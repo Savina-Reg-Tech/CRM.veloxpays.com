@@ -1,0 +1,23 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema Reference: users table
+-- This is a documentation copy — the live definition is in migrations/
+-- ─────────────────────────────────────────────────────────────────────────────
+
+--  Column       Type           Constraints
+-- ─────────────────────────────────────────────────────────────────────────────
+--  id           SERIAL         PRIMARY KEY
+--  name         VARCHAR(100)   NOT NULL
+--  email        VARCHAR(255)   NOT NULL, UNIQUE
+--  password     TEXT           NOT NULL  (bcrypt hash, never store plain text)
+--  role         user_role      NOT NULL, DEFAULT 'employee'
+--                              ENUM: 'super_admin' | 'admin' | 'employee' | 'agent' | 'affiliate'
+--  is_active    BOOLEAN        NOT NULL, DEFAULT TRUE
+--  created_by   INTEGER        FK → users(id), nullable (NULL for super admin)
+--  created_at   TIMESTAMPTZ    NOT NULL, DEFAULT NOW()
+--  updated_at   TIMESTAMPTZ    NOT NULL, DEFAULT NOW()
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- Indexes:
+--   idx_users_email   — on (email)  → fast login lookups
+--   idx_users_role    — on (role)   → fast employee listing
+-- ─────────────────────────────────────────────────────────────────────────────

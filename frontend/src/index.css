@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Custom base styles */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f9fafb;
+    color: #111827;
+  }
+}
+
+@layer components {
+  .brand-gradient-bg {
+    @apply bg-gradient-to-r from-[#4EAFFF] to-blue-600;
+  }
+}

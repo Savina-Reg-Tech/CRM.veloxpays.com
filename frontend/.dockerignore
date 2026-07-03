@@ -1,0 +1,15 @@
+# Node dependencies — reinstalled inside the image
+node_modules
+
+# Previous build output
+dist
+
+# Environment files — VITE_API_URL is passed as a build arg
+.env
+.env.local
+.env.*.local
+
+# Editor / OS noise
+.DS_Store
+*.log
+*.tsbuildinfo

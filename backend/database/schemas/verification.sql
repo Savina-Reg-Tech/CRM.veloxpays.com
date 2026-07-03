@@ -1,0 +1,47 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema Reference: document verification (KYC)
+-- This is a documentation copy — the live definition is in
+--   migrations/011_document_verification.sql
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- Built on top of the approval workflow: each uploaded document is tracked by a
+-- single approval_request of kind 'document_verification' (subject_user_id =
+-- owner). The request status IS the document status; approval_actions is the
+-- audit trail. verification_documents stores ONLY file metadata.
+--
+-- ── users (added columns) ────────────────────────────────────────────────────
+--  account_status         account_status  NOT NULL DEFAULT 'pending'
+--                         ENUM: 'pending' | 'active' | 'suspended' | 'expired'
+--  verification_deadline  TIMESTAMPTZ     7-day window for unverified accounts
+--  archived_at            TIMESTAMPTZ     soft-delete marker (set on expiry)
+--
+-- ── verification_documents ───────────────────────────────────────────────────
+--  id                   SERIAL        PRIMARY KEY
+--  user_id              INTEGER       FK → users(id) ON DELETE CASCADE
+--  doc_type             VARCHAR(64)   validated against role→docs config
+--  approval_request_id  INTEGER       FK → approval_requests(id) (drives status)
+--  file_name            VARCHAR(255)  stored/generated name
+--  original_file_name   VARCHAR(255)  as uploaded
+--  storage_path         TEXT          key within the storage backend (S3/local)
+--  file_url             TEXT          resolvable URL (nullable; signed on demand)
+--  mime_type            VARCHAR(100)  pdf/jpeg/png
+--  file_size            BIGINT        bytes (≤ 10 MB)
+--  uploaded_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+--  archived_at          TIMESTAMPTZ   soft-delete marker
+--
+--  Unique: (user_id, doc_type) WHERE archived_at IS NULL  → one live doc per type
+--
+-- ── notifications ────────────────────────────────────────────────────────────
+--  id          SERIAL        PRIMARY KEY
+--  user_id     INTEGER       FK → users(id) ON DELETE CASCADE
+--  event       VARCHAR(64)   document_uploaded | document_approved | …
+--  title       VARCHAR(200)
+--  body        TEXT
+--  metadata    JSONB
+--  read_at     TIMESTAMPTZ   NULL until read
+--  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+--
+-- ── approval_actions (added columns) ─────────────────────────────────────────
+--  ip_address  INET          client IP for the audit log
+--  actor_role  VARCHAR(32)    actor role snapshot ('system' for automated jobs)
+-- ─────────────────────────────────────────────────────────────────────────────

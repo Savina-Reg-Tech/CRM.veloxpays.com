@@ -1,0 +1,30 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema reference: approval workflow (live SQL: migrations/009_approval_workflow.sql)
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- approval_requests
+--   id               SERIAL PK
+--   kind             ENUM: user_onboarding | generic
+--   status           ENUM: pending | in_review | approved | completed | rejected | cancelled
+--   title            VARCHAR(200) NOT NULL
+--   body             JSONB NULL — arbitrary payload for generic requests
+--   requester_id     INTEGER NOT NULL FK → users(id)
+--   subject_user_id  INTEGER NULL FK → users(id) — required when kind = user_onboarding
+--   assigned_to_id   INTEGER NULL FK → users(id) — optional reviewer queue
+--   subject_user_role_snapshot user_role NULL — frozen at open (user_onboarding, AF-5)
+--   decided_by_id    INTEGER NULL FK — last approve/reject actor (detail in approval_actions)
+--   decision_note    TEXT NULL
+--   created_at, updated_at, completed_at
+--
+-- approval_actions (append-only audit)
+--   id, request_id FK CASCADE, actor_id FK users
+--   from_status, to_status (ENUM; from NULL on initial submit)
+--   note, metadata JSONB, created_at
+--
+-- Indexes: status+created, requester, assigned (partial), subject_user (partial),
+--          actions by request+time, unique one open user_onboarding per subject_user_id
+-- Trigger: approval_requests.updated_at maintained on UPDATE
+--
+-- REST (see README): /api/approvals — list, create, detail, PATCH …/status, PATCH …/assign
+-- Edge cases: docs/approval_edge_cases.md
+-- ─────────────────────────────────────────────────────────────────────────────

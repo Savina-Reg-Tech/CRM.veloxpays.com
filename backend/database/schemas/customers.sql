@@ -1,0 +1,23 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema Reference: customers table (end-customer personal info)
+-- Live definition: migrations/003_create_customers_table.sql (+ 004 for legacy upgrade)
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+--  id              SERIAL PRIMARY KEY
+--  first_name      VARCHAR(100) NOT NULL
+--  middle_name     VARCHAR(100)
+--  last_name       VARCHAR(100) NOT NULL
+--  dob             DATE
+--  email           VARCHAR(255) NOT NULL
+--  phone           VARCHAR(40)
+--  address_line1   VARCHAR(255)
+--  city            VARCHAR(120)
+--  country         VARCHAR(100)
+--  status          VARCHAR(40) NOT NULL DEFAULT 'active'
+--  source          VARCHAR(32) NOT NULL DEFAULT 'manual'  CHECK (manual | veloxpays-sync)
+--  source_ref      VARCHAR(255)
+--  created_by      INTEGER FK → users(id) NULLABLE (CRM user; null for pure sync rows)
+--  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--  modified_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--  deleted_at      TIMESTAMPTZ (soft delete; NULL = active)
+-- ─────────────────────────────────────────────────────────────────────────────

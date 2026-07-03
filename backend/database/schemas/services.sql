@@ -1,0 +1,17 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema Reference: services (master service catalog)
+-- Live definition: migrations/005_create_services_table.sql
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+--  id          SERIAL PRIMARY KEY
+--  code        VARCHAR(32) NOT NULL UNIQUE
+--              CHECK (FLIGHTS | LOUNGE | ASSIST | ESIM | EGIFT | MTO)
+--  name        VARCHAR(120) NOT NULL
+--  description TEXT
+--  vendor      VARCHAR(120)
+--  is_enabled  BOOLEAN NOT NULL DEFAULT TRUE
+--  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--
+-- Indexes: code, is_enabled
+-- Seeded with the 6 codes listed above.
+-- ─────────────────────────────────────────────────────────────────────────────

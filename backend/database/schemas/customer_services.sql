@@ -1,0 +1,20 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Schema Reference: customer_services (row-based customer ↔ service mapping)
+-- Live definition: migrations/006_create_customer_services_table.sql
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+--  id           SERIAL PRIMARY KEY
+--  customer_id  INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE
+--  service_id   INTEGER NOT NULL REFERENCES services(id)  ON DELETE RESTRICT
+--  status       VARCHAR(40) NOT NULL DEFAULT 'active'
+--               (free-form, e.g. active | inactive | pending | suspended)
+--  enabled_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--  source       VARCHAR(32) NOT NULL DEFAULT 'manual'
+--               CHECK (manual | veloxpays-sync)
+--  notes        TEXT
+--  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--  modified_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+--
+-- UNIQUE (customer_id, service_id)
+-- Indexes: customer_id, service_id, status
+-- ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,15 @@
+# Node dependencies — reinstalled inside the image
+node-crm/node_modules
+
+# Environment files — injected via docker-compose environment: block
+node-crm/.env
+node-crm/.env.local
+node-crm/.env.*.local
+
+# Build / editor noise
+node-crm/*.tsbuildinfo
+.DS_Store
+*.log
+
+# Local document storage (never bake into the image)
+node-crm/uploads
