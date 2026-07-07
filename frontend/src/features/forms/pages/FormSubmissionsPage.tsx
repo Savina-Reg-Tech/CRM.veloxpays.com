@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download } from 'lucide-react'
 import { useFormSubmissions, useForm } from '../hooks/useForms'
 import { SubmissionDataView } from '../utils/submissionDisplay'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5001/api'
+import { API_BASE_URL } from '@/lib/apiConfig'
 
 const STATUS_COLORS = {
   NEW:       'bg-blue-100 text-blue-700',
@@ -44,7 +43,7 @@ export default function FormSubmissionsPage() {
   const handleExport = () => {
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
-    const url = `${API_BASE}/forms/${formId}/submissions/export${params.toString() ? `?${params}` : ''}`
+    const url = `${API_BASE_URL}/forms/${formId}/submissions/export${params.toString() ? `?${params}` : ''}`
     window.open(url, '_blank')
   }
 

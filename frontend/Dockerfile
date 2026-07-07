@@ -18,7 +18,8 @@ RUN npm install
 # Copy the rest of the source
 COPY . .
 
-# VITE_API_URL is baked into the bundle at build time.
+# VITE_API_URL is baked into the bundle at build time (see src/lib/apiConfig.ts).
+# For testing/production, pass the real API URL as a build-arg — do not rely on localhost.
 
 ARG VITE_API_URL=http://localhost:5001/api
 ENV VITE_API_URL=$VITE_API_URL

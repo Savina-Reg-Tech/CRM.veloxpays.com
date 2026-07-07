@@ -18,9 +18,9 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import type { Form, FormField } from '../types'
 import { layoutFields } from '../utils/layoutFields'
+import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5001/api'
-const PUBLIC_API = API_BASE.replace('/api', '/public')
+const PUBLIC_API = PUBLIC_API_BASE_URL
 
 // ── Theme helpers ─────────────────────────────────────────────────
 

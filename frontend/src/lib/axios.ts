@@ -1,8 +1,9 @@
 import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
+import { API_BASE_URL } from '@/lib/apiConfig'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:5001/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   // Send / receive the httpOnly auth cookie on every request.
   withCredentials: true,
