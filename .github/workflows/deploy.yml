@@ -10,7 +10,7 @@ env:
   ECR_REGISTRY:      746669209316.dkr.ecr.ap-southeast-2.amazonaws.com
   ECR_REPOSITORY:    veloxverse-crm
   ECS_CLUSTER:       veloxverse-prod-cluster
-  ECS_SERVICE:       crm-backend-service
+  ECS_SERVICE:       crm-backend-task-service-u3uzeavg
   CONTAINER_NAME:    crm-backend
 
 jobs:
