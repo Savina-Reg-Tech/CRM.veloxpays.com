@@ -201,6 +201,19 @@ const User = {
     return rows;
   },
 
+  /** Set a new (already-hashed) password. Returns { id, name, email, role }. */
+  setPassword: async (id, hashedPassword, { client } = {}) => {
+    const { rows } = await run(
+      client,
+      `UPDATE users
+          SET password = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, name, email, role`,
+      [id, hashedPassword]
+    );
+    return rows[0] || null;
+  },
+
   /** Toggle is_active for a user. Returns updated row. */
   toggleActive: async (id) => {
     const { rows } = await query(

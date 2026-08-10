@@ -387,15 +387,30 @@ export default function PublicFormPage() {
     return form.form_json.fields.filter((f) => stepFieldIds.has(f.id))
   }, [form, isMultiStep, steps, currentStep])
 
+  // Custom step-end buttons (set in the builder). A button's action ("next"
+  // vs "submit") is no longer tied to whether this is structurally the last
+  // step — any step can have a genuine Submit button (e.g. a "submit early"
+  // decision screen with both "Submit" and "Continue" options). Which
+  // handler actually runs is decided per-click in handleFormSubmit below via
+  // the clicked button's data-step-action, not by isFinalStep.
+  const stepButtons = steps[currentStep]?.buttons
+  const hasCustomButtons = !!stepButtons && stepButtons.length > 0
+  // A custom-button step is a deliberate CTA/decision screen (e.g. "Continue
+  // Application" / "Book a Call") — skip the "Back" nav and the empty-fields
+  // placeholder there instead of treating it like an in-progress form step.
+  const showBack = isMultiStep && !isFirstStep && !hasCustomButtons
+
   // ── Navigation handlers ───────────────────────────────────────
   const handleNext = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formEl = e.currentTarget
     if (!formEl.reportValidity()) return
     formDataRef.current = { ...formDataRef.current, ...collectFormData(formEl) }
-    setCurrentStep((s) => s + 1)
+    // Clamp so a misconfigured "Continue" button on the literal last step
+    // can't advance past the end into a blank, buttonless dead end.
+    setCurrentStep((s) => Math.min(s + 1, Math.max(totalSteps - 1, 0)))
     setSubmitError('')
-  }, [])
+  }, [totalSteps])
 
   const handleBack = useCallback(() => {
     setCurrentStep((s) => Math.max(0, s - 1))
@@ -422,6 +437,21 @@ export default function PublicFormPage() {
       setSubmitting(false)
     }
   }, [id])
+
+  // Single onSubmit for the <form>, regardless of which button triggered it.
+  // Reads the actual clicked button via the native SubmitEvent's `submitter`
+  // (standard DOM API) and its `data-step-action`, so a "Submit" button on a
+  // non-final step really submits instead of silently advancing — the bug
+  // that happened when onSubmit was statically bound to isFinalStep.
+  const handleFormSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null
+    const action = submitter?.dataset.stepAction ?? (isFinalStep ? 'submit' : 'next')
+    if (action === 'submit') {
+      handleSubmit(e)
+    } else {
+      handleNext(e)
+    }
+  }, [isFinalStep, handleSubmit, handleNext])
 
   // ── Shared theme styles ───────────────────────────────────────
   const cardStyle: React.CSSProperties = {
@@ -524,12 +554,14 @@ export default function PublicFormPage() {
           {/* Form body */}
           <form
             key={currentStep}
-            onSubmit={isFinalStep ? handleSubmit : handleNext}
+            onSubmit={handleFormSubmit}
             className="px-5 sm:px-8 py-5 sm:py-6 space-y-5"
             style={{ backgroundColor: `#${theme.cardBg}` }}
           >
             {visibleFields.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center py-4">No fields on this step.</p>
+              hasCustomButtons ? null : (
+                <p className="text-gray-400 text-sm text-center py-4">No fields on this step.</p>
+              )
             ) : (
               layoutFields(visibleFields).map((row, i) =>
                 row.kind === 'full' ? (
@@ -550,8 +582,8 @@ export default function PublicFormPage() {
             )}
 
             {/* Navigation */}
-            <div className={`flex gap-3 pt-1 ${isMultiStep && !isFirstStep ? 'justify-between' : ''}`}>
-              {isMultiStep && !isFirstStep && (
+            <div className={`flex gap-3 pt-1 ${showBack ? 'justify-between' : ''}`}>
+              {showBack && (
                 <button
                   type="button"
                   onClick={handleBack}
@@ -562,17 +594,49 @@ export default function PublicFormPage() {
                 </button>
               )}
 
-              <PrimaryButton
-                type="submit"
-                disabled={submitting}
-                style={btnStyle}
-                hoverStyle={btnHoverStyle}
-                className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
-              >
-                {isFinalStep
-                  ? (submitting ? 'Submitting…' : (form!.submit_button_label || 'Submit'))
-                  : 'Next →'}
-              </PrimaryButton>
+              {stepButtons && stepButtons.length > 0 ? (
+                <div className="flex-1 flex gap-3">
+                  {stepButtons.map((b) =>
+                    b.action === 'external_link' ? (
+                      <PrimaryButton
+                        key={b.id}
+                        type="button"
+                        onClick={() => { if (b.url) window.open(b.url, '_blank', 'noopener,noreferrer') }}
+                        style={btnStyle}
+                        hoverStyle={btnHoverStyle}
+                        className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm"
+                      >
+                        {b.label}
+                      </PrimaryButton>
+                    ) : (
+                      <PrimaryButton
+                        key={b.id}
+                        type="submit"
+                        dataStepAction={b.action}
+                        disabled={submitting}
+                        style={btnStyle}
+                        hoverStyle={btnHoverStyle}
+                        className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
+                      >
+                        {b.action === 'submit' && submitting ? 'Submitting…' : b.label}
+                      </PrimaryButton>
+                    )
+                  )}
+                </div>
+              ) : (
+                <PrimaryButton
+                  type="submit"
+                  dataStepAction={isFinalStep ? 'submit' : 'next'}
+                  disabled={submitting}
+                  style={btnStyle}
+                  hoverStyle={btnHoverStyle}
+                  className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
+                >
+                  {isFinalStep
+                    ? (submitting ? 'Submitting…' : (form!.submit_button_label || 'Submit'))
+                    : 'Next →'}
+                </PrimaryButton>
+              )}
             </div>
           </form>
         </div>
@@ -585,7 +649,7 @@ export default function PublicFormPage() {
 
 // ── Button with hover state ───────────────────────────────────────
 function PrimaryButton({
-  children, style, hoverStyle, className, type, disabled, onClick,
+  children, style, hoverStyle, className, type, disabled, onClick, dataStepAction,
 }: {
   children: React.ReactNode
   style: React.CSSProperties
@@ -594,6 +658,9 @@ function PrimaryButton({
   type?: 'button' | 'submit'
   disabled?: boolean
   onClick?: () => void
+  /** Read by handleFormSubmit (via SubmitEvent.submitter) to decide whether
+   *  this specific click should submit the form or advance to the next step. */
+  dataStepAction?: 'next' | 'submit'
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -605,6 +672,7 @@ function PrimaryButton({
       style={hovered ? { ...style, ...hoverStyle } : style}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      data-step-action={dataStepAction}
     >
       {children}
     </button>

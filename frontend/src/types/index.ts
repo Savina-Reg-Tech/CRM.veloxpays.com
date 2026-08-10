@@ -46,6 +46,16 @@ export interface CreateEmployeePayload {
   role: UserRole
 }
 
+// ── Password reset (admin-initiated) ──────────────────────────────
+export interface ResetPasswordResult {
+  id: number
+  name: string
+  email: string
+  role: UserRole
+  /** Present only when the caller didn't supply a password — shown once. */
+  generatedPassword?: string
+}
+
 // ── Services (master catalog) ────────────────────────────────────
 export const SERVICE_CODES = [
   'FLIGHTS',

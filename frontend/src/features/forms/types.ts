@@ -17,10 +17,37 @@ export interface FormField {
   width?: 'full' | 'half'
 }
 
+// ── Step-level custom buttons ─────────────────────────────────────
+// 'next'          — behaves like the default Next button: validates the
+//                   step's fields and advances to the following step.
+// 'submit'        — behaves like the default Submit button: validates the
+//                   step's fields and submits the whole form using all data
+//                   collected so far (including from earlier steps). Valid
+//                   on ANY step, not just the last one — lets a step act as
+//                   a "submit early" decision screen (e.g. "Submit" +
+//                   "Continue Application" side by side).
+// 'external_link' — opens `url` in a new tab; does not validate, advance,
+//                   or submit. Valid on any step.
+export const STEP_BUTTON_ACTIONS = ['next', 'submit', 'external_link'] as const
+export type StepButtonAction = (typeof STEP_BUTTON_ACTIONS)[number]
+
+export interface StepButton {
+  id: string
+  label: string
+  action: StepButtonAction
+  url?: string   // required when action === 'external_link'
+}
+
 export interface FormStep {
   id: string
   title: string
   fieldIds: string[]   // ordered list of field IDs in this step
+  /**
+   * Custom action buttons shown instead of the default single "Next"/"Submit"
+   * button for this step — e.g. a final step could offer both a "Submit"
+   * button and a "Book a Call" (external link) button side by side.
+   */
+  buttons?: StepButton[]
 }
 
 export interface FormJson {

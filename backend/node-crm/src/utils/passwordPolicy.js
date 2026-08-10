@@ -52,3 +52,40 @@ export function validatePassword(password) {
 
   return { valid: true };
 }
+
+// Character sets exclude visually-ambiguous glyphs (I/O/0/1) so generated
+// passwords are easy for an admin to read aloud or retype.
+const GEN_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const GEN_LOWER = "abcdefghijkmnpqrstuvwxyz";
+const GEN_DIGITS = "23456789";
+const GEN_SPECIAL = "!@#$%^&*_-+=";
+
+const randomChar = (set) => set[Math.floor(Math.random() * set.length)];
+
+/**
+ * Generates a random password that satisfies {@link validatePassword}.
+ * Used for admin-triggered password resets when no specific password is supplied.
+ *
+ * @param {number} [length=14]
+ * @returns {string}
+ */
+export function generateStrongPassword(length = 14) {
+  const required = [
+    randomChar(GEN_UPPER),
+    randomChar(GEN_LOWER),
+    randomChar(GEN_DIGITS),
+    randomChar(GEN_SPECIAL),
+  ];
+  const all = GEN_UPPER + GEN_LOWER + GEN_DIGITS + GEN_SPECIAL;
+  const rest = Array.from({ length: Math.max(length - required.length, 0) }, () =>
+    randomChar(all)
+  );
+  const chars = [...required, ...rest];
+
+  // Fisher–Yates shuffle so the required characters aren't always up front.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}

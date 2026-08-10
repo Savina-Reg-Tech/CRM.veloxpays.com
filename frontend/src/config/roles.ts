@@ -75,3 +75,15 @@ export function getRoleHome(role: UserRole | undefined | null): string {
   if (!role) return '/login'
   return ROLE_HOMES[role] ?? '/login'
 }
+
+/**
+ * Email of the primary/seed super-admin account (matches backend
+ * `crmRoles.PROTECTED_SUPER_ADMIN_EMAIL`). This account can never be
+ * deactivated — the backend enforces this; the UI mirrors it so the action
+ * is disabled rather than erroring after the fact.
+ */
+export const PROTECTED_SUPER_ADMIN_EMAIL = 'admin@crm.com'
+
+export function isProtectedAccount(email: string | undefined | null): boolean {
+  return !!email && email.trim().toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL
+}

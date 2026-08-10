@@ -4,6 +4,7 @@ import type {
   CreateEmployeePayload,
   Employee,
   Paginated,
+  ResetPasswordResult,
   UserStats,
 } from '@/types'
 
@@ -30,6 +31,14 @@ export const employeeService = {
 
   toggleStatus: async (id: number): Promise<Employee> => {
     const res = await api.patch<ApiResponse<Employee>>(`/users/${id}/toggle-status`)
+    return res.data.data
+  },
+
+  resetPassword: async (id: number, password?: string): Promise<ResetPasswordResult> => {
+    const res = await api.post<ApiResponse<ResetPasswordResult>>(
+      `/users/${id}/reset-password`,
+      password ? { password } : {}
+    )
     return res.data.data
   },
 }

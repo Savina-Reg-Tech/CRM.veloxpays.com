@@ -1,9 +1,10 @@
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
 import { getClient } from "../../config/db.js";
-import { ALLOWED_ROLES, ROLE_CREATION_MATRIX } from "../config/crmRoles.js";
-import { validatePassword } from "../utils/passwordPolicy.js";
+import { ALLOWED_ROLES, ROLE_CREATION_MATRIX, isProtectedAccount } from "../config/crmRoles.js";
+import { validatePassword, generateStrongPassword } from "../utils/passwordPolicy.js";
 import { insertUserOnboardingApprovalInTransaction } from "./approvalService.js";
+import { notify } from "./notificationService.js";
 import {
   roleRequiresVerification,
   VERIFICATION_WINDOW_DAYS,
@@ -113,6 +114,10 @@ export const getUserStats = async () => User.getUserStats();
  *
  * Refuses to operate when the caller is targeting their own account — a
  * super-admin should not be able to lock themselves out of the system.
+ * Also refuses to deactivate the protected primary super-admin account
+ * (admin@crm.com) — that account is the fallback for regaining CRM access,
+ * so it can never be deactivated, even by another super admin. (There is no
+ * user-delete feature in the CRM, so this is the only "removal" path.)
  */
 export const toggleUserStatus = async (userId, requesterId) => {
   if (requesterId !== undefined && String(userId) === String(requesterId)) {
@@ -121,7 +126,73 @@ export const toggleUserStatus = async (userId, requesterId) => {
       message: "You cannot change your own account status",
     };
   }
+
+  const target = await User.findById(userId);
+  if (!target) throw { status: 404, message: "User not found" };
+
+  if (target.is_active && isProtectedAccount(target.email)) {
+    throw {
+      status: 403,
+      message: "This account is protected and cannot be deactivated",
+    };
+  }
+
   const result = await User.toggleActive(userId);
   if (!result) throw { status: 404, message: "User not found" };
   return result;
+};
+
+/**
+ * Resets a user's password on an admin's behalf.
+ *
+ * Reuses the same role-hierarchy rule as account creation (ROLE_CREATION_MATRIX):
+ * a requester may only reset the password of a role they're allowed to create.
+ * Super admins can therefore reset anyone (including other super admins); admins
+ * can reset employee/agent/affiliate accounts but not other admins.
+ *
+ * When `password` is omitted, a strong random password is generated and returned
+ * in plaintext once so the admin can hand it to the user — it is never stored or
+ * logged in plaintext, and this is the only response that will ever contain it.
+ */
+export const resetUserPassword = async ({ userId, password }, requester) => {
+  const target = await User.findById(userId);
+  if (!target) throw { status: 404, message: "User not found" };
+
+  const allowedRoles = ROLE_CREATION_MATRIX[requester?.role] || [];
+  if (!allowedRoles.includes(target.role)) {
+    throw {
+      status: 403,
+      message: `Role '${requester?.role}' is not allowed to reset a '${target.role}' user's password`,
+    };
+  }
+
+  let plainPassword = password;
+  let generated = false;
+  if (plainPassword === undefined || plainPassword === null || plainPassword === "") {
+    plainPassword = generateStrongPassword();
+    generated = true;
+  } else {
+    const pwdCheck = validatePassword(plainPassword);
+    if (!pwdCheck.valid) throw { status: 400, message: pwdCheck.message };
+  }
+
+  const hashedPassword = await bcrypt.hash(plainPassword.trim(), 10);
+  const updated = await User.setPassword(target.id, hashedPassword);
+  if (!updated) throw { status: 404, message: "User not found" };
+
+  // Best-effort — notification delivery must never roll back the reset itself.
+  void notify({
+    recipient: { id: updated.id, email: updated.email },
+    event: "password_reset",
+    title: "Your password was reset",
+    body: `An administrator (${requester?.name ?? requester?.email ?? "an admin"}) reset your Velox CRM password. If you did not expect this, contact your administrator immediately.`,
+  }).catch(() => {});
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    email: updated.email,
+    role: updated.role,
+    ...(generated ? { generatedPassword: plainPassword } : {}),
+  };
 };

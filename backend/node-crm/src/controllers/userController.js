@@ -3,6 +3,7 @@ import {
   getAllUsers,
   getUserStats,
   toggleUserStatus,
+  resetUserPassword,
 } from "../services/userService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
@@ -89,6 +90,23 @@ export const handleToggleStatus = async (req, res) => {
   try {
     const result = await toggleUserStatus(req.params.id, req.user.id);
     return sendSuccess(res, result, "User status updated");
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
+};
+
+/**
+ * POST /api/users/:id/reset-password
+ * Super Admin/Admin — reset another user's password. Role hierarchy is
+ * enforced in the service (mirrors who each role is allowed to create).
+ * Body: { password?: string } — omit to auto-generate a strong password,
+ * which is returned once in the response for the admin to hand off.
+ */
+export const handleResetPassword = async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    const result = await resetUserPassword({ userId: req.params.id, password }, req.user);
+    return sendSuccess(res, result, "Password reset successfully");
   } catch (err) {
     return sendError(res, err.message, err.status || 500);
   }

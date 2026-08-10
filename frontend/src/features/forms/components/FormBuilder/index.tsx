@@ -8,12 +8,13 @@
  *   • Dragging an existing canvas field → reorders it within the canvas.
  */
 
-import { useReducer, useCallback, useRef, useState } from 'react'
+import { useReducer, useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import FieldPalette from './FieldPalette'
 import FieldCanvas from './FieldCanvas'
 import FieldEditor from './FieldEditor'
 import StepTabs from './StepTabs'
+import StepButtonsModal from './StepButtonsModal'
 import type { FormField, FormJson, FormStep, FieldType } from '../../types'
 
 /** Build a default step */
@@ -34,6 +35,7 @@ type Action =
   | { type: 'RENAME_STEP'; stepIndex: number; title: string }
   | { type: 'MOVE_STEP'; from: number; to: number }
   | { type: 'SET_ACTIVE_STEP'; stepIndex: number }
+  | { type: 'SET_STEP_BUTTONS'; stepIndex: number; buttons: FormStep['buttons'] }
 
 interface State {
   fields: FormField[]
@@ -174,6 +176,12 @@ function reducer(state: State, action: Action): State {
     }
     case 'SET_ACTIVE_STEP':
       return { ...state, activeStepIndex: action.stepIndex, selectedId: null }
+    case 'SET_STEP_BUTTONS': {
+      const steps = state.steps.map((s, i) =>
+        i === action.stepIndex ? { ...s, buttons: action.buttons } : s
+      )
+      return { ...state, steps }
+    }
     default:
       return state
   }
@@ -196,9 +204,15 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
   // Drag state (refs to avoid re-renders during drag)
   const dragSource = useRef<{ kind: 'palette'; fieldType: FieldType } | { kind: 'canvas'; index: number } | null>(null)
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
+  const [buttonsModalOpen, setButtonsModalOpen] = useState(false)
 
   const selectedField = state.fields.find((f) => f.id === state.selectedId) ?? null
   const isMultiStep = state.steps.length > 0
+  const activeStep: FormStep | null = isMultiStep ? state.steps[state.activeStepIndex] ?? null : null
+  // Determines which button actions the editor offers for the active step:
+  // non-final steps get "next"/"external_link", the final step gets
+  // "submit"/"external_link" (see StepButtonsModal).
+  const isFinalStep = isMultiStep && state.activeStepIndex === state.steps.length - 1
 
   // In multi-step mode: only show fields belonging to the active step
   const activeStepFieldIds = isMultiStep ? new Set(state.steps[state.activeStepIndex]?.fieldIds ?? []) : null
@@ -206,49 +220,22 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
     ? state.fields.filter((f) => activeStepFieldIds!.has(f.id))
     : state.fields
 
-  // We compute current formJson from state for the onChange callback
-  const notifyChange = useCallback((fields: FormField[], steps?: FormStep[]) => {
-    onChange({ fields, steps: steps && steps.length > 0 ? steps : undefined })
-  }, [onChange])
-
-  const handleDispatch = (action: Action) => {
-    dispatch(action)
-    // Compute next state fields inline
-    let nextFields: FormField[]
-    switch (action.type) {
-      case 'ADD_FIELD': {
-        const field = buildDefaultField(action.fieldType)
-        nextFields = [...state.fields]
-        if (action.atIndex !== undefined) nextFields.splice(action.atIndex, 0, field)
-        else nextFields.push(field)
-        break
-      }
-      case 'REMOVE_FIELD':
-        nextFields = state.fields.filter((f) => f.id !== action.id)
-        break
-      case 'UPDATE_FIELD':
-        nextFields = state.fields.map((f) => f.id === action.id ? { ...f, ...action.patch } : f)
-        break
-      case 'MOVE_FIELD': {
-        const arr = [...state.fields]
-        const [moved] = arr.splice(action.fromIndex, 1)
-        arr.splice(action.toIndex, 0, moved)
-        nextFields = arr
-        break
-      }
-      default:
-        nextFields = state.fields
-    }
-    // After dispatch we re-read state.steps from the upcoming render via useEffect pattern
-    // but since we need to pass steps here, approximate based on current steps
-    notifyChange(nextFields, state.steps.length > 0 ? state.steps : undefined)
-  }
+  // Sync every state change back up to the parent (which owns the saved
+  // formJson). Reading straight from `state` here — rather than each handler
+  // manually recomputing "next fields/steps" — means every action type
+  // (including step add/rename/remove/move/reorder and step-button edits)
+  // propagates correctly instead of only the field-mutating ones.
+  useEffect(() => {
+    onChange({ fields: state.fields, steps: state.steps.length > 0 ? state.steps : undefined })
+  }, [state.fields, state.steps, onChange])
 
   // ── Step handlers ─────────────────────────────────────────────
   const handleAddStep = () => dispatch({ type: 'ADD_STEP' })
   const handleRemoveStep = (i: number) => dispatch({ type: 'REMOVE_STEP', stepIndex: i })
   const handleRenameStep = (i: number, title: string) => dispatch({ type: 'RENAME_STEP', stepIndex: i, title })
   const handleMoveStep = (from: number, to: number) => dispatch({ type: 'MOVE_STEP', from, to })
+  const handleSetStepButtons = (buttons: FormStep['buttons']) =>
+    dispatch({ type: 'SET_STEP_BUTTONS', stepIndex: state.activeStepIndex, buttons })
 
   // ── DnD handlers ─────────────────────────────────────────────
   const handlePaletteDragStart = (fieldType: FieldType) => {
@@ -271,9 +258,9 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
     if (!src) return
 
     if (src.kind === 'palette') {
-      handleDispatch({ type: 'ADD_FIELD', fieldType: src.fieldType, atIndex: dropIndex })
+      dispatch({ type: 'ADD_FIELD', fieldType: src.fieldType, atIndex: dropIndex })
     } else if (src.kind === 'canvas' && src.index !== dropIndex) {
-      handleDispatch({ type: 'MOVE_FIELD', fromIndex: src.index, toIndex: dropIndex })
+      dispatch({ type: 'MOVE_FIELD', fromIndex: src.index, toIndex: dropIndex })
     }
     dragSource.current = null
   }
@@ -284,7 +271,7 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
     const src = dragSource.current
     if (!src) return
     if (src.kind === 'palette') {
-      handleDispatch({ type: 'ADD_FIELD', fieldType: src.fieldType })
+      dispatch({ type: 'ADD_FIELD', fieldType: src.fieldType })
     }
     dragSource.current = null
   }
@@ -307,6 +294,27 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
         onMove={handleMoveStep}
       />
 
+      {/* Custom step-end buttons — replaces the default "Next"/"Submit"
+          button for this step (including the final step's Submit button). */}
+      {isMultiStep && (
+        <div className="flex items-center justify-between px-4 py-1.5 bg-indigo-50/60 border-b border-gray-100 shrink-0">
+          <span className="text-xs text-gray-500">
+            {activeStep?.buttons?.length
+              ? `${activeStep.buttons.length} custom button${activeStep.buttons.length === 1 ? '' : 's'} on "${activeStep.title}"`
+              : isFinalStep
+                ? `Default "Submit" button on "${activeStep?.title}"`
+                : `Default "Next" button on "${activeStep?.title}"`}
+          </span>
+          <button
+            type="button"
+            onClick={() => setButtonsModalOpen(true)}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            Customize buttons →
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Field palette */}
         <FieldPalette onDragStart={handlePaletteDragStart} />
@@ -317,7 +325,7 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
           selectedId={state.selectedId}
           dropTargetIndex={dropTargetIndex}
           onSelect={(id) => dispatch({ type: 'SELECT', id })}
-          onRemove={(id) => handleDispatch({ type: 'REMOVE_FIELD', id })}
+          onRemove={(id) => dispatch({ type: 'REMOVE_FIELD', id })}
           onDragStart={handleCanvasDragStart}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
@@ -329,10 +337,18 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
         <FieldEditor
           field={selectedField}
           onChange={(patch) => {
-            if (selectedField) handleDispatch({ type: 'UPDATE_FIELD', id: selectedField.id, patch })
+            if (selectedField) dispatch({ type: 'UPDATE_FIELD', id: selectedField.id, patch })
           }}
         />
       </div>
+
+      <StepButtonsModal
+        open={buttonsModalOpen}
+        onClose={() => setButtonsModalOpen(false)}
+        step={activeStep}
+        isFinalStep={isFinalStep}
+        onSave={handleSetStepButtons}
+      />
     </div>
   )
 }

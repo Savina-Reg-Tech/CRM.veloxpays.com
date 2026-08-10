@@ -57,6 +57,7 @@ export default function FormBuilderPage() {
   const [formJson, setFormJson] = useState<FormJson>({ fields: [] })
   const [preview, setPreview] = useState(false)
   const [previewStep, setPreviewStep] = useState(0)
+  const [previewSubmitFlash, setPreviewSubmitFlash] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [settingsTab, setSettingsTab] = useState<'general' | 'notifications'>('general')
@@ -72,6 +73,17 @@ export default function FormBuilderPage() {
   const createMutation = useCreateForm()
   const updateMutation = useUpdateForm(numericId ?? 0)
 
+  // The builder canvas (FormBuilder) seeds its internal drag-and-drop state
+  // from `formJson` only once, on mount — it does not re-sync on later prop
+  // changes (so it never clobbers in-progress edits mid-session). That means
+  // we must not mount it until the fetched form has actually landed in
+  // `formJson`; otherwise it mounts with empty fields and stays empty forever.
+  // `hydrated` tracks that handoff explicitly instead of relying on `isLoading`
+  // flipping in the same render the data arrives (state set via `useEffect`
+  // is one render behind, which was the root cause of fields never appearing
+  // when editing an existing form).
+  const [hydrated, setHydrated] = useState(isNew)
+
   useEffect(() => {
     if (existingForm) {
       setName(existingForm.name)
@@ -85,6 +97,7 @@ export default function FormBuilderPage() {
       setAutoRespond(existingForm.auto_respond ?? false)
       setAutoRespondSubject(existingForm.auto_respond_subject ?? 'Thanks for reaching out!')
       setAutoRespondBody(existingForm.auto_respond_body ?? '')
+      setHydrated(true)
     }
   }, [existingForm])
 
@@ -121,7 +134,7 @@ export default function FormBuilderPage() {
     }
   }
 
-  if (!isNew && isLoading) {
+  if (!isNew && (isLoading || !hydrated)) {
     return (
       <div className="flex h-64 items-center justify-center text-gray-400 text-sm">
         Loading form…
@@ -202,6 +215,12 @@ export default function FormBuilderPage() {
                 })()
               : formJson.fields
             const progressPct = isMultiPreview ? Math.round(((safeStep + 1) / totalPreviewSteps) * 100) : 100
+            const isPreviewFinalStep = !isMultiPreview || safeStep === totalPreviewSteps - 1
+            const stepButtons = isMultiPreview ? previewSteps[safeStep]?.buttons : undefined
+            const hasCustomButtons = !!stepButtons && stepButtons.length > 0
+            // A custom-button step is a deliberate CTA/decision screen — skip
+            // the "Back" nav and the empty-fields placeholder there.
+            const showPreviewBack = isMultiPreview && safeStep > 0 && !hasCustomButtons
 
             return (
               <div className="flex-1 overflow-y-auto bg-gray-100 flex items-start justify-center p-10">
@@ -230,7 +249,9 @@ export default function FormBuilderPage() {
 
                   <div className="px-8 py-6 space-y-5">
                     {previewFields.length === 0 ? (
-                      <p className="text-gray-400 text-sm text-center py-8">No fields yet.</p>
+                      hasCustomButtons ? null : (
+                        <p className="text-gray-400 text-sm text-center py-8">No fields yet.</p>
+                      )
                     ) : (
                       layoutFields(previewFields).map((row, i) =>
                         row.kind === 'full' ? (
@@ -243,8 +264,8 @@ export default function FormBuilderPage() {
                       )
                     )}
 
-                    <div className={`flex gap-3 pt-1 ${isMultiPreview && safeStep > 0 ? 'justify-between' : 'justify-end'}`}>
-                      {isMultiPreview && safeStep > 0 && (
+                    <div className={`flex gap-3 pt-1 ${showPreviewBack ? 'justify-between' : 'justify-end'}`}>
+                      {showPreviewBack && (
                         <button
                           type="button"
                           onClick={() => setPreviewStep((s) => s - 1)}
@@ -253,13 +274,42 @@ export default function FormBuilderPage() {
                           ← Back
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => { if (isMultiPreview && safeStep < totalPreviewSteps - 1) setPreviewStep((s) => s + 1) }}
-                        className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
-                      >
-                        {!isMultiPreview || safeStep === totalPreviewSteps - 1 ? submitLabel : 'Next →'}
-                      </button>
+                      {stepButtons && stepButtons.length > 0 ? (
+                        <div className="flex-1 flex flex-col gap-2">
+                          <div className="flex gap-2">
+                            {stepButtons.map((b) => (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  if (b.action === 'next') {
+                                    setPreviewStep((s) => Math.min(s + 1, totalPreviewSteps - 1))
+                                  } else if (b.action === 'submit') {
+                                    setPreviewSubmitFlash(true)
+                                    setTimeout(() => setPreviewSubmitFlash(false), 1500)
+                                  } else if (b.action === 'external_link' && b.url) {
+                                    window.open(b.url, '_blank', 'noopener,noreferrer')
+                                  }
+                                }}
+                                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                              >
+                                {b.label}
+                              </button>
+                            ))}
+                          </div>
+                          {previewSubmitFlash && (
+                            <p className="text-xs text-emerald-600 text-center">✓ This button submits the form.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { if (isMultiPreview && safeStep < totalPreviewSteps - 1) setPreviewStep((s) => s + 1) }}
+                          className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                        >
+                          {isPreviewFinalStep ? submitLabel : 'Next →'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

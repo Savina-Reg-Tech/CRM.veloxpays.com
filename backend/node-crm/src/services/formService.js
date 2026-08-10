@@ -69,6 +69,26 @@ function validateFormJson(formJson) {
       for (const fid of step.fieldIds) {
         if (!fieldIds.has(fid)) throw { status: 400, message: `Step "${step.title}" references unknown field id: ${fid}` };
       }
+
+      // Optional custom step-end buttons (replace the default "Next"/"Submit"
+      // button for this step, including on the form's final step; see
+      // frontend `StepButton` type).
+      if (step.buttons !== undefined) {
+        if (!Array.isArray(step.buttons)) {
+          throw { status: 400, message: `Step "${step.title}" buttons must be an array` };
+        }
+        for (const btn of step.buttons) {
+          if (!btn.id || !btn.label || typeof btn.label !== "string") {
+            throw { status: 400, message: `Step "${step.title}" has a button missing an id or label` };
+          }
+          if (!["next", "submit", "external_link"].includes(btn.action)) {
+            throw { status: 400, message: `Step "${step.title}" button "${btn.label}" has an invalid action: ${btn.action}` };
+          }
+          if (btn.action === "external_link" && (!btn.url || typeof btn.url !== "string")) {
+            throw { status: 400, message: `Step "${step.title}" button "${btn.label}" is an external link but has no url` };
+          }
+        }
+      }
     }
   }
 }
