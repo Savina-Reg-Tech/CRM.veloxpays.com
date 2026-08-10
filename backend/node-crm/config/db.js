@@ -9,7 +9,7 @@ const pool = new Pool({
   database: process.env.DB_NAME     || "crm_db",
   user:     process.env.DB_USER     || "postgres",
   password: process.env.DB_PASSWORD || "",
-  // Keep up to 10 idle connections in the pool
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
