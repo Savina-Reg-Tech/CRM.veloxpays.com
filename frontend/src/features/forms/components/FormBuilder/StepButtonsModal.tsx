@@ -7,24 +7,30 @@ interface StepButtonsModalProps {
   open: boolean
   onClose: () => void
   step: FormStep | null
-  /** Whether this is the form's last step — only affects the default action
-   *  given to newly-added buttons and the "can visitors finish?" warning.
-   *  Every action (Continue / Submit / Link) is selectable on any step. */
+  /** Whether this is the field-collecting step right before the reserved
+   *  "On Form Submit" step — only affects the default action given to
+   *  newly-added buttons and the "can visitors finish?" warning. Every
+   *  action (Continue / Submit / Link) is selectable on any field step. */
   isFinalStep: boolean
+  /** The reserved "On Form Submit" step: data has already been posted by
+   *  the time visitors see it, so only "Open a link" CTAs make sense here —
+   *  offering Submit/Continue would let a button re-submit or "advance"
+   *  nowhere. */
+  isOnSubmitStep?: boolean
   onSave: (buttons: StepButton[] | undefined) => void
 }
 
-function emptyButton(isFinalStep: boolean): StepButton {
-  return { id: `btn_${nanoid(6)}`, label: '', action: isFinalStep ? 'submit' : 'next' }
+function emptyButton(isFinalStep: boolean, isOnSubmitStep: boolean): StepButton {
+  return { id: `btn_${nanoid(6)}`, label: '', action: isOnSubmitStep ? 'external_link' : isFinalStep ? 'submit' : 'next' }
 }
 
-const ACTION_OPTIONS: { value: StepButtonAction; label: string; icon: typeof MousePointerClick }[] = [
+const ALL_ACTION_OPTIONS: { value: StepButtonAction; label: string; icon: typeof MousePointerClick }[] = [
   { value: 'next', label: 'Continue', icon: MousePointerClick },
   { value: 'submit', label: 'Submit', icon: Send },
   { value: 'external_link', label: 'Open a link', icon: ExternalLink },
 ]
 
-export default function StepButtonsModal({ open, onClose, step, isFinalStep, onSave }: StepButtonsModalProps) {
+export default function StepButtonsModal({ open, onClose, step, isFinalStep, isOnSubmitStep = false, onSave }: StepButtonsModalProps) {
   const [buttons, setButtons] = useState<StepButton[]>([])
   const [seededFor, setSeededFor] = useState<string | null>(null)
 
@@ -42,7 +48,17 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, onS
 
   const remove = (id: string) => setButtons((prev) => prev.filter((b) => b.id !== id))
 
-  const add = () => setButtons((prev) => [...prev, emptyButton(isFinalStep)])
+  const add = () => setButtons((prev) => [...prev, emptyButton(isFinalStep, isOnSubmitStep)])
+  // The reserved on-submit step only ever offers link CTAs (see prop doc).
+  // The last field step before it can't offer "Continue" — there's no
+  // further field step to continue to, and the on-submit step must only be
+  // reached via a genuine submission, never a bare "next" advance (which
+  // would show a completion-looking screen without the data ever posting).
+  const actionOptions = isOnSubmitStep
+    ? ALL_ACTION_OPTIONS.filter((o) => o.value === 'external_link')
+    : isFinalStep
+      ? ALL_ACTION_OPTIONS.filter((o) => o.value !== 'next')
+      : ALL_ACTION_OPTIONS
 
   const handleClose = () => {
     setSeededFor(null)
@@ -66,8 +82,9 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, onS
           <div>
             <h2 className="text-base font-semibold text-gray-800">Custom buttons — {step.title}</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Replace the default "{isFinalStep ? 'Submit' : 'Next'}" button with your own options for this step.
-              Any button can submit the form — it doesn't have to be the last step.
+              {isOnSubmitStep
+                ? 'Add CTA buttons visitors see right after they submit — e.g. "Continue Application" or "Book a Call." Leave empty to show the default thank-you message instead.'
+                : `Replace the default "${isFinalStep ? 'Submit' : 'Next'}" button with your own options for this step. Any button can submit the form — it doesn't have to be the last field step.`}
             </p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 shrink-0">✕</button>
@@ -77,7 +94,9 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, onS
         <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
           {buttons.length === 0 && (
             <p className="text-sm text-gray-400 text-center py-4">
-              No custom buttons yet — this step will show the default "{isFinalStep ? 'Submit' : 'Next'}" button.
+              {isOnSubmitStep
+                ? 'No custom buttons yet — visitors will see the default thank-you message.'
+                : `No custom buttons yet — this step will show the default "${isFinalStep ? 'Submit' : 'Next'}" button.`}
             </p>
           )}
 
@@ -100,8 +119,8 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, onS
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5">
-                {ACTION_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <div className={`grid gap-1.5 ${actionOptions.length === 1 ? 'grid-cols-1' : actionOptions.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {actionOptions.map(({ value, label, icon: Icon }) => (
                   <button
                     key={value}
                     type="button"
@@ -136,7 +155,7 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, onS
             <Plus size={14} /> Add button
           </button>
 
-          {isFinalStep && buttons.length > 0 && !hasSubmitButton && (
+          {!isOnSubmitStep && isFinalStep && buttons.length > 0 && !hasSubmitButton && (
             <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
               None of these buttons actually submits the form — set at least one button's action
               to "Submit," or visitors reaching this step won't be able to complete it.

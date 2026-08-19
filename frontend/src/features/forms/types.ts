@@ -38,6 +38,31 @@ export interface StepButton {
   url?: string   // required when action === 'external_link'
 }
 
+// ── "On submission" behavior (the reserved On Form Submit step) ───
+// 'message'         — show a thank-you message inline (optionally alongside
+//                      custom CTA buttons — see `buttons` above).
+// 'redirect_page'    — navigate the browser to an internal page/path.
+// 'redirect_url'     — navigate the browser to any external URL.
+// 'redirect_meeting'— navigate the browser to a meeting-scheduling link
+//                      (e.g. Calendly, HubSpot Meetings).
+// 'redirect_payment'— navigate the browser to a payment link (e.g. Stripe).
+// The four redirect kinds behave identically at runtime (a real browser
+// navigation right after a successful submit) — they're kept as distinct,
+// separately-stored fields so switching between them in the builder never
+// clobbers a link you already typed into another one, and so the intent is
+// unambiguous both to the admin and to anyone reading the saved form_json.
+export const ON_SUBMIT_ACTIONS = ['message', 'redirect_page', 'redirect_url', 'redirect_meeting', 'redirect_payment'] as const
+export type OnSubmitAction = (typeof ON_SUBMIT_ACTIONS)[number]
+
+export interface OnSubmitConfig {
+  action: OnSubmitAction
+  message?: string       // 'message' — falls back to the form's success_message when unset
+  pageUrl?: string       // 'redirect_page'
+  externalUrl?: string   // 'redirect_url'
+  meetingUrl?: string    // 'redirect_meeting'
+  paymentUrl?: string    // 'redirect_payment'
+}
+
 export interface FormStep {
   id: string
   title: string
@@ -45,9 +70,22 @@ export interface FormStep {
   /**
    * Custom action buttons shown instead of the default single "Next"/"Submit"
    * button for this step — e.g. a final step could offer both a "Submit"
-   * button and a "Book a Call" (external link) button side by side.
+   * button and a "Book a Call" (external link) button side by side. On the
+   * reserved on-submit step, these only apply when `onSubmitConfig.action`
+   * is "message" (a redirect leaves the page before any button could show).
    */
   buttons?: StepButton[]
+  /**
+   * Marks the reserved, HubSpot-style "On Form Submit" step: what the
+   * visitor sees right after the real data is submitted (custom CTA
+   * buttons, or the default thank-you message if none are configured).
+   * It never holds fields, is always kept as the last entry in `steps`,
+   * and can't be deleted/reordered/renamed from the builder. At most one
+   * step in a form should carry this flag.
+   */
+  isOnSubmit?: boolean
+  /** Only meaningful on the reserved on-submit step; see OnSubmitConfig. */
+  onSubmitConfig?: OnSubmitConfig
 }
 
 export interface FormJson {

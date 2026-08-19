@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Save, Eye, EyeOff, ArrowUpRight } from 'lucide-react'
 import FormBuilder from '../components/FormBuilder'
 import { useForm, useCreateForm, useUpdateForm } from '../hooks/useForms'
 import type { FormJson, FormStatus, FormField, FormStep } from '../types'
@@ -215,12 +215,32 @@ export default function FormBuilderPage() {
                 })()
               : formJson.fields
             const progressPct = isMultiPreview ? Math.round(((safeStep + 1) / totalPreviewSteps) * 100) : 100
-            const isPreviewFinalStep = !isMultiPreview || safeStep === totalPreviewSteps - 1
-            const stepButtons = isMultiPreview ? previewSteps[safeStep]?.buttons : undefined
+            // Mirrors PublicFormPage: the reserved "On Form Submit" step is
+            // always last, and the "final field step" (default action =
+            // Submit) is the one immediately before it.
+            const onSubmitStepIndex = isMultiPreview ? previewSteps.findIndex((s) => s.isOnSubmit) : -1
+            const hasOnSubmitStep = onSubmitStepIndex !== -1
+            const isPreviewOnSubmitStep = hasOnSubmitStep && safeStep === onSubmitStepIndex
+            const isPreviewFinalStep = !isMultiPreview
+              || (hasOnSubmitStep ? safeStep === onSubmitStepIndex - 1 : safeStep === totalPreviewSteps - 1)
+            const onSubmitConfig = isPreviewOnSubmitStep ? previewSteps[safeStep]?.onSubmitConfig : undefined
+            const onSubmitAction = onSubmitConfig?.action ?? 'message'
+            const isPreviewRedirect = isPreviewOnSubmitStep && onSubmitAction !== 'message'
+            const redirectUrl = !isPreviewRedirect ? undefined : onSubmitAction === 'redirect_page' ? onSubmitConfig?.pageUrl
+              : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalUrl
+              : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingUrl
+              : onSubmitConfig?.paymentUrl
+            // Buttons/message only ever apply when the on-submit action is
+            // "Show thank-you message" — a redirect leaves the page before
+            // either could show.
+            const stepButtons = isMultiPreview && !isPreviewRedirect ? previewSteps[safeStep]?.buttons : undefined
             const hasCustomButtons = !!stepButtons && stepButtons.length > 0
             // A custom-button step is a deliberate CTA/decision screen — skip
             // the "Back" nav and the empty-fields placeholder there.
-            const showPreviewBack = isMultiPreview && safeStep > 0 && !hasCustomButtons
+            const showPreviewBack = isMultiPreview && safeStep > 0 && !hasCustomButtons && !isPreviewRedirect
+            // With no custom buttons configured, the on-submit step previews
+            // as the default thank-you screen rather than an empty field step.
+            const showPreviewThankYou = isPreviewOnSubmitStep && !hasCustomButtons && !isPreviewRedirect
 
             return (
               <div className="flex-1 overflow-y-auto bg-gray-100 flex items-start justify-center p-10">
@@ -248,7 +268,29 @@ export default function FormBuilderPage() {
                   </div>
 
                   <div className="px-8 py-6 space-y-5">
-                    {previewFields.length === 0 ? (
+                    {isPreviewRedirect ? (
+                      /* A redirect action navigates the browser away
+                         immediately on real submission — nothing to fill in
+                         or click here, so preview it as a destination card. */
+                      <div className="text-center py-8">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center mx-auto mb-3">
+                          <ArrowUpRight size={18} className="text-indigo-500" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-gray-700 mb-1">Visitors will be redirected</h3>
+                        <p className="text-gray-400 text-xs break-all">
+                          {redirectUrl?.trim() || 'No destination URL set yet'}
+                        </p>
+                      </div>
+                    ) : showPreviewThankYou ? (
+                      /* Default "On Form Submit" content when no custom CTA
+                         buttons are configured — mirrors the live thank-you
+                         screen visitors see after actually submitting. */
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-3">✅</div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-1.5">You're all set!</h3>
+                        <p className="text-gray-500 text-sm">{onSubmitConfig?.message?.trim() || successMsg || 'Thank you! Your submission has been received.'}</p>
+                      </div>
+                    ) : previewFields.length === 0 ? (
                       hasCustomButtons ? null : (
                         <p className="text-gray-400 text-sm text-center py-8">No fields yet.</p>
                       )
@@ -264,53 +306,64 @@ export default function FormBuilderPage() {
                       )
                     )}
 
-                    <div className={`flex gap-3 pt-1 ${showPreviewBack ? 'justify-between' : 'justify-end'}`}>
-                      {showPreviewBack && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewStep((s) => s - 1)}
-                          className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                          ← Back
-                        </button>
-                      )}
-                      {stepButtons && stepButtons.length > 0 ? (
-                        <div className="flex-1 flex flex-col gap-2">
-                          <div className="flex gap-2">
-                            {stepButtons.map((b) => (
-                              <button
-                                key={b.id}
-                                type="button"
-                                onClick={() => {
-                                  if (b.action === 'next') {
-                                    setPreviewStep((s) => Math.min(s + 1, totalPreviewSteps - 1))
-                                  } else if (b.action === 'submit') {
-                                    setPreviewSubmitFlash(true)
-                                    setTimeout(() => setPreviewSubmitFlash(false), 1500)
-                                  } else if (b.action === 'external_link' && b.url) {
-                                    window.open(b.url, '_blank', 'noopener,noreferrer')
-                                  }
-                                }}
-                                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
-                              >
-                                {b.label}
-                              </button>
-                            ))}
+                    {!showPreviewThankYou && !isPreviewRedirect && (
+                      <div className={`flex gap-3 pt-1 ${showPreviewBack ? 'justify-between' : 'justify-end'}`}>
+                        {showPreviewBack && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewStep((s) => s - 1)}
+                            className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            ← Back
+                          </button>
+                        )}
+                        {stepButtons && stepButtons.length > 0 ? (
+                          <div className="flex-1 flex flex-col gap-2">
+                            <div className="flex gap-2">
+                              {stepButtons.map((b) => (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (b.action === 'next') {
+                                      setPreviewStep((s) => Math.min(s + 1, totalPreviewSteps - 1))
+                                    } else if (b.action === 'submit') {
+                                      setPreviewSubmitFlash(true)
+                                      setTimeout(() => setPreviewSubmitFlash(false), 1500)
+                                      if (onSubmitStepIndex !== -1) setPreviewStep(onSubmitStepIndex)
+                                    } else if (b.action === 'external_link' && b.url) {
+                                      window.open(b.url, '_blank', 'noopener,noreferrer')
+                                    }
+                                  }}
+                                  className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                                >
+                                  {b.label}
+                                </button>
+                              ))}
+                            </div>
+                            {previewSubmitFlash && (
+                              <p className="text-xs text-emerald-600 text-center">✓ This button submits the form.</p>
+                            )}
                           </div>
-                          {previewSubmitFlash && (
-                            <p className="text-xs text-emerald-600 text-center">✓ This button submits the form.</p>
-                          )}
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => { if (isMultiPreview && safeStep < totalPreviewSteps - 1) setPreviewStep((s) => s + 1) }}
-                          className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
-                        >
-                          {isPreviewFinalStep ? submitLabel : 'Next →'}
-                        </button>
-                      )}
-                    </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isPreviewFinalStep) {
+                                setPreviewSubmitFlash(true)
+                                setTimeout(() => setPreviewSubmitFlash(false), 1500)
+                                if (onSubmitStepIndex !== -1) setPreviewStep(onSubmitStepIndex)
+                              } else if (isMultiPreview && safeStep < totalPreviewSteps - 1) {
+                                setPreviewStep((s) => s + 1)
+                              }
+                            }}
+                            className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                          >
+                            {isPreviewFinalStep ? submitLabel : 'Next →'}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

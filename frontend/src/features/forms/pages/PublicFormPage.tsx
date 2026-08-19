@@ -355,6 +355,11 @@ export default function PublicFormPage() {
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(0)
   const formDataRef = useRef<Record<string, unknown>>({})
+  // Guards against a double POST — e.g. legacy forms migrated to have a
+  // reserved on-submit step that still carries an old "submit"-action
+  // button saved before that step type was CTA-link-only. A ref (not
+  // state) so the check is never stale inside the handleSubmit closure.
+  const alreadySubmittedRef = useRef(false)
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -377,8 +382,32 @@ export default function PublicFormPage() {
   const isMultiStep = steps.length > 0
   const totalSteps = steps.length
   const isFirstStep = currentStep === 0
-  const isFinalStep = !isMultiStep || currentStep === totalSteps - 1
+  // The reserved "On Form Submit" step (HubSpot-style): what visitors see
+  // right after the real data posts — custom CTA buttons, or the default
+  // thank-you message if none are configured. Only present on forms built
+  // (or re-saved) with the updated builder; older multi-step forms simply
+  // won't have one, and behave exactly as before.
+  const onSubmitStepIndex = steps.findIndex((s) => s.isOnSubmit)
+  const hasOnSubmitStep = onSubmitStepIndex !== -1
+  const isOnSubmitStep = hasOnSubmitStep && currentStep === onSubmitStepIndex
+  // "Final field step" = where the default action is Submit rather than
+  // Next — the field-collecting step immediately before the reserved
+  // on-submit step (or, for legacy forms without one, the literal last step).
+  const isFinalStep = !isMultiStep || (hasOnSubmitStep ? currentStep === onSubmitStepIndex - 1 : currentStep === totalSteps - 1)
   const progressPct = isMultiStep ? Math.round(((currentStep + 1) / totalSteps) * 100) : 100
+
+  // What the on-submit step is configured to do: show a message (default,
+  // and the only mode where CTA buttons apply) or redirect the browser
+  // straight to a page/URL/meeting link/payment link.
+  const onSubmitConfig = hasOnSubmitStep ? steps[onSubmitStepIndex]?.onSubmitConfig : undefined
+  const onSubmitAction = onSubmitConfig?.action ?? 'message'
+  const onSubmitRedirectUrl = (
+    onSubmitAction === 'redirect_page' ? onSubmitConfig?.pageUrl
+      : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalUrl
+      : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingUrl
+      : onSubmitAction === 'redirect_payment' ? onSubmitConfig?.paymentUrl
+      : undefined
+  )?.trim() || undefined
 
   const getVisibleFields = useCallback((): FormField[] => {
     if (!form) return []
@@ -419,6 +448,7 @@ export default function PublicFormPage() {
 
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (alreadySubmittedRef.current) return
     setSubmitError('')
     setSubmitting(true)
     const data = { ...formDataRef.current, ...collectFormData(e.currentTarget) }
@@ -430,13 +460,25 @@ export default function PublicFormPage() {
       })
       const json = await res.json()
       if (!json.success) throw new Error(json.message ?? 'Submission failed')
+      alreadySubmittedRef.current = true
+      // A configured redirect takes the visitor straight off the form —
+      // there's no on-page state left to show once this fires.
+      if (onSubmitRedirectUrl) {
+        window.location.href = onSubmitRedirectUrl
+        return
+      }
       setSubmitted(true)
+      // Land on the reserved "On Form Submit" step so its custom CTA
+      // buttons (or the default thank-you message, if none are configured)
+      // show up — instead of always jumping straight to the generic
+      // full-screen thank-you view.
+      if (onSubmitStepIndex !== -1) setCurrentStep(onSubmitStepIndex)
     } catch (err: any) {
       setSubmitError(err.message ?? 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
-  }, [id])
+  }, [id, onSubmitStepIndex, onSubmitRedirectUrl])
 
   // Single onSubmit for the <form>, regardless of which button triggered it.
   // Reads the actual clicked button via the native SubmitEvent's `submitter`
@@ -490,13 +532,19 @@ export default function PublicFormPage() {
     )
   }
 
-  if (submitted) {
+  // Once submitted, show the generic thank-you screen UNLESS we've landed on
+  // a reserved "On Form Submit" step that has custom CTA buttons configured
+  // (e.g. "Continue Application" / "Book a Call") — in that case fall
+  // through to the normal step shell below, which renders that step with no
+  // fields and just its buttons, in place of the canned message.
+  const showCustomOnSubmitScreen = submitted && isOnSubmitStep && hasCustomButtons
+  if (submitted && !showCustomOnSubmitScreen) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="text-center p-8 sm:p-10 max-w-md w-full shadow-lg" style={cardStyle}>
           <div className="text-5xl mb-4">✅</div>
           <h2 className="text-xl font-bold mb-2" style={{ color: `#${theme.labelColor}` }}>You're all set!</h2>
-          <p className="text-gray-500">{form?.success_message ?? 'Thank you! Your submission has been received.'}</p>
+          <p className="text-gray-500">{onSubmitConfig?.message?.trim() || form?.success_message || 'Thank you! Your submission has been received.'}</p>
         </div>
       </div>
     )

@@ -89,6 +89,30 @@ function validateFormJson(formJson) {
           }
         }
       }
+
+      // Optional "on submission" config — only meaningful on the reserved
+      // on-submit step, but validated wherever present so malformed data
+      // never silently reaches the public form renderer.
+      if (step.onSubmitConfig !== undefined) {
+        const cfg = step.onSubmitConfig;
+        const VALID_ON_SUBMIT_ACTIONS = ["message", "redirect_page", "redirect_url", "redirect_meeting", "redirect_payment"];
+        if (!cfg || typeof cfg !== "object" || !VALID_ON_SUBMIT_ACTIONS.includes(cfg.action)) {
+          throw { status: 400, message: `Step "${step.title}" has an invalid onSubmitConfig action` };
+        }
+        const urlFieldByAction = {
+          redirect_page: "pageUrl",
+          redirect_url: "externalUrl",
+          redirect_meeting: "meetingUrl",
+          redirect_payment: "paymentUrl",
+        };
+        const urlField = urlFieldByAction[cfg.action];
+        if (urlField && cfg[urlField] !== undefined && typeof cfg[urlField] !== "string") {
+          throw { status: 400, message: `Step "${step.title}" onSubmitConfig.${urlField} must be a string` };
+        }
+        if (cfg.message !== undefined && typeof cfg.message !== "string") {
+          throw { status: 400, message: `Step "${step.title}" onSubmitConfig.message must be a string` };
+        }
+      }
     }
   }
 }
