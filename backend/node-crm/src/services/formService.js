@@ -117,13 +117,37 @@ function validateFormJson(formJson) {
   }
 }
 
+/**
+ * Drop field definitions that no step's `fieldIds` references anymore.
+ * Builder edits (moving a field between steps, removing a step, etc.) can
+ * leave inert leftovers in `fields[]` that are never rendered anywhere in
+ * the public form — but public-submission validation reads that same
+ * `fields[]` pool, so a stale orphan still marked `required: true` fails
+ * every submission with a false "X is required" error for a field the
+ * visitor never even saw. Pruning here, at save time, stops these from
+ * accumulating. Single-step forms (no `steps`) are left untouched — there,
+ * `fields[]` IS the whole form.
+ */
+function pruneOrphanedFields(formJson) {
+  if (!formJson || !Array.isArray(formJson.steps) || formJson.steps.length === 0) {
+    return formJson;
+  }
+  const reachableIds = new Set();
+  for (const step of formJson.steps) {
+    if (step.isOnSubmit) continue; // the reserved on-submit step never holds fields
+    for (const fid of step.fieldIds ?? []) reachableIds.add(fid);
+  }
+  return { ...formJson, fields: (formJson.fields ?? []).filter((f) => reachableIds.has(f.id)) };
+}
+
 /** Create a new form */
 async function createForm(body, actor) {
-  const { name, description, form_json, submit_button_label, success_message, status,
+  const { name, description, form_json: rawFormJson, submit_button_label, success_message, status,
           notify_on_submission, notify_emails, auto_respond, auto_respond_subject, auto_respond_body } = body;
 
   if (!name || !name.trim()) throw { status: 400, message: "Form name is required" };
-  if (form_json) validateFormJson(form_json);
+  if (rawFormJson) validateFormJson(rawFormJson);
+  const form_json = rawFormJson ? pruneOrphanedFields(rawFormJson) : rawFormJson;
 
   const slug = await generateUniqueSlug(name);
 
@@ -149,10 +173,11 @@ async function updateForm(id, body) {
   const form = await Form.findById(id);
   if (!form) throw { status: 404, message: "Form not found" };
 
-  const { name, description, form_json, submit_button_label, success_message, status,
+  const { name, description, form_json: rawFormJson, submit_button_label, success_message, status,
           notify_on_submission, notify_emails, auto_respond, auto_respond_subject, auto_respond_body } = body;
 
-  if (form_json) validateFormJson(form_json);
+  if (rawFormJson) validateFormJson(rawFormJson);
+  const form_json = rawFormJson ? pruneOrphanedFields(rawFormJson) : rawFormJson;
 
   let slug;
   if (name && name.trim() !== form.name) {

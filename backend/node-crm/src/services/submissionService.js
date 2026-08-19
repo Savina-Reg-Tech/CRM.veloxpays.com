@@ -5,6 +5,33 @@ import { calculateSpamScore, validateEmail } from "./spamService.js";
 import { sendSubmissionNotification, sendAutoResponder } from "./emailService.js";
 
 /**
+ * Fields actually reachable by a visitor filling out the form — i.e.
+ * rendered somewhere in its step flow.
+ *
+ * Multi-step forms can end up with orphaned field definitions sitting in
+ * `form_json.fields` (leftover from builder edits — a field moved between
+ * steps, a step removed and its fields not fully reassigned, etc.) that no
+ * step's `fieldIds` references anymore. Those are never rendered in the
+ * public form, so a value for them can never be submitted. Validating or
+ * extracting contact info against the full `fields[]` pool instead of this
+ * reachable subset produces false "X is required" errors for fields the
+ * visitor never even saw, and can silently pick up an orphaned duplicate
+ * (always empty) instead of the real field when extracting name/email/phone.
+ */
+function getReachableFields(form) {
+  const fields = form.form_json?.fields ?? [];
+  const steps = form.form_json?.steps ?? [];
+  if (steps.length === 0) return fields; // single-step forms: fields[] IS the whole form
+
+  const reachableIds = new Set();
+  for (const step of steps) {
+    if (step.isOnSubmit) continue; // the reserved on-submit step never holds fields
+    for (const fid of step.fieldIds ?? []) reachableIds.add(fid);
+  }
+  return fields.filter((f) => reachableIds.has(f.id));
+}
+
+/**
  * Extract a value for a field type from submission data.
  * Looks for common keys: the field label (lower+snake), field id, or the type.
  */
@@ -25,7 +52,7 @@ function extractFromData(data, field) {
  * Returns a map of { fieldId: value } or throws 400.
  */
 function validateSubmission(form, rawData) {
-  const fields = form.form_json?.fields ?? [];
+  const fields = getReachableFields(form);
   const errors = [];
 
   for (const field of fields) {
@@ -51,7 +78,7 @@ function validateSubmission(form, rawData) {
  * Find email + name + phone from the submitted data based on field types.
  */
 function extractContactFields(form, rawData) {
-  const fields = form.form_json?.fields ?? [];
+  const fields = getReachableFields(form);
   let email = null;
   let name = null;
   let phone = null;
@@ -109,7 +136,7 @@ async function processFormSubmission({ formId, data, formLoadedAt, ipAddress, us
   // ── Hard email validation (reject invalid/fake emails outright) ──
   // Directly scan every email-type field by field.id so we never miss one,
   // even if extractContactFields failed to pick it up.
-  const emailFields = (form.form_json?.fields ?? []).filter((f) => f.type === "email");
+  const emailFields = getReachableFields(form).filter((f) => f.type === "email");
   for (const field of emailFields) {
     const rawValue =
       data[field.id] ??
