@@ -408,6 +408,15 @@ export default function PublicFormPage() {
       : onSubmitAction === 'redirect_payment' ? onSubmitConfig?.paymentUrl
       : undefined
   )?.trim() || undefined
+  // "Open in new tab" is stored per redirect type (see OnSubmitConfig) —
+  // read whichever flag matches the currently-selected action.
+  const onSubmitOpenInNewTab = (
+    onSubmitAction === 'redirect_page' ? onSubmitConfig?.pageOpenInNewTab
+      : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalOpenInNewTab
+      : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingOpenInNewTab
+      : onSubmitAction === 'redirect_payment' ? onSubmitConfig?.paymentOpenInNewTab
+      : false
+  ) ?? false
 
   const getVisibleFields = useCallback((): FormField[] => {
     if (!form) return []
@@ -461,9 +470,21 @@ export default function PublicFormPage() {
       const json = await res.json()
       if (!json.success) throw new Error(json.message ?? 'Submission failed')
       alreadySubmittedRef.current = true
-      // A configured redirect takes the visitor straight off the form —
-      // there's no on-page state left to show once this fires.
       if (onSubmitRedirectUrl) {
+        if (onSubmitOpenInNewTab) {
+          // Open the destination in a new tab and leave this one — the form
+          // tab, standalone or embedded in an iframe — exactly where it is.
+          // `window.open` targets the top-level browsing context either
+          // way, so this never tries to navigate the iframe itself.
+          window.open(onSubmitRedirectUrl, '_blank', 'noopener,noreferrer')
+          // This tab shows the plain thank-you message in place of the
+          // form — not the on-submit step's CTA buttons (those are a
+          // "message" action feature) and not another redirect.
+          setSubmitted(true)
+          return
+        }
+        // No new tab requested — take the visitor straight off the form;
+        // there's no on-page state left to show once this fires.
         window.location.href = onSubmitRedirectUrl
         return
       }
@@ -478,7 +499,7 @@ export default function PublicFormPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [id, onSubmitStepIndex, onSubmitRedirectUrl])
+  }, [id, onSubmitStepIndex, onSubmitRedirectUrl, onSubmitOpenInNewTab])
 
   // Single onSubmit for the <form>, regardless of which button triggered it.
   // Reads the actual clicked button via the native SubmitEvent's `submitter`

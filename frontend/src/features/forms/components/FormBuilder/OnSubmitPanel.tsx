@@ -58,6 +58,16 @@ const URL_PLACEHOLDER: Partial<Record<OnSubmitAction, string>> = {
   redirect_payment: 'https://buy.stripe.com/your-payment-link',
 }
 
+// Same per-action-field pattern as URL_FIELD, for the same reason: a
+// separate flag per redirect type so switching options never clobbers a
+// choice already made on another one.
+const NEW_TAB_FIELD: Partial<Record<OnSubmitAction, keyof OnSubmitConfig>> = {
+  redirect_page: 'pageOpenInNewTab',
+  redirect_url: 'externalOpenInNewTab',
+  redirect_meeting: 'meetingOpenInNewTab',
+  redirect_payment: 'paymentOpenInNewTab',
+}
+
 export default function OnSubmitPanel({ step, onChange, buttonsCount, onOpenButtonsModal }: OnSubmitPanelProps) {
   const config: OnSubmitConfig = step.onSubmitConfig ?? { action: 'message' }
   const action = config.action
@@ -76,6 +86,7 @@ export default function OnSubmitPanel({ step, onChange, buttonsCount, onOpenButt
           {OPTIONS.map(({ value, label, help, icon: Icon }) => {
             const isSelected = action === value
             const urlKey = URL_FIELD[value]
+            const newTabKey = NEW_TAB_FIELD[value]
 
             return (
               <div
@@ -134,6 +145,18 @@ export default function OnSubmitPanel({ step, onChange, buttonsCount, onOpenButt
                         placeholder={URL_PLACEHOLDER[value]}
                         className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                       />
+                    )}
+
+                    {newTabKey && (
+                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={!!config[newTabKey]}
+                          onChange={(e) => update({ [newTabKey]: e.target.checked } as Partial<OnSubmitConfig>)}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-300"
+                        />
+                        Open in new tab
+                      </label>
                     )}
                   </div>
                 )}

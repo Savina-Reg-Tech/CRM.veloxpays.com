@@ -61,6 +61,19 @@ export interface OnSubmitConfig {
   externalUrl?: string   // 'redirect_url'
   meetingUrl?: string    // 'redirect_meeting'
   paymentUrl?: string    // 'redirect_payment'
+  // "Open in new tab" — one flag per redirect type (rather than a single
+  // shared flag), matching how the URL fields above are kept separate, so
+  // switching between redirect options in the builder never clobbers a
+  // choice already made on another one. Ignored for 'message'. When true,
+  // the destination opens via `window.open(url, '_blank', 'noopener,noreferrer')`
+  // and the form's own tab stays put (showing the thank-you message)
+  // instead of navigating away — works the same standalone or embedded in
+  // an iframe, since the new tab is opened on the top-level window, not
+  // inside the iframe's own navigation context.
+  pageOpenInNewTab?: boolean     // 'redirect_page'
+  externalOpenInNewTab?: boolean // 'redirect_url'
+  meetingOpenInNewTab?: boolean  // 'redirect_meeting'
+  paymentOpenInNewTab?: boolean  // 'redirect_payment'
 }
 
 export interface FormStep {

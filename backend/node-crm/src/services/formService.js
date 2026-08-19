@@ -105,9 +105,23 @@ function validateFormJson(formJson) {
           redirect_meeting: "meetingUrl",
           redirect_payment: "paymentUrl",
         };
+        const newTabFieldByAction = {
+          redirect_page: "pageOpenInNewTab",
+          redirect_url: "externalOpenInNewTab",
+          redirect_meeting: "meetingOpenInNewTab",
+          redirect_payment: "paymentOpenInNewTab",
+        };
         const urlField = urlFieldByAction[cfg.action];
         if (urlField && cfg[urlField] !== undefined && typeof cfg[urlField] !== "string") {
           throw { status: 400, message: `Step "${step.title}" onSubmitConfig.${urlField} must be a string` };
+        }
+        // Validate every "open in new tab" flag that's present, not just
+        // the one for the currently-selected action — they're preserved
+        // independently across redirect types, same as the URL fields.
+        for (const newTabField of Object.values(newTabFieldByAction)) {
+          if (cfg[newTabField] !== undefined && typeof cfg[newTabField] !== "boolean") {
+            throw { status: 400, message: `Step "${step.title}" onSubmitConfig.${newTabField} must be a boolean` };
+          }
         }
         if (cfg.message !== undefined && typeof cfg.message !== "string") {
           throw { status: 400, message: `Step "${step.title}" onSubmitConfig.message must be a string` };

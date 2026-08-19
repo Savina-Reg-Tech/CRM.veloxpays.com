@@ -230,6 +230,11 @@ export default function FormBuilderPage() {
               : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalUrl
               : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingUrl
               : onSubmitConfig?.paymentUrl
+            // Preview-only hint — never actually opens a tab here.
+            const redirectOpensNewTab = !isPreviewRedirect ? false : onSubmitAction === 'redirect_page' ? !!onSubmitConfig?.pageOpenInNewTab
+              : onSubmitAction === 'redirect_url' ? !!onSubmitConfig?.externalOpenInNewTab
+              : onSubmitAction === 'redirect_meeting' ? !!onSubmitConfig?.meetingOpenInNewTab
+              : !!onSubmitConfig?.paymentOpenInNewTab
             // Buttons/message only ever apply when the on-submit action is
             // "Show thank-you message" — a redirect leaves the page before
             // either could show.
@@ -280,6 +285,9 @@ export default function FormBuilderPage() {
                         <p className="text-gray-400 text-xs break-all">
                           {redirectUrl?.trim() || 'No destination URL set yet'}
                         </p>
+                        {redirectOpensNewTab && redirectUrl?.trim() && (
+                          <p className="text-indigo-500 text-xs mt-2 font-medium">Opens in a new tab — this form stays open</p>
+                        )}
                       </div>
                     ) : showPreviewThankYou ? (
                       /* Default "On Form Submit" content when no custom CTA
