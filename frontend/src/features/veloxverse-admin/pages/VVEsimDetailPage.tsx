@@ -1,4 +1,4 @@
-import type { ElementType } from 'react'
+import { useState, type ElementType } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
+import Modal from '@/components/ui/Modal'
 import Spinner from '@/components/ui/Spinner'
 import { useToast } from '@/app/providers/ToastProvider'
 import {
@@ -24,6 +25,7 @@ import {
   useVVSuspendEsim,
   useVVUnsuspendEsim,
 } from '../hooks/useVVEsim'
+import { useVVUserDetail } from '../hooks/useVVUsers'
 import { formatUsd, formatDateTime, statusBadgeVariant } from '../utils'
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -85,9 +87,22 @@ export default function VVEsimDetailPage() {
   const { showToast } = useToast()
 
   const { data: order, isLoading } = useVVEsimDetail(orderNo)
+  // The eSIM order endpoint only returns `userId`, not a `customer` object — fetch the
+  // real name/email via the already-bridged admin users endpoint (same one VVUserDetailPage
+  // uses) rather than assuming a field the backend never sends.
+  const { data: customerDetail } = useVVUserDetail(order?.userId)
   const cancelMutation = useVVCancelEsim()
   const suspendMutation = useVVSuspendEsim()
   const unsuspendMutation = useVVUnsuspendEsim()
+
+  const customerName = customerDetail?.user.fullName
+    || [customerDetail?.user.firstName, customerDetail?.user.lastName].filter(Boolean).join(' ')
+    || customerDetail?.user.email
+    || (order?.userId ? `User ${order.userId}` : undefined)
+  const customerEmail = customerDetail?.user.email
+
+  const [showSuspendModal, setShowSuspendModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
 
   const copyToClipboard = (label: string, value: string) => {
     navigator.clipboard
@@ -106,6 +121,8 @@ export default function VVEsimDetailPage() {
         title: 'Error',
         message: err instanceof Error ? err.message : 'Failed to suspend eSIM',
       })
+    } finally {
+      setShowSuspendModal(false)
     }
   }
 
@@ -123,18 +140,28 @@ export default function VVEsimDetailPage() {
     }
   }
 
+  // Single entry point for both "staff cancels on a customer's behalf" and
+  // "customer requests cancellation" — there's no separate customer login
+  // in this CRM (see roles.ts: only staff roles exist), so this action,
+  // scoped to the specific order/customer shown on this page, IS the
+  // customer-facing cancellation flow. The backend's cancel endpoint
+  // already applies its own state-aware cancel-vs-revoke + refund logic;
+  // the CRM just calls the one documented action either way. Confirmation
+  // happens via the Modal below (see showCancelModal), not a native confirm().
   const handleCancel = async () => {
     if (!order) return
-    if (!confirm('Cancel this eSIM? The user will be auto-refunded.')) return
+    const who = customerName || 'this customer'
     try {
       await cancelMutation.mutateAsync(order.orderNo)
-      showToast({ type: 'success', title: 'eSIM cancelled & refunded' })
+      showToast({ type: 'success', title: 'Cancellation processed', message: `${who}'s eSIM has been cancelled.` })
     } catch (err) {
       showToast({
         type: 'error',
         title: 'Error',
         message: err instanceof Error ? err.message : 'Failed to cancel eSIM',
       })
+    } finally {
+      setShowCancelModal(false)
     }
   }
 
@@ -169,9 +196,10 @@ export default function VVEsimDetailPage() {
   const isTerminal =
     order.status === 'CANCELLED' ||
     order.status === 'EXPIRED' ||
-    order.status === 'FAILED'
-  const profit = order.sellingPrice - order.cost
-  const title = order.coverages[0]?.packageName ?? `Order ${order.orderNo}`
+    order.status === 'FAILED' ||
+    order.status === 'REVOKED'
+  const profit = order.profitUsd ?? (order.sellingPriceUsd ?? 0) - (order.costUsd ?? 0)
+  const title = order.packageName ?? order.packages?.[0]?.name ?? `Order ${order.orderNo}`
 
   return (
     <div className="max-w-full space-y-6">
@@ -297,12 +325,12 @@ export default function VVEsimDetailPage() {
               <DetailRow
                 icon={Database}
                 label="Remaining"
-                value={order.remainingVolume != null ? formatBytes(order.remainingVolume) : null}
+                value={order.remainingVolumeGB != null ? `${order.remainingVolumeGB.toFixed(2)} GB` : null}
               />
               <DetailRow
                 icon={Clock}
                 label="Duration"
-                value={order.duration != null ? `${order.duration} days` : null}
+                value={order.totalDuration != null ? `${order.totalDuration} ${order.durationUnit ?? 'days'}` : null}
               />
               <DetailRow icon={Signal} label="SMDP Status" value={order.smdpStatus} />
               <DetailRow icon={Signal} label="eSIM Status" value={order.esimStatus} />
@@ -317,7 +345,7 @@ export default function VVEsimDetailPage() {
               <DetailRow
                 icon={Clock}
                 label="Expires"
-                value={order.expiredAt ? formatDateTime(order.expiredAt) : null}
+                value={order.profileExpiresAt ? formatDateTime(order.profileExpiresAt) : null}
               />
             </div>
           </Card>
@@ -325,26 +353,26 @@ export default function VVEsimDetailPage() {
           <Card>
             <CardHeader title="Customer" />
             <div className="grid grid-cols-2 gap-4">
-              <DetailRow icon={User} label="Name" value={order.customer.name} />
-              <DetailRow icon={User} label="Email" value={order.customer.email} />
+              <DetailRow icon={User} label="Name" value={customerName} />
+              <DetailRow icon={User} label="Email" value={customerEmail} />
             </div>
           </Card>
 
           <Card>
             <CardHeader title="Pricing" />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <DetailRow icon={CreditCard} label="Cost" value={formatUsd(order.cost)} />
+              <DetailRow icon={CreditCard} label="Cost" value={formatUsd(order.costUsd ?? 0)} />
               <DetailRow
                 icon={CreditCard}
                 label="Selling Price"
-                value={formatUsd(order.sellingPrice)}
+                value={formatUsd(order.sellingPriceUsd ?? 0)}
               />
               <DetailRow icon={CreditCard} label="Profit" value={formatUsd(profit)} />
               <DetailRow icon={CreditCard} label="Payment" value={order.paymentMethod} />
             </div>
           </Card>
 
-          {order.coverages && order.coverages.length > 0 && (
+          {order.packages && order.packages.length > 0 && (
             <Card padding="none">
               <div className="p-6 pb-0">
                 <CardHeader title="Coverage" className="mb-4" />
@@ -361,13 +389,13 @@ export default function VVEsimDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {order.coverages.map((pkg, i) => (
+                    {order.packages.map((pkg, i) => (
                       <tr key={i}>
                         <td className="px-4 py-2 font-mono text-xs text-gray-600">
-                          {pkg.packageCode || '—'}
+                          {pkg.code || '—'}
                         </td>
-                        <td className="px-4 py-2 text-gray-700">{pkg.packageName || '—'}</td>
-                        <td className="px-4 py-2 text-gray-700">{pkg.locationCode || '—'}</td>
+                        <td className="px-4 py-2 text-gray-700">{pkg.name || '—'}</td>
+                        <td className="px-4 py-2 text-gray-700">{pkg.location || '—'}</td>
                         <td className="px-4 py-2 text-gray-700">
                           {pkg.volume != null ? formatBytes(pkg.volume) : '—'}
                         </td>
@@ -398,7 +426,7 @@ export default function VVEsimDetailPage() {
                 ) : (
                   <Button
                     variant="outline"
-                    onClick={handleSuspend}
+                    onClick={() => setShowSuspendModal(true)}
                     loading={suspendMutation.isPending}
                   >
                     <Pause className="h-4 w-4" />
@@ -407,17 +435,76 @@ export default function VVEsimDetailPage() {
                 )}
                 <Button
                   variant="danger"
-                  onClick={handleCancel}
+                  onClick={() => setShowCancelModal(true)}
                   loading={cancelMutation.isPending}
                 >
                   <Ban className="h-4 w-4" />
-                  Cancel & Refund
+                  Request cancellation
                 </Button>
               </div>
             </Card>
           )}
         </div>
       </div>
+
+      <Modal
+        open={showSuspendModal}
+        onClose={() => setShowSuspendModal(false)}
+        title="Suspend eSIM"
+        description={`Order #${order.orderNo}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowSuspendModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleSuspend}
+              loading={suspendMutation.isPending}
+            >
+              <Pause className="h-4 w-4" />
+              Suspend eSIM
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          This pauses data service immediately for{' '}
+          <span className="font-medium text-gray-900">{customerName ?? 'this customer'}</span>.
+          They'll lose connectivity until it's unsuspended. This does not cancel the order or
+          affect billing, and can be reversed at any time from this page.
+        </p>
+      </Modal>
+
+      <Modal
+        open={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Request Cancellation"
+        description={`Order #${order.orderNo}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCancelModal(false)}>
+              Keep eSIM
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleCancel}
+              loading={cancelMutation.isPending}
+            >
+              <Ban className="h-4 w-4" />
+              Confirm cancellation
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          This will cancel the eSIM for{' '}
+          <span className="font-medium text-gray-900">{customerName ?? 'this customer'}</span>.
+          If it hasn't been activated yet, it's processed as a full refund; if it's already in
+          use, it will be revoked instead and the customer refunded from their wallet. This
+          action can't be undone.
+        </p>
+      </Modal>
     </div>
   )
 }

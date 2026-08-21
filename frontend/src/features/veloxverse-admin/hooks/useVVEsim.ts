@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { vvEsimService } from '../vvAdminService'
 
-export function useVVEsimOrders(page = 1, limit = 20) {
+export function useVVEsimOrders(page = 1, limit = 20, filters: { search?: string; status?: string } = {}) {
   return useQuery({
-    queryKey: ['vv-esim', 'orders', page, limit],
-    queryFn: () => vvEsimService.getOrders(page, limit),
+    queryKey: ['vv-esim', 'orders', page, limit, filters.search ?? '', filters.status ?? ''],
+    queryFn: () => vvEsimService.getOrders(page, limit, filters),
+    placeholderData: (prev) => prev,
   })
 }
 

@@ -82,18 +82,38 @@ export interface VVPagination {
 
 export interface AdminOrderRow {
   orderNo: string
+  userId?: string
+  packageCode?: string
+  packageName?: string
   quantity: number
-  createTime: string
-  cost: number
-  sellingPrice: number
   status: string
+  costUsd: number | null
+  sellingPriceUsd: number | null
+  profitUsd?: number | null
+  iccid?: string
+  esimStatus?: string
+  smdpStatus?: string
+  paymentMethod?: string
+  invoiceNo?: string | null
+  createdAt: string
 }
 
+// Matches VeloxVerse's adminOrderService.buildAdminOrderDetail (presentOrder() base +
+// admin-only/live-provider fields). There is NO `customer` field on this object — only
+// `userId` — so the CRM enriches the "Customer" card via a separate vvUsersService.get(userId)
+// call rather than assuming the eSIM endpoint returns customer info.
 export interface AdminOrderDetail {
   orderNo: string
-  esimTranNo: string
+  status: string
+  packageCode?: string
+  packageName?: string
+  locationCode?: string
+  quantity: number
+  currency?: string
+  userId?: string
+  esimTranNo?: string
   providerOrderNo?: string
-  invoiceNo?: string
+  invoiceNo?: string | null
   iccid: string
   imsi?: string
   eid?: string
@@ -107,17 +127,17 @@ export interface AdminOrderDetail {
   esimStatus?: string
   smsStatus?: string
   activatedAt?: string
-  expiredAt?: string
-  status: string
-  cost: number
-  sellingPrice: number
+  profileExpiresAt?: string
+  costUsd: number | null
+  sellingPriceUsd: number | null
+  profitUsd?: number | null
   paymentMethod: string
   totalVolume?: number
-  remainingVolume?: number
-  duration?: number
-  createTime: string
-  customer: { name: string; email: string }
-  coverages: { packageCode: string; packageName: string; locationCode: string; volume: number; duration: number }[]
+  remainingVolumeGB?: number | null
+  totalDuration?: number
+  durationUnit?: string
+  createdAt: string
+  packages: { code: string | null; name: string | null; location: string | null; volume: number | null; duration: number | null }[]
 }
 
 // ── Lounge ───────────────────────────────────────────────────────────

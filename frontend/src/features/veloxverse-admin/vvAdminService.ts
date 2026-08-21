@@ -55,8 +55,21 @@ export const vvAnalyticsService = {
 
 // ── eSIM Orders ─────────────────────────────────────────────────────
 export const vvEsimService = {
-  async getOrders(page = 1, limit = 20) {
-    const { data } = await api.get<VVResponse<{ orders: AdminOrderRow[]; pagination: VVPagination }>>(`${VV}/admin/esims/orders`, { params: { page, limit } })
+  // `search`/`status` are passed through optimistically, mirroring the
+  // page/limit/search convention already used by vvUsersService.list and
+  // vvPromoService.list against the same /vv-admin backend — not confirmed
+  // for this specific endpoint. If the backend ignores them, VVEsimListPage
+  // still filters the returned page client-side, so search/filter works
+  // either way.
+  async getOrders(page = 1, limit = 20, params: { search?: string; status?: string } = {}) {
+    const { data } = await api.get<VVResponse<{ orders: AdminOrderRow[]; pagination: VVPagination }>>(`${VV}/admin/esims/orders`, {
+      params: {
+        page,
+        limit,
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.status ? { status: params.status } : {}),
+      },
+    })
     return data.data
   },
   async getOrderDetail(orderNo: string) {
