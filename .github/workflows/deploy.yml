@@ -1,85 +1,123 @@
-name: Deploy CRM to ECS
+name: Deploy to Lightsail
 
 on:
   push:
-    branches:
-      - main
-
-env:
-  AWS_REGION:        ap-southeast-2
-  ECR_REGISTRY:      746669209316.dkr.ecr.ap-southeast-2.amazonaws.com
-  ECR_REPOSITORY:    veloxverse-crm
-  ECS_CLUSTER:       veloxverse-prod-cluster
-  ECS_SERVICE:       crm-backend-task-service-u3uzeavg
-  CONTAINER_NAME:    crm-backend
+    branches: [main]
 
 jobs:
-  test:
-    name: Run Tests
+  deploy-backend:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install dependencies
-        working-directory: backend/node-crm
-        run: npm ci
-
-      - name: Run tests
-        working-directory: backend/node-crm
-        run: npm test
-
-  deploy:
-    name: Build and Deploy to ECS
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t velox-backend:${{ github.sha }} ./backend
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build Docker image
+      - name: Install Lightsail CLI plugin
         run: |
-          docker build \
-            -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            ./backend
-          docker tag \
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          curl "https://s3.us-west-2.amazonaws.com/lightsail.amazonaws.com/lightsailctl-linux-amd64" -o /usr/local/bin/lightsailctl
+          chmod +x /usr/local/bin/lightsailctl
 
-      - name: Push image to ECR
+      - name: Push backend image to Lightsail
         run: |
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          aws lightsail push-container-image \
+            --service-name velox-backend \
+            --label velox-backend \
+            --image velox-backend:${{ github.sha }}
 
-      - name: Deploy to ECS
+      - name: Get pushed backend image reference
+        id: backend_image
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --force-new-deployment \
-            --region ${{ env.AWS_REGION }}
+          IMAGE_REF=$(aws lightsail get-container-images \
+            --service-name velox-backend \
+            --query "containerImages[0].image" --output text)
+          echo "image=$IMAGE_REF" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for deployment
+      - name: Deploy backend
         run: |
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --region ${{ env.AWS_REGION }}
-          echo "✅ CRM deployed successfully"
+          aws lightsail create-container-service-deployment \
+            --service-name velox-backend \
+            --containers "{
+              \"velox-backend\": {
+                \"image\": \"${{ steps.backend_image.outputs.image }}\",
+                \"ports\": { \"5002\": \"HTTP\" },
+                \"environment\": {
+                  \"DB_HOST\": \"${{ secrets.DB_HOST }}\",
+                  \"DB_PORT\": \"5432\",
+                  \"DB_USER\": \"${{ secrets.DB_USER }}\",
+                  \"DB_PASSWORD\": \"${{ secrets.DB_PASSWORD }}\",
+                  \"DB_NAME\": \"${{ secrets.DB_NAME }}\",
+                  \"NODE_ENV\": \"production\",
+                  \"ALLOWED_ORIGINS\": \"${{ secrets.FRONTEND_URL }}\",
+                  \"JWT_SECRET\": \"${{ secrets.JWT_SECRET }}\",
+                  \"JWT_EXPIRES_IN\": \"7d\"
+                }
+              }
+            }" \
+            --public-endpoint "{
+              \"containerName\": \"velox-backend\",
+              \"containerPort\": 5002,
+              \"healthCheck\": { \"path\": \"/health\" }
+            }"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build frontend image
+        run: |
+          docker build -t velox-frontend:${{ github.sha }} \
+            --build-arg VITE_API_URL=${{ secrets.VITE_API_URL }} \
+            ./frontend
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install Lightsail CLI plugin
+        run: |
+          curl "https://s3.us-west-2.amazonaws.com/lightsail.amazonaws.com/lightsailctl-linux-amd64" -o /usr/local/bin/lightsailctl
+          chmod +x /usr/local/bin/lightsailctl
+
+      - name: Push frontend image to Lightsail
+        run: |
+          aws lightsail push-container-image \
+            --service-name velox-frontend \
+            --label velox-frontend \
+            --image velox-frontend:${{ github.sha }}
+
+      - name: Get pushed frontend image reference
+        id: frontend_image
+        run: |
+          IMAGE_REF=$(aws lightsail get-container-images \
+            --service-name velox-frontend \
+            --query "containerImages[0].image" --output text)
+          echo "image=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy frontend
+        run: |
+          aws lightsail create-container-service-deployment \
+            --service-name velox-frontend \
+            --containers "{
+              \"velox-frontend\": {
+                \"image\": \"${{ steps.frontend_image.outputs.image }}\",
+                \"ports\": { \"80\": \"HTTP\" }
+              }
+            }" \
+            --public-endpoint "{
+              \"containerName\": \"velox-frontend\",
+              \"containerPort\": 80,
+              \"healthCheck\": { \"path\": \"/\" }
+            }"
