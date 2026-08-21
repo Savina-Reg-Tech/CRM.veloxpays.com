@@ -41,31 +41,47 @@ jobs:
           echo "image=$IMAGE_REF" >> "$GITHUB_OUTPUT"
 
       - name: Deploy backend
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          ALLOWED_ORIGINS: ${{ secrets.FRONTEND_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          IMAGE_REF: ${{ steps.backend_image.outputs.image }}
         run: |
-          aws lightsail create-container-service-deployment \
-            --service-name velox-backend \
-            --containers "{
-              \"velox-backend\": {
-                \"image\": \"${{ steps.backend_image.outputs.image }}\",
-                \"ports\": { \"5002\": \"HTTP\" },
-                \"environment\": {
-                  \"DB_HOST\": \"${{ secrets.DB_HOST }}\",
-                  \"DB_PORT\": \"5432\",
-                  \"DB_USER\": \"${{ secrets.DB_USER }}\",
-                  \"DB_PASSWORD\": \"${{ secrets.DB_PASSWORD }}\",
-                  \"DB_NAME\": \"${{ secrets.DB_NAME }}\",
-                  \"NODE_ENV\": \"production\",
-                  \"ALLOWED_ORIGINS\": \"${{ secrets.FRONTEND_URL }}\",
-                  \"JWT_SECRET\": \"${{ secrets.JWT_SECRET }}\",
-                  \"JWT_EXPIRES_IN\": \"7d\"
+          # Build the containers JSON with jq so secrets are treated as pure
+          # data — safe regardless of backticks, quotes, $ signs, etc.
+          CONTAINERS_JSON=$(jq -n \
+            --arg image "$IMAGE_REF" \
+            --arg dbhost "$DB_HOST" \
+            --arg dbuser "$DB_USER" \
+            --arg dbpass "$DB_PASSWORD" \
+            --arg dbname "$DB_NAME" \
+            --arg origins "$ALLOWED_ORIGINS" \
+            --arg jwt "$JWT_SECRET" \
+            '{
+              "velox-backend": {
+                image: $image,
+                ports: { "5002": "HTTP" },
+                environment: {
+                  DB_HOST: $dbhost,
+                  DB_PORT: "5432",
+                  DB_USER: $dbuser,
+                  DB_PASSWORD: $dbpass,
+                  DB_NAME: $dbname,
+                  NODE_ENV: "production",
+                  ALLOWED_ORIGINS: $origins,
+                  JWT_SECRET: $jwt,
+                  JWT_EXPIRES_IN: "7d"
                 }
               }
-            }" \
-            --public-endpoint "{
-              \"containerName\": \"velox-backend\",
-              \"containerPort\": 5002,
-              \"healthCheck\": { \"path\": \"/health\" }
-            }"
+            }')
+
+          aws lightsail create-container-service-deployment \
+            --service-name velox-backend \
+            --containers "$CONTAINERS_JSON" \
+            --public-endpoint '{"containerName":"velox-backend","containerPort":5002,"healthCheck":{"path":"/health"}}'
 
   deploy-frontend:
     runs-on: ubuntu-latest
