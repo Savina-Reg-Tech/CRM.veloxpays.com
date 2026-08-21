@@ -126,4 +126,3 @@ jobs:
             --service-name velox-frontend \
             --containers "$CONTAINERS_JSON" \
             --public-endpoint '{"containerName":"velox-frontend","containerPort":80,"healthCheck":{"path":"/"}}'
-            #eod
