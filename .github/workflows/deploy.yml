@@ -35,6 +35,9 @@ jobs:
       - name: Get pushed backend image reference
         id: backend_image
         run: |
+          echo "--- Full image list for debugging ---"
+          aws lightsail get-container-images --service-name velox-backend
+          echo "--------------------------------------"
           IMAGE_REF=$(aws lightsail get-container-images \
             --service-name velox-backend \
             --query "containerImages[0].image" --output text)
