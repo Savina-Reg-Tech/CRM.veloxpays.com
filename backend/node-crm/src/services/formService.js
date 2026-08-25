@@ -26,6 +26,46 @@ async function generateUniqueSlug(name, excludeId = null) {
   return slug;
 }
 
+// ── Theme validation ──────────────────────────────────────────────
+// Mirrors frontend/src/features/forms/utils/theme.ts `validateThemeShape`
+// and frontend/src/features/forms/types.ts constants exactly, so a form
+// (or template) rejected here would also have been flagged in the builder
+// UI — the server check exists because the client one can't be trusted.
+const THEME_HEX_RE = /^[0-9a-fA-F]{6}$/;
+const THEME_BORDER_RADIUS_PRESETS = ["none", "sm", "md", "lg", "full"];
+const THEME_FONT_FAMILY_OPTIONS = ["system", "inter", "roboto", "georgia", "mono"];
+const THEME_COLOR_FIELDS = [
+  "buttonColor", "buttonTextColor", "headerBgColor", "headerTextColor",
+  "formBgColor", "cardBgColor", "labelColor", "inputBorderColor",
+  "inputBgColor", "inputTextColor",
+];
+
+/**
+ * Validate a (possibly partial) form theme object. Throws { status, message }
+ * on the first violation, same shape as the rest of this file's validators.
+ * Used both for `form_json.theme` (via validateFormJson) and for
+ * `form_templates.theme` payloads (via formTemplateService.js) — one schema,
+ * two call sites.
+ */
+function validateThemeObject(theme, label = "theme") {
+  if (theme === undefined || theme === null) return;
+  if (typeof theme !== "object" || Array.isArray(theme)) {
+    throw { status: 400, message: `${label} must be an object` };
+  }
+  for (const field of THEME_COLOR_FIELDS) {
+    const v = theme[field];
+    if (v !== undefined && (typeof v !== "string" || !THEME_HEX_RE.test(v))) {
+      throw { status: 400, message: `${label}.${field} must be a 6-digit hex color without '#'` };
+    }
+  }
+  if (theme.borderRadius !== undefined && !THEME_BORDER_RADIUS_PRESETS.includes(theme.borderRadius)) {
+    throw { status: 400, message: `${label}.borderRadius must be one of: ${THEME_BORDER_RADIUS_PRESETS.join(", ")}` };
+  }
+  if (theme.fontFamily !== undefined && !THEME_FONT_FAMILY_OPTIONS.includes(theme.fontFamily)) {
+    throw { status: 400, message: `${label}.fontFamily must be one of: ${THEME_FONT_FAMILY_OPTIONS.join(", ")}` };
+  }
+}
+
 /** Validate a form's field schema */
 function validateFormJson(formJson) {
   if (!formJson || typeof formJson !== "object") {
@@ -34,6 +74,8 @@ function validateFormJson(formJson) {
   if (!Array.isArray(formJson.fields)) {
     throw { status: 400, message: "form_json.fields must be an array" };
   }
+
+  validateThemeObject(formJson.theme, "form_json.theme");
 
   const VALID_TYPES = new Set([
     "text", "email", "phone", "textarea",
@@ -265,4 +307,5 @@ export {
   getPublicForm,
   generateIframeEmbed,
   generateJsEmbed,
+  validateThemeObject,
 };

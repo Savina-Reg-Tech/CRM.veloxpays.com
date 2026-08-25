@@ -23,6 +23,13 @@ import {
   handleAddDomain,
   handleDeleteDomain,
 } from "../controllers/emailDomainController.js";
+import {
+  handleCreateFormTemplate,
+  handleListFormTemplates,
+  handleGetFormTemplate,
+  handleUpdateFormTemplate,
+  handleDeleteFormTemplate,
+} from "../controllers/formTemplateController.js";
 
 const router = Router();
 
@@ -32,6 +39,14 @@ router.use(authorizeRoles("super_admin", "admin"));
 
 // ── Global stats ──────────────────────────────────────────────────
 router.get("/stats", handleGetGlobalStats);
+
+// ── Design templates (must come before "/:id" so "templates" doesn't get
+// swallowed as a form id param) ────────────────────────────────────
+router.post("/templates", handleCreateFormTemplate);
+router.get("/templates", handleListFormTemplates);
+router.get("/templates/:id", handleGetFormTemplate);
+router.patch("/templates/:id", handleUpdateFormTemplate);
+router.delete("/templates/:id", handleDeleteFormTemplate);
 
 // ── Forms CRUD ────────────────────────────────────────────────────
 router.post("/", handleCreateForm);

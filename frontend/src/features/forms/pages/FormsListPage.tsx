@@ -4,6 +4,7 @@ import { Plus, ExternalLink, Edit2, Trash2, BarChart2, FileText, Code2 } from 'l
 import { useForms, useDeleteForm, useGlobalStats } from '../hooks/useForms'
 import { formApi } from '../formService'
 import EmbedModal from '../components/EmbedModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import type { Form, EmbedCodes } from '../types'
 
 const STATUS_COLORS = {
@@ -27,6 +28,7 @@ export default function FormsListPage() {
   const [embedForm, setEmbedForm] = useState<Form | null>(null)
   const [embedCodes, setEmbedCodes] = useState<EmbedCodes | null>(null)
   const [embedLoading, setEmbedLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
   const PAGE_SIZE = 20
 
   const { data, isLoading, isError } = useForms({ limit: PAGE_SIZE, offset: page * PAGE_SIZE })
@@ -48,9 +50,14 @@ export default function FormsListPage() {
     }
   }
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Delete form "${name}"? This action cannot be undone.`)) return
-    await deleteMutation.mutateAsync(id)
+  const handleDelete = (id: number, name: string) => {
+    setDeleteTarget({ id, name })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    await deleteMutation.mutateAsync(deleteTarget.id)
+    setDeleteTarget(null)
   }
 
   return (
@@ -224,6 +231,17 @@ export default function FormsListPage() {
         onClose={() => setEmbedForm(null)}
         embedCodes={embedCodes}
         isLoading={embedLoading}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete form"
+        message={deleteTarget ? `Delete form "${deleteTarget.name}"? This action cannot be undone.` : ''}
+        confirmLabel="Delete"
+        danger
+        loading={deleteMutation.isPending}
       />
     </div>
   )

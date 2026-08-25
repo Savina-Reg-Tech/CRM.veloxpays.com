@@ -101,10 +101,91 @@ export interface FormStep {
   onSubmitConfig?: OnSubmitConfig
 }
 
+// ── Theming ───────────────────────────────────────────────────────
+// Colors are stored as 6-digit hex WITHOUT the leading '#' (matches the
+// existing URL-query-param theme convention already used by the public
+// form renderer, e.g. ?color=4F46E5) — keeps both sources interchangeable.
+export const HEX_COLOR_RE = /^[0-9a-fA-F]{6}$/
+
+// Fixed presets rather than a freeform px value — avoids arbitrary CSS
+// injection risk and keeps every themed form visually consistent with the
+// rest of the design system.
+export const BORDER_RADIUS_PRESETS = {
+  none: '0px',
+  sm: '6px',
+  md: '12px',
+  lg: '16px',
+  full: '24px',
+} as const
+export type BorderRadiusPreset = keyof typeof BORDER_RADIUS_PRESETS
+
+// Allowlist only — never accept arbitrary font-family CSS from a form.
+export const FONT_FAMILY_OPTIONS = [
+  { value: 'system', label: 'System default', css: 'system-ui, -apple-system, "Segoe UI", sans-serif' },
+  { value: 'inter', label: 'Inter', css: '"Inter", system-ui, sans-serif' },
+  { value: 'roboto', label: 'Roboto', css: '"Roboto", system-ui, sans-serif' },
+  { value: 'georgia', label: 'Georgia (serif)', css: 'Georgia, "Times New Roman", serif' },
+  { value: 'mono', label: 'Monospace', css: '"SFMono-Regular", Consolas, monospace' },
+] as const
+export type FontFamilyOption = (typeof FONT_FAMILY_OPTIONS)[number]['value']
+
+export interface FormTheme {
+  buttonColor?: string       // hex, no '#' — Next/Submit button background
+  buttonTextColor?: string   // hex, no '#'
+  headerBgColor?: string     // hex, no '#' — form header band background
+  headerTextColor?: string   // hex, no '#'
+  formBgColor?: string       // hex, no '#' — page background behind the card
+  cardBgColor?: string       // hex, no '#' — the form card itself
+  labelColor?: string        // hex, no '#' — field labels/body text
+  inputBorderColor?: string  // hex, no '#' — border around text fields, dropdowns, etc.
+  inputBgColor?: string      // hex, no '#' — background inside text fields, dropdowns, etc.
+  inputTextColor?: string    // hex, no '#' — text typed/selected inside inputs
+  borderRadius?: BorderRadiusPreset
+  fontFamily?: FontFamilyOption
+}
+
+// Mirrors the fallback values `buildTheme()` in PublicFormPage already used
+// via URL query params, so a form with no theme set renders identically to
+// how every form rendered before theming existed.
+export const DEFAULT_FORM_THEME: Required<FormTheme> = {
+  buttonColor: '4F46E5',
+  buttonTextColor: 'FFFFFF',
+  headerBgColor: '4F46E5',
+  headerTextColor: 'FFFFFF',
+  formBgColor: 'F3F4F6',
+  cardBgColor: 'FFFFFF',
+  labelColor: '374151',
+  inputBorderColor: 'D1D5DB',
+  inputBgColor: 'FFFFFF',
+  inputTextColor: '111827',
+  borderRadius: 'lg',
+  fontFamily: 'system',
+}
+
 export interface FormJson {
   fields: FormField[]
   steps?: FormStep[]   // undefined = single-step (legacy)
+  theme?: FormTheme    // undefined = DEFAULT_FORM_THEME (see PublicFormPage buildTheme)
 }
+
+export interface FormTemplate {
+  id: number
+  name: string
+  description: string | null
+  theme: FormTheme
+  created_by: number | null
+  created_by_name?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateFormTemplatePayload {
+  name: string
+  description?: string
+  theme: FormTheme
+}
+
+export interface UpdateFormTemplatePayload extends Partial<CreateFormTemplatePayload> {}
 
 // ── Form statuses ─────────────────────────────────────────────────
 export const FORM_STATUSES = ['draft', 'published', 'archived'] as const

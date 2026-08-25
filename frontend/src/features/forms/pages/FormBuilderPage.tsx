@@ -3,33 +3,44 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Eye, EyeOff, ArrowUpRight } from 'lucide-react'
 import FormBuilder from '../components/FormBuilder'
 import { useForm, useCreateForm, useUpdateForm } from '../hooks/useForms'
-import type { FormJson, FormStatus, FormField, FormStep } from '../types'
+import type { FormJson, FormStatus, FormField, FormStep, FormTheme } from '../types'
 import { layoutFields } from '../utils/layoutFields'
+import {
+  resolveTheme, themePageStyle, themeCardStyle, themeHeaderStyle,
+  themeHeaderTextStyle, themeButtonStyle, themeButtonHoverColor, themeLabelStyle,
+  themeInputBorderStyle, themeInputStyle, themeCheckStyle,
+} from '../utils/theme'
+import { parseInlineLinks } from '../utils/richText'
 
-function PreviewField({ field }: { field: FormField }) {
-  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg'
+function PreviewField({ field, theme }: { field: FormField; theme: Required<FormTheme> }) {
+  const inputCls = 'w-full px-3 py-2 text-sm border'
+  const inputStyle = {
+    borderRadius: `calc(${themeCardStyle(theme).borderRadius} * 0.6)`,
+    ...themeInputStyle(theme),
+  } as React.CSSProperties
+  const checkStyle = themeCheckStyle(theme)
   return (
     <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-1">
+      <label className="block text-sm font-semibold mb-1" style={themeLabelStyle(theme)}>
         {field.label}{field.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {field.type === 'textarea' ? (
-        <textarea rows={3} placeholder={field.placeholder} className={`${inputCls} resize-none`} />
+        <textarea rows={3} placeholder={field.placeholder} className={`${inputCls} resize-none`} style={inputStyle} />
       ) : field.type === 'dropdown' ? (
-        <select className={inputCls}>
+        <select className={inputCls} style={inputStyle}>
           <option>Select…</option>
           {field.options?.map((o) => <option key={o}>{o}</option>)}
         </select>
       ) : field.type === 'radio' ? (
-        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm"><input type="radio" readOnly /> {o}</label>)}</div>
+        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm" style={themeLabelStyle(theme)}><input type="radio" readOnly style={checkStyle} /> {parseInlineLinks(o)}</label>)}</div>
       ) : field.type === 'checkbox' ? (
-        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm"><input type="checkbox" readOnly /> {o}</label>)}</div>
+        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm" style={themeLabelStyle(theme)}><input type="checkbox" readOnly style={checkStyle} /> {parseInlineLinks(o)}</label>)}</div>
       ) : field.type === 'date' ? (
-        <input type="date" className={inputCls} readOnly />
+        <input type="date" className={inputCls} style={inputStyle} readOnly />
       ) : field.type === 'file' ? (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center text-sm text-gray-400">Click to upload</div>
+        <div className="border-2 border-dashed rounded-lg p-4 text-center text-sm text-gray-400" style={themeInputBorderStyle(theme)}>Click to upload</div>
       ) : (
-        <input type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'} placeholder={field.placeholder} className={inputCls} readOnly />
+        <input type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'} placeholder={field.placeholder} className={inputCls} style={inputStyle} readOnly />
       )}
       {field.helpText && <p className="text-xs text-gray-400 mt-1">{field.helpText}</p>}
     </div>
@@ -56,6 +67,12 @@ export default function FormBuilderPage() {
   const [status, setStatus] = useState<FormStatus>('draft')
   const [formJson, setFormJson] = useState<FormJson>({ fields: [] })
   const [preview, setPreview] = useState(false)
+  // Which builder tab (Build/Design) is active — owned here rather than
+  // inside <FormBuilder> so it survives toggling Preview on and off (the
+  // Preview pane below is a separate branch of this same render, not a
+  // child of FormBuilder, so FormBuilder unmounts while it's showing and
+  // would otherwise forget which tab was active).
+  const [builderView, setBuilderView] = useState<'build' | 'design'>('build')
   const [previewStep, setPreviewStep] = useState(0)
   const [previewSubmitFlash, setPreviewSubmitFlash] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -204,6 +221,7 @@ export default function FormBuilderPage() {
         {preview ? (
           /* Live preview pane */
           (() => {
+            const theme = resolveTheme(formJson.theme)
             const previewSteps: FormStep[] = formJson.steps ?? []
             const isMultiPreview = previewSteps.length > 0
             const totalPreviewSteps = previewSteps.length
@@ -214,7 +232,6 @@ export default function FormBuilderPage() {
                   return formJson.fields.filter((f) => ids.has(f.id))
                 })()
               : formJson.fields
-            const progressPct = isMultiPreview ? Math.round(((safeStep + 1) / totalPreviewSteps) * 100) : 100
             // Mirrors PublicFormPage: the reserved "On Form Submit" step is
             // always last, and the "final field step" (default action =
             // Submit) is the one immediately before it.
@@ -248,28 +265,12 @@ export default function FormBuilderPage() {
             const showPreviewThankYou = isPreviewOnSubmitStep && !hasCustomButtons && !isPreviewRedirect
 
             return (
-              <div className="flex-1 overflow-y-auto bg-gray-100 flex items-start justify-center p-10">
-                <div className="w-full max-w-lg bg-white rounded-2xl shadow-lg overflow-hidden">
+              <div className="flex-1 overflow-y-auto flex items-start justify-center p-10" style={themePageStyle(theme)}>
+                <div className="w-full max-w-lg shadow-lg overflow-hidden" style={themeCardStyle(theme)}>
                   {/* Header */}
-                  <div className="bg-gradient-to-r from-indigo-600 to-blue-500 px-8 py-6">
-                    <h2 className="text-xl font-bold text-white">{name || 'Untitled Form'}</h2>
-                    {description && <p className="text-indigo-100 text-sm mt-1">{description}</p>}
-                    {isMultiPreview && (
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-indigo-100 text-xs font-medium">Step {safeStep + 1} of {totalPreviewSteps}</span>
-                          <span className="text-indigo-100 text-xs">{previewSteps[safeStep]?.title}</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-indigo-400/40 rounded-full overflow-hidden">
-                          <div className="h-full bg-white rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          {previewSteps.map((_, i) => (
-                            <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i < safeStep ? 'bg-white' : i === safeStep ? 'bg-white scale-125' : 'bg-indigo-400/40'}`} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                  <div className="px-8 py-6" style={themeHeaderStyle(theme)}>
+                    <h2 className="text-xl font-bold" style={themeHeaderTextStyle(theme)}>{name || 'Untitled Form'}</h2>
+                    {description && <p className="text-sm mt-1" style={{ ...themeHeaderTextStyle(theme), opacity: 0.85 }}>{description}</p>}
                   </div>
 
                   <div className="px-8 py-6 space-y-5">
@@ -295,8 +296,8 @@ export default function FormBuilderPage() {
                          screen visitors see after actually submitting. */
                       <div className="text-center py-8">
                         <div className="text-4xl mb-3">✅</div>
-                        <h3 className="text-lg font-bold text-gray-800 mb-1.5">You're all set!</h3>
-                        <p className="text-gray-500 text-sm">{onSubmitConfig?.message?.trim() || successMsg || 'Thank you! Your submission has been received.'}</p>
+                        <h3 className="text-lg font-bold mb-1.5" style={themeLabelStyle(theme)}>You're all set!</h3>
+                        <p className="text-sm opacity-80" style={themeLabelStyle(theme)}>{onSubmitConfig?.message?.trim() || successMsg || 'Thank you! Your submission has been received.'}</p>
                       </div>
                     ) : previewFields.length === 0 ? (
                       hasCustomButtons ? null : (
@@ -305,10 +306,10 @@ export default function FormBuilderPage() {
                     ) : (
                       layoutFields(previewFields).map((row, i) =>
                         row.kind === 'full' ? (
-                          row.field.type !== 'hidden' && <PreviewField key={row.field.id} field={row.field} />
+                          row.field.type !== 'hidden' && <PreviewField key={row.field.id} field={row.field} theme={theme} />
                         ) : (
                           <div key={i} className="grid grid-cols-2 gap-4">
-                            {row.fields.map((f) => <PreviewField key={f.id} field={f} />)}
+                            {row.fields.map((f) => <PreviewField key={f.id} field={f} theme={theme} />)}
                           </div>
                         )
                       )
@@ -343,7 +344,10 @@ export default function FormBuilderPage() {
                                       window.open(b.url, '_blank', 'noopener,noreferrer')
                                     }
                                   }}
-                                  className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                                  className="flex-1 py-2.5 text-sm font-medium transition-colors"
+                                  style={themeButtonStyle(theme)}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = themeButtonHoverColor(theme))}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = themeButtonStyle(theme).backgroundColor as string)}
                                 >
                                   {b.label}
                                 </button>
@@ -365,7 +369,10 @@ export default function FormBuilderPage() {
                                 setPreviewStep((s) => s + 1)
                               }
                             }}
-                            className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
+                            className="flex-1 py-2.5 text-sm font-medium transition-colors"
+                            style={themeButtonStyle(theme)}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = themeButtonHoverColor(theme))}
+                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = themeButtonStyle(theme).backgroundColor as string)}
                           >
                             {isPreviewFinalStep ? submitLabel : 'Next →'}
                           </button>
@@ -485,6 +492,8 @@ export default function FormBuilderPage() {
               <FormBuilder
                 initialFormJson={formJson}
                 onChange={setFormJson}
+                view={builderView}
+                onViewChange={setBuilderView}
               />
             </div>
           </div>

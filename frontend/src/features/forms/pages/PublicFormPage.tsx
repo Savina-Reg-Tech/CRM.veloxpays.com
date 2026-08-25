@@ -3,12 +3,34 @@
  *
  * Responsive: single column on mobile, half-width grid on sm+.
  *
- * Theming via URL query params (for iframe embeds / white-label):
- *   ?color=4F46E5        — primary brand color (hex, no #)
- *   ?radius=16           — card/input border radius in px (default 16)
- *   ?bg=F9FAFB           — page background color (default light gray)
- *   ?cardBg=FFFFFF       — form card background (default white)
- *   ?labelColor=374151   — label text color
+ * Theming precedence (lowest to highest):
+ *   1. DEFAULT_FORM_THEME (frontend/src/features/forms/types.ts)
+ *   2. The form's own persisted `form_json.theme`, set via the builder's
+ *      Design tab — this is the normal source of truth for a form's colors.
+ *   3. URL query params — an optional override layer on top, for iframe
+ *      embeds / white-label use cases that need a one-off variation without
+ *      editing the form itself:
+ *        ?color=4F46E5          — legacy single override: sets BOTH the
+ *                                 header background and the button color at
+ *                                 once (this was the only option before
+ *                                 button/header had independent colors —
+ *                                 kept working exactly as before).
+ *        ?buttonColor=4F46E5    — button background only
+ *        ?buttonTextColor=FFFFFF
+ *        ?headerBgColor=4F46E5  — header band background only
+ *        ?headerTextColor=FFFFFF
+ *        ?radius=16             — card/input border radius in px
+ *        ?bg=F9FAFB             — page background color
+ *        ?cardBg=FFFFFF         — form card background
+ *        ?labelColor=374151     — label text color
+ *        ?inputBorderColor=D1D5DB — border around text fields/dropdowns
+ *        ?inputBgColor=FFFFFF   — background inside text fields/dropdowns
+ *        ?inputTextColor=111827 — text typed/selected inside inputs
+ *
+ * Every theme value is applied via inline `style` on the specific element it
+ * affects (never a global `<style>` tag or `document.documentElement`), so
+ * it's inherently scoped to this form and can't leak into — or be affected
+ * by — a host page when embedded in an iframe.
  *
  * Example embed:
  *   <iframe src="/embed/42?color=E11D48&radius=8&bg=FFF1F2" />
@@ -16,8 +38,11 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import type { Form, FormField } from '../types'
+import type { Form, FormField, FormTheme } from '../types'
+import { BORDER_RADIUS_PRESETS } from '../types'
 import { layoutFields } from '../utils/layoutFields'
+import { resolveTheme } from '../utils/theme'
+import { parseInlineLinks } from '../utils/richText'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
@@ -33,27 +58,53 @@ function darken(hex: string, amount = 20): string {
 }
 
 interface Theme {
-  primary: string       // hex without #
-  primaryDark: string
+  primary: string       // button color, hex without # — also drives focus
+                         // rings / radio-checkbox accents throughout the form
+  primaryDark: string   // auto-derived hover/dark variant of `primary`
+  buttonTextColor: string
+  headerBg: string
+  headerBgDark: string  // auto-derived, for the header gradient
+  headerTextColor: string
   radius: string        // css value e.g. "16px"
   bg: string
   cardBg: string
   labelColor: string
+  inputBorderColor: string
+  inputBgColor: string
+  inputTextColor: string
 }
 
-function buildTheme(params: URLSearchParams): Theme {
-  const primary    = params.get('color')      ?? '4F46E5'
-  const radius     = params.get('radius')     ?? '16'
-  const bg         = params.get('bg')         ?? 'F3F4F6'
-  const cardBg     = params.get('cardBg')     ?? 'FFFFFF'
-  const labelColor = params.get('labelColor') ?? '374151'
+function buildTheme(params: URLSearchParams, formTheme?: FormTheme): Theme {
+  const resolved = resolveTheme(formTheme)
+  const legacyColor = params.get('color') // pre-dates independent button/header theming
+
+  const primary = params.get('buttonColor') ?? legacyColor ?? resolved.buttonColor
+  const buttonTextColor = params.get('buttonTextColor') ?? resolved.buttonTextColor
+  const headerBg = params.get('headerBgColor') ?? legacyColor ?? resolved.headerBgColor
+  const headerTextColor = params.get('headerTextColor') ?? resolved.headerTextColor
+  const defaultRadiusPx = parseInt(BORDER_RADIUS_PRESETS[resolved.borderRadius], 10) || 16
+  const radius = params.get('radius') ?? String(defaultRadiusPx)
+  const bg = params.get('bg') ?? resolved.formBgColor
+  const cardBg = params.get('cardBg') ?? resolved.cardBgColor
+  const labelColor = params.get('labelColor') ?? resolved.labelColor
+  const inputBorderColor = params.get('inputBorderColor') ?? resolved.inputBorderColor
+  const inputBgColor = params.get('inputBgColor') ?? resolved.inputBgColor
+  const inputTextColor = params.get('inputTextColor') ?? resolved.inputTextColor
+
   return {
     primary,
     primaryDark: darken(primary),
+    buttonTextColor,
+    headerBg,
+    headerBgDark: darken(headerBg),
+    headerTextColor,
     radius: `${parseInt(radius, 10) || 16}px`,
     bg,
     cardBg,
     labelColor,
+    inputBorderColor,
+    inputBgColor,
+    inputTextColor,
   }
 }
 
@@ -150,7 +201,13 @@ function EmailInput({ field, inputCls, inputStyle, focusStyle }: {
     setTimeout(() => inputRef.current?.dispatchEvent(new Event('blur')), 0)
   }
 
-  const borderColor = validationError ? '#EF4444' : '#D1D5DB'
+  // Only override the themed border color when flagging a hard validation
+  // error — otherwise fall through to whatever inputStyle.borderColor was
+  // already set to (the form's own themed input border color). Spreading
+  // an explicit `borderColor: undefined` key would still win over the
+  // earlier spread and blank the border out, so this is only included when
+  // there's actually an error to show.
+  const errorBorderStyle: React.CSSProperties = validationError ? { borderColor: '#EF4444' } : {}
 
   return (
     <div>
@@ -163,7 +220,7 @@ function EmailInput({ field, inputCls, inputStyle, focusStyle }: {
           onChange={handleChange}
           onBlur={handleBlur}
           className={inputCls}
-          style={{ ...inputStyle, ...focusStyle, borderColor }}
+          style={{ ...inputStyle, ...focusStyle, ...errorBorderStyle }}
           placeholder={field.placeholder}
           required={field.required}
         />
@@ -217,13 +274,21 @@ interface FieldRendererProps { field: FormField; theme: Theme }
 function FieldRenderer({ field, theme }: FieldRendererProps) {
   if (field.type === 'hidden') return null
 
+  // `colorScheme: 'light'` keeps native control chrome (checkbox/radio
+  // boxes, the select popup, the date picker) rendering with light-appearance
+  // UA styles even when the visitor's OS is in dark mode — otherwise the
+  // browser silently swaps in dark native styling that ignores these inline
+  // colors and can make a checkbox almost invisible against a themed card.
   const inputStyle: React.CSSProperties = {
     borderRadius: `calc(${theme.radius} * 0.6)`,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    borderColor: `#${theme.inputBorderColor}`,
+    backgroundColor: `#${theme.inputBgColor}`,
+    color: `#${theme.inputTextColor}`,
+    colorScheme: 'light',
   }
   const inputCls = 'w-full px-3 py-2 text-sm border focus:outline-none focus:ring-2 transition-shadow'
   const focusStyle = { '--tw-ring-color': `#${theme.primary}55` } as React.CSSProperties
+  const checkStyle: React.CSSProperties = { accentColor: `#${theme.primary}`, colorScheme: 'light' }
 
   return (
     <div>
@@ -261,9 +326,9 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
                 name={field.id}
                 value={o}
                 required={field.required}
-                style={{ accentColor: `#${theme.primary}` }}
+                style={checkStyle}
               />
-              {o}
+              {parseInlineLinks(o)}
             </label>
           ))}
         </div>
@@ -275,9 +340,10 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
                 type="checkbox"
                 name={`${field.id}[]`}
                 value={o}
-                style={{ accentColor: `#${theme.primary}` }}
+                required={field.required}
+                style={checkStyle}
               />
-              {o}
+              {parseInlineLinks(o)}
             </label>
           ))}
         </div>
@@ -292,7 +358,7 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
       ) : field.type === 'file' ? (
         <div
           className="relative border-2 border-dashed p-4 text-center text-sm text-gray-400 cursor-pointer hover:opacity-80 transition-opacity"
-          style={{ borderRadius: inputStyle.borderRadius, borderColor: '#D1D5DB' }}
+          style={{ borderRadius: inputStyle.borderRadius, borderColor: `#${theme.inputBorderColor}` }}
         >
           <input type="file" name={field.id} required={field.required} className="absolute inset-0 opacity-0 cursor-pointer" />
           Click to upload a file
@@ -342,9 +408,11 @@ function collectFormData(formEl: HTMLFormElement): Record<string, unknown> {
 export default function PublicFormPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
-  const theme = buildTheme(searchParams)
 
   const [form, setForm] = useState<Form | null>(null)
+  // Recomputes once `form` (and its persisted form_json.theme) loads —
+  // URL params still layer on top, same precedence documented above.
+  const theme = buildTheme(searchParams, form?.form_json?.theme)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -394,7 +462,6 @@ export default function PublicFormPage() {
   // Next — the field-collecting step immediately before the reserved
   // on-submit step (or, for legacy forms without one, the literal last step).
   const isFinalStep = !isMultiStep || (hasOnSubmitStep ? currentStep === onSubmitStepIndex - 1 : currentStep === totalSteps - 1)
-  const progressPct = isMultiStep ? Math.round(((currentStep + 1) / totalSteps) * 100) : 100
 
   // What the on-submit step is configured to do: show a message (default,
   // and the only mode where CTA buttons apply) or redirect the browser
@@ -522,10 +589,12 @@ export default function PublicFormPage() {
     backgroundColor: `#${theme.cardBg}`,
   }
   const headerStyle: React.CSSProperties = {
-    background: `linear-gradient(135deg, #${theme.primary}, #${theme.primaryDark})`,
+    background: `linear-gradient(135deg, #${theme.headerBg}, #${theme.headerBgDark})`,
   }
+  const headerTextStyle: React.CSSProperties = { color: `#${theme.headerTextColor}` }
   const btnStyle: React.CSSProperties = {
     backgroundColor: `#${theme.primary}`,
+    color: `#${theme.buttonTextColor}`,
     borderRadius: `calc(${theme.radius} * 0.7)`,
   }
   const btnHoverStyle: React.CSSProperties = {
@@ -583,41 +652,8 @@ export default function PublicFormPage() {
 
           {/* Header band */}
           <div className="px-5 sm:px-8 py-5 sm:py-6" style={headerStyle}>
-            <h1 className="text-lg sm:text-xl font-bold text-white">{form!.name}</h1>
-            {form!.description && <p className="text-white/80 text-sm mt-1">{form!.description}</p>}
-
-            {/* Multi-step progress */}
-            {isMultiStep && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-white/80 text-xs font-medium">
-                    Step {currentStep + 1} of {totalSteps}
-                  </span>
-                  <span className="text-white/80 text-xs truncate max-w-[50%] text-right">
-                    {steps[currentStep]?.title}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.25)' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${progressPct}%`, backgroundColor: 'white' }}
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  {steps.map((_, i) => (
-                    <div
-                      key={i}
-                      className="rounded-full transition-all duration-300"
-                      style={{
-                        width: i === currentStep ? '10px' : '8px',
-                        height: i === currentStep ? '10px' : '8px',
-                        backgroundColor: i <= currentStep ? 'white' : 'rgba(255,255,255,0.3)',
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            <h1 className="text-lg sm:text-xl font-bold" style={headerTextStyle}>{form!.name}</h1>
+            {form!.description && <p className="text-sm mt-1" style={{ ...headerTextStyle, opacity: 0.8 }}>{form!.description}</p>}
           </div>
 
           {/* Form body */}
@@ -673,7 +709,7 @@ export default function PublicFormPage() {
                         onClick={() => { if (b.url) window.open(b.url, '_blank', 'noopener,noreferrer') }}
                         style={btnStyle}
                         hoverStyle={btnHoverStyle}
-                        className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm"
+                        className="flex-1 font-semibold py-2.5 transition-colors text-sm"
                       >
                         {b.label}
                       </PrimaryButton>
@@ -685,7 +721,7 @@ export default function PublicFormPage() {
                         disabled={submitting}
                         style={btnStyle}
                         hoverStyle={btnHoverStyle}
-                        className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
+                        className="flex-1 font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
                       >
                         {b.action === 'submit' && submitting ? 'Submitting…' : b.label}
                       </PrimaryButton>
@@ -699,7 +735,7 @@ export default function PublicFormPage() {
                   disabled={submitting}
                   style={btnStyle}
                   hoverStyle={btnHoverStyle}
-                  className="flex-1 text-white font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
+                  className="flex-1 font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
                 >
                   {isFinalStep
                     ? (submitting ? 'Submitting…' : (form!.submit_button_label || 'Submit'))

@@ -138,6 +138,13 @@ export default function FieldEditor({ field, onChange }: FieldEditorProps) {
         {hasOptions && (
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-2">Options</label>
+            {(field.type === 'checkbox' || field.type === 'radio') && (
+              <p className="text-[11px] text-gray-400 mb-2 leading-snug">
+                Tip: write <code className="bg-gray-100 px-1 rounded">[link text](https://…)</code> anywhere in an
+                option to make it clickable — e.g. "I agree to the [Terms of Service](https://…) and{' '}
+                [Privacy Policy](https://…)".
+              </p>
+            )}
             <div className="space-y-1.5">
               {(field.options ?? []).map((opt, i) => (
                 <div key={i} className="flex items-center gap-1.5">

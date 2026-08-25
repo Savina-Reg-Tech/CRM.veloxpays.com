@@ -4,6 +4,7 @@ import type {
   Form, FormSubmission, Lead, BlockedDomain,
   CreateFormPayload, UpdateFormPayload, EmbedCodes,
   GlobalStats, DailyCount, LeadStatus,
+  FormTemplate, CreateFormTemplatePayload, UpdateFormTemplatePayload,
 } from './types'
 
 const BASE = '/forms'
@@ -90,5 +91,25 @@ export const formApi = {
 
   deleteDomain: async (id: number) => {
     await api.delete(`${BASE}/email-domains/${id}`)
+  },
+
+  // ── Design templates (global, shared theme presets) ────────────
+  listTemplates: async () => {
+    const res = await api.get<ApiResponse<FormTemplate[]>>(`${BASE}/templates`)
+    return res.data.data
+  },
+
+  createTemplate: async (payload: CreateFormTemplatePayload) => {
+    const res = await api.post<ApiResponse<FormTemplate>>(`${BASE}/templates`, payload)
+    return res.data.data
+  },
+
+  updateTemplate: async (id: number, payload: UpdateFormTemplatePayload) => {
+    const res = await api.patch<ApiResponse<FormTemplate>>(`${BASE}/templates/${id}`, payload)
+    return res.data.data
+  },
+
+  deleteTemplate: async (id: number) => {
+    await api.delete(`${BASE}/templates/${id}`)
   },
 }

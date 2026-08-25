@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formApi } from '../formService'
-import type { CreateFormPayload, UpdateFormPayload, LeadStatus } from '../types'
+import type { CreateFormPayload, UpdateFormPayload, LeadStatus, CreateFormTemplatePayload, UpdateFormTemplatePayload } from '../types'
 
 // ── Query keys ────────────────────────────────────────────────────
 export const formKeys = {
@@ -15,6 +15,7 @@ export const formKeys = {
   leads:       (params: object) => [...formKeys.all, 'leads', params] as const,
   leadStats:   () => [...formKeys.all, 'lead-stats'] as const,
   domains:     () => [...formKeys.all, 'domains'] as const,
+  templates:   () => [...formKeys.all, 'templates'] as const,
 }
 
 // ── Forms ─────────────────────────────────────────────────────────
@@ -130,5 +131,37 @@ export function useDeleteDomain() {
   return useMutation({
     mutationFn: (id: number) => formApi.deleteDomain(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: formKeys.domains() }),
+  })
+}
+
+// ── Design templates ────────────────────────────────────────────────
+export function useFormTemplates() {
+  return useQuery({
+    queryKey: formKeys.templates(),
+    queryFn: formApi.listTemplates,
+  })
+}
+
+export function useCreateFormTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateFormTemplatePayload) => formApi.createTemplate(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: formKeys.templates() }),
+  })
+}
+
+export function useUpdateFormTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: UpdateFormTemplatePayload }) => formApi.updateTemplate(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: formKeys.templates() }),
+  })
+}
+
+export function useDeleteFormTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => formApi.deleteTemplate(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: formKeys.templates() }),
   })
 }

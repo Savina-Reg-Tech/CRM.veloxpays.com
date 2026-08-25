@@ -10,13 +10,15 @@
 
 import { useReducer, useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
+import { Palette, Pencil } from 'lucide-react'
 import FieldPalette from './FieldPalette'
 import FieldCanvas from './FieldCanvas'
 import FieldEditor from './FieldEditor'
 import StepTabs from './StepTabs'
 import StepButtonsModal from './StepButtonsModal'
 import OnSubmitPanel from './OnSubmitPanel'
-import type { FormField, FormJson, FormStep, FieldType } from '../../types'
+import DesignPanel from './DesignPanel'
+import type { FormField, FormJson, FormStep, FieldType, FormTheme } from '../../types'
 
 /** Build a default (field-collecting) step */
 function buildDefaultStep(index: number): FormStep {
@@ -80,7 +82,7 @@ function buildInitialState(formJson?: FormJson): State {
   // Otherwise a valid on-submit step (and its onSubmitConfig) already
   // exists — left exactly as loaded, nothing recreated or reset.
 
-  return { fields, selectedId: null, steps, activeStepIndex: 0 }
+  return { fields, selectedId: null, steps, activeStepIndex: 0, theme: formJson?.theme }
 }
 
 // ── Reducer ───────────────────────────────────────────────────────
@@ -98,12 +100,15 @@ type Action =
   | { type: 'SET_ACTIVE_STEP'; stepIndex: number }
   | { type: 'SET_STEP_BUTTONS'; stepIndex: number; buttons: FormStep['buttons'] }
   | { type: 'SET_ON_SUBMIT_CONFIG'; stepIndex: number; config: FormStep['onSubmitConfig'] }
+  | { type: 'SET_THEME'; theme: FormTheme }
+  | { type: 'APPLY_TEMPLATE'; theme: FormTheme }
 
 interface State {
   fields: FormField[]
   selectedId: string | null
   steps: FormStep[]          // empty array = single-step mode (no step UI shown)
   activeStepIndex: number
+  theme: FormTheme | undefined  // undefined = DEFAULT_FORM_THEME (see utils/theme.ts)
 }
 
 function buildDefaultField(type: FieldType): FormField {
@@ -120,6 +125,35 @@ function buildDefaultField(type: FieldType): FormField {
     base.options = ['Option 1', 'Option 2', 'Option 3']
   }
   return base
+}
+
+/**
+ * Sample fields seeded the first time a design template is applied to an
+ * otherwise-empty form — matches what the template's card preview actually
+ * shows (First/Last name, Email, Phone, an agreement checkbox), so picking
+ * a template gives the admin something real to build from instead of
+ * landing on the empty "Drop fields here" canvas. Never runs if the form
+ * already has fields — applying a template only ever changes colors then.
+ */
+function buildStarterFields(): FormField[] {
+  return [
+    { id: `field_${nanoid(8)}`, type: 'text', label: 'First Name', required: true, placeholder: '', helpText: '', width: 'half' },
+    { id: `field_${nanoid(8)}`, type: 'text', label: 'Last Name', required: true, placeholder: '', helpText: '', width: 'half' },
+    { id: `field_${nanoid(8)}`, type: 'email', label: 'Email Address', required: true, placeholder: '', helpText: '', width: 'full' },
+    { id: `field_${nanoid(8)}`, type: 'phone', label: 'Phone Number', required: false, placeholder: '', helpText: '', width: 'full' },
+    {
+      id: `field_${nanoid(8)}`,
+      type: 'checkbox',
+      label: 'Agreement',
+      required: true,
+      placeholder: '',
+      helpText: '',
+      width: 'full',
+      // [label](url) syntax — renders as real clickable links; edit the
+      // URLs (or the wording) from the field editor's Options list.
+      options: ['I agree to the [Terms of Service](https://example.com/terms) and [Privacy Policy](https://example.com/privacy)'],
+    },
+  ]
 }
 
 function labelForType(t: FieldType): string {
@@ -282,6 +316,25 @@ function reducer(state: State, action: Action): State {
       )
       return { ...state, steps }
     }
+    case 'SET_THEME':
+      return { ...state, theme: action.theme }
+    case 'APPLY_TEMPLATE': {
+      // Applying a template always changes the theme. It only seeds sample
+      // fields when the form is genuinely empty — an admin who already
+      // built fields and then picks a different template should get new
+      // colors, not lose their work.
+      if (state.fields.length > 0) {
+        return { ...state, theme: action.theme }
+      }
+      const starterFields = buildStarterFields()
+      const fieldStepIndex = state.steps.findIndex((s) => !s.isOnSubmit)
+      const steps = fieldStepIndex === -1
+        ? state.steps
+        : state.steps.map((s, i) =>
+            i === fieldStepIndex ? { ...s, fieldIds: starterFields.map((f) => f.id) } : s
+          )
+      return { ...state, theme: action.theme, fields: starterFields, steps }
+    }
     default:
       return state
   }
@@ -291,9 +344,17 @@ function reducer(state: State, action: Action): State {
 interface FormBuilderProps {
   initialFormJson?: FormJson
   onChange: (formJson: FormJson) => void
+  // Build/Design tab — lifted up to and owned by FormBuilderPage rather than
+  // kept as local state here. FormBuilderPage unmounts this whole component
+  // while its separate Preview pane is showing (it renders a different JSX
+  // tree, not <FormBuilder>), so local state here would silently reset to
+  // 'build' every time Preview was toggled off, even if the admin had been
+  // on the Design tab. Owning it one level up means it survives that.
+  view: 'build' | 'design'
+  onViewChange: (view: 'build' | 'design') => void
 }
 
-export default function FormBuilder({ initialFormJson, onChange }: FormBuilderProps) {
+export default function FormBuilder({ initialFormJson, onChange, view, onViewChange }: FormBuilderProps) {
   // Lazy initializer so the legacy on-submit-step migration in
   // buildInitialState actually runs on mount — the reducer function itself
   // is never invoked for useReducer's initial state, only for dispatched
@@ -348,8 +409,12 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
   // (including step add/rename/remove/move/reorder and step-button edits)
   // propagates correctly instead of only the field-mutating ones.
   useEffect(() => {
-    onChange({ fields: state.fields, steps: state.steps.length > 0 ? state.steps : undefined })
-  }, [state.fields, state.steps, onChange])
+    onChange({
+      fields: state.fields,
+      steps: state.steps.length > 0 ? state.steps : undefined,
+      theme: state.theme,
+    })
+  }, [state.fields, state.steps, state.theme, onChange])
 
   // ── Step handlers ─────────────────────────────────────────────
   const handleAddStep = () => dispatch({ type: 'ADD_STEP' })
@@ -412,6 +477,41 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
 
   return (
     <div className="flex flex-col h-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {/* Build / Design top-level tabs — Design is form-wide (colors, radius,
+          font), not per-step, so it lives above the step tabs and replaces
+          the whole build area rather than living inside any one step. */}
+      <div className="flex items-center gap-1 border-b border-gray-100 bg-gray-50/60 px-3 pt-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => onViewChange('build')}
+          className={`flex items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            view === 'build' ? 'bg-white text-gray-900 border border-b-0 border-gray-200' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Pencil size={13} />
+          Build
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('design')}
+          className={`flex items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            view === 'design' ? 'bg-white text-gray-900 border border-b-0 border-gray-200' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Palette size={13} />
+          Design
+        </button>
+      </div>
+
+      {view === 'design' ? (
+        <DesignPanel
+          theme={state.theme}
+          onChange={(theme) => dispatch({ type: 'SET_THEME', theme })}
+          onApplyTemplate={(theme) => dispatch({ type: 'APPLY_TEMPLATE', theme })}
+          onSwitchToBuild={() => onViewChange('build')}
+        />
+      ) : (
+        <>
       {/* Step tabs (shown when multi-step mode is active, or to enable it) */}
       <StepTabs
         steps={state.steps}
@@ -483,6 +583,8 @@ export default function FormBuilder({ initialFormJson, onChange }: FormBuilderPr
             }}
           />
         </div>
+      )}
+        </>
       )}
 
       <StepButtonsModal
