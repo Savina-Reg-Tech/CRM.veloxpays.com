@@ -43,6 +43,7 @@ import { BORDER_RADIUS_PRESETS } from '../types'
 import { layoutFields } from '../utils/layoutFields'
 import { resolveTheme } from '../utils/theme'
 import { parseInlineLinks } from '../utils/richText'
+import { evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
@@ -135,12 +136,14 @@ function suggestEmailFix(email: string): string | null {
   return fix ? email.slice(0, at + 1) + fix : null
 }
 
-function EmailInput({ field, inputCls, inputStyle, focusStyle }: {
+function EmailInput({ field, inputCls, inputStyle, focusStyle, disabled, required }: {
   field: FormField
   inputCls: string
   inputStyle: React.CSSProperties
   focusStyle: React.CSSProperties
   theme: Theme
+  disabled?: boolean
+  required?: boolean
 }) {
   const [value, setValue] = useState(field.defaultValue ?? '')
   const [suggestion, setSuggestion] = useState<string | null>(null)
@@ -222,7 +225,8 @@ function EmailInput({ field, inputCls, inputStyle, focusStyle }: {
           className={inputCls}
           style={{ ...inputStyle, ...focusStyle, ...errorBorderStyle }}
           placeholder={field.placeholder}
-          required={field.required}
+          required={required}
+          disabled={disabled}
         />
         {/* Validating spinner */}
         {validating && (
@@ -269,9 +273,24 @@ function EmailInput({ field, inputCls, inputStyle, focusStyle }: {
 }
 
 // ── Field renderer ────────────────────────────────────────────────
-interface FieldRendererProps { field: FormField; theme: Theme }
+interface FieldRendererProps {
+  field: FormField
+  theme: Theme
+  /** True when a conditional rule (see utils/rules.ts) currently hides this
+   * field. The wrapper stays mounted (not unmounted) so a value the visitor
+   * already typed survives being hidden and shown again — visibility is
+   * done via the native `hidden` attribute on the wrapper (visual) plus
+   * `disabled` on the actual control(s) (excludes it from both HTML5
+   * required-validation and FormData/submission, which is what actually
+   * matters — a merely-hidden-via-CSS required field would still block
+   * submission in most browsers). */
+  hidden: boolean
+  /** Folds in any rule-driven require_field/unrequire_field override —
+   * falls back to the field's own base `required` when no rule touches it. */
+  effectiveRequired: boolean
+}
 
-function FieldRenderer({ field, theme }: FieldRendererProps) {
+function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendererProps) {
   if (field.type === 'hidden') return null
 
   // `colorScheme: 'light'` keeps native control chrome (checkbox/radio
@@ -289,12 +308,13 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
   const inputCls = 'w-full px-3 py-2 text-sm border focus:outline-none focus:ring-2 transition-shadow'
   const focusStyle = { '--tw-ring-color': `#${theme.primary}55` } as React.CSSProperties
   const checkStyle: React.CSSProperties = { accentColor: `#${theme.primary}`, colorScheme: 'light' }
+  const required = !hidden && effectiveRequired
 
   return (
-    <div>
+    <div hidden={hidden}>
       <label className="block text-sm font-semibold mb-1" style={{ color: `#${theme.labelColor}` }}>
         {field.label}
-        {field.required && <span className="text-red-500 ml-1">*</span>}
+        {effectiveRequired && <span className="text-red-500 ml-1">*</span>}
       </label>
 
       {field.type === 'textarea' ? (
@@ -304,14 +324,16 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
           style={{ ...inputStyle, ...focusStyle }}
           rows={4}
           placeholder={field.placeholder}
-          required={field.required}
+          required={required}
+          disabled={hidden}
         />
       ) : field.type === 'dropdown' ? (
         <select
           name={field.id}
           className={inputCls}
           style={{ ...inputStyle, ...focusStyle }}
-          required={field.required}
+          required={required}
+          disabled={hidden}
           defaultValue=""
         >
           <option value="" disabled>{field.placeholder || 'Select an option…'}</option>
@@ -325,7 +347,8 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
                 type="radio"
                 name={field.id}
                 value={o}
-                required={field.required}
+                required={required}
+                disabled={hidden}
                 style={checkStyle}
               />
               {parseInlineLinks(o)}
@@ -340,7 +363,8 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
                 type="checkbox"
                 name={`${field.id}[]`}
                 value={o}
-                required={field.required}
+                required={required}
+                disabled={hidden}
                 style={checkStyle}
               />
               {parseInlineLinks(o)}
@@ -353,14 +377,15 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
           name={field.id}
           className={inputCls}
           style={{ ...inputStyle, ...focusStyle }}
-          required={field.required}
+          required={required}
+          disabled={hidden}
         />
       ) : field.type === 'file' ? (
         <div
           className="relative border-2 border-dashed p-4 text-center text-sm text-gray-400 cursor-pointer hover:opacity-80 transition-opacity"
           style={{ borderRadius: inputStyle.borderRadius, borderColor: `#${theme.inputBorderColor}` }}
         >
-          <input type="file" name={field.id} required={field.required} className="absolute inset-0 opacity-0 cursor-pointer" />
+          <input type="file" name={field.id} required={required} disabled={hidden} className="absolute inset-0 opacity-0 cursor-pointer" />
           Click to upload a file
         </div>
       ) : field.type === 'section' ? (
@@ -371,7 +396,7 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
           )}
         </div>
       ) : field.type === 'email' ? (
-        <EmailInput field={field} inputCls={inputCls} inputStyle={inputStyle} focusStyle={focusStyle} theme={theme} />
+        <EmailInput field={field} inputCls={inputCls} inputStyle={inputStyle} focusStyle={focusStyle} theme={theme} required={required} disabled={hidden} />
       ) : (
         <input
           type={field.type === 'phone' ? 'tel' : 'text'}
@@ -379,7 +404,8 @@ function FieldRenderer({ field, theme }: FieldRendererProps) {
           className={inputCls}
           style={{ ...inputStyle, ...focusStyle }}
           placeholder={field.placeholder}
-          required={field.required}
+          required={required}
+          disabled={hidden}
           defaultValue={field.defaultValue}
         />
       )}
@@ -404,6 +430,40 @@ function collectFormData(formEl: HTMLFormElement): Record<string, unknown> {
   return data
 }
 
+// ── Apply a rule's set_value/clear_value action directly to the DOM ──
+// Most fields on this form are uncontrolled (no React state backing their
+// value), so a rule-driven "set value" has to write straight to the actual
+// input(s) rather than through React. Dispatching a real 'input' event
+// afterward lets the same delegated listener that triggered this action
+// re-evaluate rules against the new value — which is how a set_value on one
+// field can go on to satisfy another rule's condition (a normal, finite
+// cascade; circular cascades are refused at save time, see utils/rules.ts
+// findRuleCycle).
+function applyValueAction(formEl: HTMLFormElement, fieldId: string, value: string | null) {
+  const escaped = CSS.escape(fieldId)
+
+  const checkboxes = formEl.querySelectorAll<HTMLInputElement>(`[name="${escaped}[]"]`)
+  if (checkboxes.length > 0) {
+    const wanted = value === null ? [] : value.split(',').map((v) => v.trim())
+    checkboxes.forEach((cb) => { cb.checked = wanted.includes(cb.value) })
+    checkboxes[0]?.dispatchEvent(new Event('input', { bubbles: true }))
+    return
+  }
+
+  const radios = formEl.querySelectorAll<HTMLInputElement>(`[name="${escaped}"][type="radio"]`)
+  if (radios.length > 0) {
+    radios.forEach((r) => { r.checked = value !== null && r.value === value })
+    radios[0]?.dispatchEvent(new Event('input', { bubbles: true }))
+    return
+  }
+
+  const el = formEl.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${escaped}"]`)
+  if (!el) return
+  el.value = value ?? ''
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 // ── Main component ────────────────────────────────────────────────
 export default function PublicFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -418,6 +478,12 @@ export default function PublicFormPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  // Which message to show on the thank-you screen — resolved at submit time
+  // from whichever conditional outcome matched (or the base config's own
+  // message, if none did/exist). Only known once the submission's data is
+  // final, so it can't be derived ahead of time the way the rest of the
+  // step's static config is.
+  const [resolvedMessage, setResolvedMessage] = useState<string | undefined>(undefined)
   const loadedAt = useRef(new Date().toISOString())
 
   // Multi-step state
@@ -428,6 +494,39 @@ export default function PublicFormPage() {
   // button saved before that step type was CTA-link-only. A ref (not
   // state) so the check is never stale inside the handleSubmit closure.
   const alreadySubmittedRef = useRef(false)
+
+  // ── Conditional logic (rules) ───────────────────────────────────
+  // See utils/rules.ts. Most fields here are uncontrolled HTML inputs (no
+  // React state backing their value), so live show/hide-as-you-type is done
+  // via a single delegated onInput/onChange listener on the <form> that
+  // reads the current DOM values, evaluates the rules, and updates
+  // `ruleState` — re-rendering with a new `hidden`/`effectiveRequired` prop
+  // per field does NOT reset an uncontrolled input's already-typed value,
+  // since React only diffs the changed props/attributes, not the DOM node.
+  const formElRef = useRef<HTMLFormElement | null>(null)
+  const triggeredRuleIdsRef = useRef<Set<string>>(new Set())
+  const [ruleState, setRuleState] = useState<RuleEvaluationResult>(() => evaluateRules(undefined, {}))
+
+  const recomputeRules = useCallback(() => {
+    const formEl = formElRef.current
+    if (!formEl || !form) return
+    const values = { ...formDataRef.current, ...collectFormData(formEl) }
+    const result = evaluateRules(form.form_json.rules, values, triggeredRuleIdsRef.current)
+    triggeredRuleIdsRef.current = result.triggeredRuleIds
+    for (const action of result.valueActions) {
+      applyValueAction(formEl, action.fieldId, action.value)
+    }
+    setRuleState(result)
+  }, [form])
+
+  // Re-run once whenever the form first loads and again every time the
+  // active step's fields (a fresh DOM, via the <form key={currentStep}>
+  // below) mount — so default/pre-filled values are reflected in the
+  // starting hidden/required state before the visitor touches anything.
+  useEffect(() => {
+    recomputeRules()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, currentStep])
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -465,25 +564,13 @@ export default function PublicFormPage() {
 
   // What the on-submit step is configured to do: show a message (default,
   // and the only mode where CTA buttons apply) or redirect the browser
-  // straight to a page/URL/meeting link/payment link.
+  // straight to a page/URL/meeting link/payment link. This is the BASE
+  // config/fallback — if it has conditionalOutcomes, the actual behavior for
+  // a given submission is resolved from the final submitted data inside
+  // handleSubmit below (resolveOnSubmitOutcome), not decided here ahead of
+  // time, since which outcome applies can only be known once the visitor's
+  // answers are in.
   const onSubmitConfig = hasOnSubmitStep ? steps[onSubmitStepIndex]?.onSubmitConfig : undefined
-  const onSubmitAction = onSubmitConfig?.action ?? 'message'
-  const onSubmitRedirectUrl = (
-    onSubmitAction === 'redirect_page' ? onSubmitConfig?.pageUrl
-      : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalUrl
-      : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingUrl
-      : onSubmitAction === 'redirect_payment' ? onSubmitConfig?.paymentUrl
-      : undefined
-  )?.trim() || undefined
-  // "Open in new tab" is stored per redirect type (see OnSubmitConfig) —
-  // read whichever flag matches the currently-selected action.
-  const onSubmitOpenInNewTab = (
-    onSubmitAction === 'redirect_page' ? onSubmitConfig?.pageOpenInNewTab
-      : onSubmitAction === 'redirect_url' ? onSubmitConfig?.externalOpenInNewTab
-      : onSubmitAction === 'redirect_meeting' ? onSubmitConfig?.meetingOpenInNewTab
-      : onSubmitAction === 'redirect_payment' ? onSubmitConfig?.paymentOpenInNewTab
-      : false
-  ) ?? false
 
   const getVisibleFields = useCallback((): FormField[] => {
     if (!form) return []
@@ -537,24 +624,47 @@ export default function PublicFormPage() {
       const json = await res.json()
       if (!json.success) throw new Error(json.message ?? 'Submission failed')
       alreadySubmittedRef.current = true
-      if (onSubmitRedirectUrl) {
-        if (onSubmitOpenInNewTab) {
+
+      // Resolve which on-submit behavior actually applies to THIS
+      // submission — the first conditional outcome whose conditions match
+      // the final data, or the step's own base config if none do/exist.
+      const outcome = resolveOnSubmitOutcome(onSubmitConfig, data)
+      const resolvedAction = outcome?.action ?? 'message'
+      const redirectUrl = (
+        resolvedAction === 'redirect_page' ? outcome?.pageUrl
+          : resolvedAction === 'redirect_url' ? outcome?.externalUrl
+          : resolvedAction === 'redirect_meeting' ? outcome?.meetingUrl
+          : resolvedAction === 'redirect_payment' ? outcome?.paymentUrl
+          : undefined
+      )?.trim() || undefined
+      const openInNewTab = (
+        resolvedAction === 'redirect_page' ? outcome?.pageOpenInNewTab
+          : resolvedAction === 'redirect_url' ? outcome?.externalOpenInNewTab
+          : resolvedAction === 'redirect_meeting' ? outcome?.meetingOpenInNewTab
+          : resolvedAction === 'redirect_payment' ? outcome?.paymentOpenInNewTab
+          : false
+      ) ?? false
+
+      if (redirectUrl) {
+        if (openInNewTab) {
           // Open the destination in a new tab and leave this one — the form
           // tab, standalone or embedded in an iframe — exactly where it is.
           // `window.open` targets the top-level browsing context either
           // way, so this never tries to navigate the iframe itself.
-          window.open(onSubmitRedirectUrl, '_blank', 'noopener,noreferrer')
+          window.open(redirectUrl, '_blank', 'noopener,noreferrer')
           // This tab shows the plain thank-you message in place of the
           // form — not the on-submit step's CTA buttons (those are a
           // "message" action feature) and not another redirect.
+          setResolvedMessage(outcome?.message)
           setSubmitted(true)
           return
         }
         // No new tab requested — take the visitor straight off the form;
         // there's no on-page state left to show once this fires.
-        window.location.href = onSubmitRedirectUrl
+        window.location.href = redirectUrl
         return
       }
+      setResolvedMessage(outcome?.message)
       setSubmitted(true)
       // Land on the reserved "On Form Submit" step so its custom CTA
       // buttons (or the default thank-you message, if none are configured)
@@ -566,7 +676,7 @@ export default function PublicFormPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [id, onSubmitStepIndex, onSubmitRedirectUrl, onSubmitOpenInNewTab])
+  }, [id, onSubmitStepIndex, onSubmitConfig])
 
   // Single onSubmit for the <form>, regardless of which button triggered it.
   // Reads the actual clicked button via the native SubmitEvent's `submitter`
@@ -634,7 +744,7 @@ export default function PublicFormPage() {
         <div className="text-center p-8 sm:p-10 max-w-md w-full shadow-lg" style={cardStyle}>
           <div className="text-5xl mb-4">✅</div>
           <h2 className="text-xl font-bold mb-2" style={{ color: `#${theme.labelColor}` }}>You're all set!</h2>
-          <p className="text-gray-500">{onSubmitConfig?.message?.trim() || form?.success_message || 'Thank you! Your submission has been received.'}</p>
+          <p className="text-gray-500">{resolvedMessage?.trim() || form?.success_message || 'Thank you! Your submission has been received.'}</p>
         </div>
       </div>
     )
@@ -659,7 +769,10 @@ export default function PublicFormPage() {
           {/* Form body */}
           <form
             key={currentStep}
+            ref={formElRef}
             onSubmit={handleFormSubmit}
+            onInput={recomputeRules}
+            onChange={recomputeRules}
             className="px-5 sm:px-8 py-5 sm:py-6 space-y-5"
             style={{ backgroundColor: `#${theme.cardBg}` }}
           >
@@ -670,11 +783,21 @@ export default function PublicFormPage() {
             ) : (
               layoutFields(visibleFields).map((row, i) =>
                 row.kind === 'full' ? (
-                  <FieldRenderer key={row.field.id} field={row.field} theme={theme} />
+                  <FieldRenderer
+                    key={row.field.id} field={row.field} theme={theme}
+                    hidden={ruleState.hidden.has(row.field.id)}
+                    effectiveRequired={isEffectivelyRequired(row.field, ruleState.requiredOverride)}
+                  />
                 ) : (
                   // Responsive: stack on mobile, side-by-side on sm+
                   <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {row.fields.map((f) => <FieldRenderer key={f.id} field={f} theme={theme} />)}
+                    {row.fields.map((f) => (
+                      <FieldRenderer
+                        key={f.id} field={f} theme={theme}
+                        hidden={ruleState.hidden.has(f.id)}
+                        effectiveRequired={isEffectivelyRequired(f, ruleState.requiredOverride)}
+                      />
+                    ))}
                   </div>
                 )
               )

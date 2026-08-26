@@ -5,6 +5,7 @@ import type {
   CreateFormPayload, UpdateFormPayload, EmbedCodes,
   GlobalStats, DailyCount, LeadStatus,
   FormTemplate, CreateFormTemplatePayload, UpdateFormTemplatePayload,
+  WebhookDelivery,
 } from './types'
 
 const BASE = '/forms'
@@ -48,6 +49,12 @@ export const formApi = {
 
   getAnalytics: async (formId: number) => {
     const res = await api.get<ApiResponse<{ daily: DailyCount[]; globalStats: Record<string, number> }>>(`${BASE}/${formId}/analytics`)
+    return res.data.data
+  },
+
+  // ── Webhook delivery log ────────────────────────────────────────
+  listWebhookDeliveries: async (formId: number, params?: { limit?: number; offset?: number }) => {
+    const res = await api.get<ApiResponse<Paginated<WebhookDelivery>>>(`${BASE}/${formId}/webhook-deliveries`, { params })
     return res.data.data
   },
 

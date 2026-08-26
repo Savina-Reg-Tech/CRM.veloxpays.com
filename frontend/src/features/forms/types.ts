@@ -54,7 +54,12 @@ export interface StepButton {
 export const ON_SUBMIT_ACTIONS = ['message', 'redirect_page', 'redirect_url', 'redirect_meeting', 'redirect_payment'] as const
 export type OnSubmitAction = (typeof ON_SUBMIT_ACTIONS)[number]
 
-export interface OnSubmitConfig {
+// Shared by the base on-submit behavior AND each conditional outcome below
+// — same fields either way, just picked out into its own interface so
+// `ConditionalOutcome.config` can reference it without recursively
+// including `conditionalOutcomes` itself (an outcome's own resolved
+// behavior can't have further nested outcomes).
+export interface OnSubmitOutcomeConfig {
   action: OnSubmitAction
   message?: string       // 'message' — falls back to the form's success_message when unset
   pageUrl?: string       // 'redirect_page'
@@ -74,6 +79,16 @@ export interface OnSubmitConfig {
   externalOpenInNewTab?: boolean // 'redirect_url'
   meetingOpenInNewTab?: boolean  // 'redirect_meeting'
   paymentOpenInNewTab?: boolean  // 'redirect_payment'
+}
+
+export interface OnSubmitConfig extends OnSubmitOutcomeConfig {
+  /** Ordered list of conditional overrides — evaluated against the final
+   * submitted data (all steps merged) at submit time, first match wins.
+   * Falls back to this object's own action/message/url fields above when
+   * none match or when this list is empty/absent, so existing forms with a
+   * single fixed on-submit behavior are completely unaffected. See
+   * ConditionalOutcome below and utils/rules.ts resolveOnSubmitOutcome. */
+  conditionalOutcomes?: ConditionalOutcome[]
 }
 
 export interface FormStep {
@@ -99,6 +114,141 @@ export interface FormStep {
   isOnSubmit?: boolean
   /** Only meaningful on the reserved on-submit step; see OnSubmitConfig. */
   onSubmitConfig?: OnSubmitConfig
+}
+
+// ── Conditional logic ("IF conditions THEN actions" rules) ────────
+// A rule fires its actions when its condition group evaluates true against
+// the current values of OTHER fields. Stored as `formJson.rules` — a new
+// top-level array alongside `fields`/`steps`/`theme`, needing no DB schema
+// change since form_json is already JSONB (same pattern theme/onSubmitConfig
+// already used).
+//
+// Rules are evaluated in array order, and later rules can override earlier
+// ones for the same field+property (e.g. one rule requires a field, a later
+// one un-requires it) — simple, predictable "last write wins" semantics
+// rather than a priority system. Reordering rules in the builder changes
+// precedence.
+export const CONDITION_OPERATORS = [
+  'equals', 'not_equals',
+  'contains', 'not_contains',
+  'is_empty', 'is_not_empty',
+  'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal',
+] as const
+export type ConditionOperator = (typeof CONDITION_OPERATORS)[number]
+
+// Operators that don't take a comparison value (the UI hides the value input
+// for these).
+export const VALUELESS_OPERATORS: ConditionOperator[] = ['is_empty', 'is_not_empty']
+
+export interface RuleCondition {
+  id: string
+  fieldId: string
+  operator: ConditionOperator
+  value?: string   // omitted for is_empty / is_not_empty
+}
+
+// v1 supports one flat AND/OR group per rule (no nested groups) — the
+// simplest mental model for "IF this AND this" or "IF this OR this". The
+// extensibility hook for later: a future nested-group feature can let
+// `conditions` accept a mix of RuleCondition and ConditionGroup without
+// breaking this shape or any saved rule.
+export interface ConditionGroup {
+  logic: 'AND' | 'OR'
+  conditions: RuleCondition[]
+}
+
+// Discriminated union — new action types slot in later (redirect, notify,
+// webhook — see project notes) without touching existing ones or the rules
+// UI's core rendering logic.
+export const RULE_ACTION_TYPES = [
+  'show_field', 'hide_field',
+  'require_field', 'unrequire_field',
+  'set_value', 'clear_value',
+] as const
+export type RuleActionType = (typeof RULE_ACTION_TYPES)[number]
+
+export type RuleAction =
+  | { id: string; type: 'show_field'; fieldId: string }
+  | { id: string; type: 'hide_field'; fieldId: string }
+  | { id: string; type: 'require_field'; fieldId: string }
+  | { id: string; type: 'unrequire_field'; fieldId: string }
+  | { id: string; type: 'set_value'; fieldId: string; value: string }
+  | { id: string; type: 'clear_value'; fieldId: string }
+
+export interface ConditionalRule {
+  id: string
+  name?: string   // optional admin-facing label, e.g. "Show shipping address"
+  enabled: boolean
+  group: ConditionGroup
+  actions: RuleAction[]
+}
+
+// ── Conditional "on submission" outcomes ───────────────────────────
+// A different flavor of conditional logic than ConditionalRule above: this
+// picks WHICH on-submit behavior (message vs. one of the redirect kinds)
+// applies for a given submission, rather than showing/hiding/requiring
+// fields while the visitor is still filling the form out. Kept as its own
+// type (not folded into ConditionalRule/RuleAction) because "resolve one
+// outcome from a list, first match wins" is a different evaluation shape
+// than "run every matching rule's actions".
+export interface ConditionalOutcome {
+  id: string
+  name?: string   // optional admin-facing label, e.g. "High-value lead"
+  group: ConditionGroup
+  config: OnSubmitOutcomeConfig
+}
+
+// ── Conditional notification recipients ────────────────────────────
+// The form's base notify_on_submission/notify_emails (separate DB columns,
+// not part of form_json — see Form below) remain the on/off switch and
+// default recipient list. This is an optional override layer on top: when
+// notifications are enabled and a rule's conditions match the final
+// submitted data, ITS email list is used instead of the default one for
+// that submission — first match wins, same evaluation shape as
+// ConditionalOutcome. Falls back to the default list when nothing matches
+// or when this array is empty/absent, so existing forms are unaffected.
+export interface NotificationRule {
+  id: string
+  name?: string   // optional admin-facing label, e.g. "Route to sales lead"
+  enabled: boolean
+  group: ConditionGroup
+  emails: string[]
+}
+
+// ── Conditional webhooks ────────────────────────────────────────────
+// POSTs the submission (as JSON) to an admin-configured URL when the rule's
+// conditions match the final submitted data. Unlike NotificationRule
+// (first match wins, since it's picking ONE recipient list), every enabled
+// webhook whose conditions match gets its own delivery attempt — they're
+// independent side-effect triggers, not mutually-exclusive choices. Actual
+// sending, HMAC signing, and SSRF-safety checks happen server-side only
+// (see backend/node-crm/src/services/webhookService.js); the client never
+// calls the URL itself.
+export interface WebhookRule {
+  id: string
+  name?: string   // optional admin-facing label, e.g. "Notify Zapier"
+  enabled: boolean
+  group: ConditionGroup
+  url: string
+  secret?: string   // used server-side to sign the payload (X-Velox-Signature: sha256=...)
+}
+
+/** One logged attempt to deliver a WebhookRule's payload — see
+ * webhook_deliveries table / WebhookDelivery.js. Admin-visible so a
+ * silently-failing webhook (bad URL, receiver down, blocked as SSRF) isn't
+ * invisible. */
+export interface WebhookDelivery {
+  id: number
+  form_id: number
+  submission_id: number | null
+  rule_id: string | null
+  rule_name: string | null
+  url: string
+  success: boolean
+  status_code: number | null
+  error_message: string | null
+  duration_ms: number | null
+  created_at: string
 }
 
 // ── Theming ───────────────────────────────────────────────────────
@@ -166,6 +316,9 @@ export interface FormJson {
   fields: FormField[]
   steps?: FormStep[]   // undefined = single-step (legacy)
   theme?: FormTheme    // undefined = DEFAULT_FORM_THEME (see PublicFormPage buildTheme)
+  rules?: ConditionalRule[]   // undefined/empty = no conditional logic (legacy forms unaffected)
+  notificationRules?: NotificationRule[]   // undefined/empty = always use the form's default notify_emails
+  webhookRules?: WebhookRule[]   // undefined/empty = no webhooks fire on submission
 }
 
 export interface FormTemplate {

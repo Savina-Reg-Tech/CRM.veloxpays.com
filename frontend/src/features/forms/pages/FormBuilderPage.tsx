@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Eye, EyeOff, ArrowUpRight } from 'lucide-react'
 import FormBuilder from '../components/FormBuilder'
+import NotificationRulesSection from '../components/FormBuilder/NotificationRulesSection'
+import WebhookRulesSection from '../components/FormBuilder/WebhookRulesSection'
+import WebhookDeliveryLog from '../components/FormBuilder/WebhookDeliveryLog'
 import { useForm, useCreateForm, useUpdateForm } from '../hooks/useForms'
 import type { FormJson, FormStatus, FormField, FormStep, FormTheme } from '../types'
 import { layoutFields } from '../utils/layoutFields'
@@ -72,12 +75,12 @@ export default function FormBuilderPage() {
   // Preview pane below is a separate branch of this same render, not a
   // child of FormBuilder, so FormBuilder unmounts while it's showing and
   // would otherwise forget which tab was active).
-  const [builderView, setBuilderView] = useState<'build' | 'design'>('build')
+  const [builderView, setBuilderView] = useState<'build' | 'design' | 'logic'>('build')
   const [previewStep, setPreviewStep] = useState(0)
   const [previewSubmitFlash, setPreviewSubmitFlash] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications'>('general')
+  const [settingsTab, setSettingsTab] = useState<'general' | 'notifications' | 'webhooks'>('general')
   // Notification settings
   const [notifyOnSubmission, setNotifyOnSubmission] = useState(false)
   const [notifyEmails, setNotifyEmails] = useState('')
@@ -403,6 +406,13 @@ export default function FormBuilderPage() {
               >
                 Notifications {notifyOnSubmission || autoRespond ? '🔔' : ''}
               </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab('webhooks')}
+                className={`pb-2 text-xs font-semibold border-b-2 transition-colors ${settingsTab === 'webhooks' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+              >
+                Webhooks {(formJson.webhookRules?.length ?? 0) > 0 ? '🔗' : ''}
+              </button>
             </div>
 
             {/* General settings bar */}
@@ -450,6 +460,14 @@ export default function FormBuilderPage() {
                         placeholder="admin@example.com, team@example.com"
                         className="w-full max-w-lg text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                       />
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <NotificationRulesSection
+                          fields={formJson.fields}
+                          steps={formJson.steps ?? []}
+                          rules={formJson.notificationRules ?? []}
+                          onChange={(notificationRules) => setFormJson((prev) => ({ ...prev, notificationRules }))}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -487,11 +505,35 @@ export default function FormBuilderPage() {
               </div>
             )}
 
+            {/* Webhooks settings panel */}
+            {settingsTab === 'webhooks' && (
+              <div className="px-6 py-4 bg-white border-b border-gray-100 space-y-5 shrink-0 max-h-96 overflow-y-auto">
+                <WebhookRulesSection
+                  fields={formJson.fields}
+                  steps={formJson.steps ?? []}
+                  rules={formJson.webhookRules ?? []}
+                  onChange={(webhookRules) => setFormJson((prev) => ({ ...prev, webhookRules }))}
+                />
+                {numericId && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <WebhookDeliveryLog formId={numericId} />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* The builder canvas */}
             <div className="flex-1 overflow-hidden">
               <FormBuilder
                 initialFormJson={formJson}
-                onChange={setFormJson}
+                // Merge rather than replace: FormBuilder's internal state
+                // (and therefore this callback's payload) only ever tracks
+                // fields/steps/theme/rules — it has no idea about
+                // notificationRules, which is edited directly in this
+                // page's own Notifications tab below. Replacing the whole
+                // object here would silently wipe that out on the very
+                // next field/theme/logic edit.
+                onChange={(patch) => setFormJson((prev) => ({ ...prev, ...patch }))}
                 view={builderView}
                 onViewChange={setBuilderView}
               />

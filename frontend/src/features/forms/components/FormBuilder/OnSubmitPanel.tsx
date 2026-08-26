@@ -1,170 +1,168 @@
-import { MessageSquare, FileText, Link2, CalendarClock, CreditCard } from 'lucide-react'
-import type { FormStep, OnSubmitAction, OnSubmitConfig } from '../../types'
+import { useState } from 'react'
+import { GitBranch, Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import type { ConditionalOutcome, FormField, FormStep, OnSubmitConfig } from '../../types'
+import { VALUELESS_OPERATORS } from '../../types'
+import { buildFieldLabeler } from '../../utils/fieldLabels'
+import { OPERATOR_LABELS } from './RuleEditorModal'
+import OnSubmitActionPicker from './OnSubmitActionPicker'
+import OutcomeEditorModal from './OutcomeEditorModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 interface OnSubmitPanelProps {
   step: FormStep
+  fields: FormField[]
+  steps: FormStep[]
   onChange: (config: OnSubmitConfig) => void
   buttonsCount: number
   onOpenButtonsModal: () => void
 }
 
-const OPTIONS: { value: OnSubmitAction; label: string; help: string; icon: typeof MessageSquare }[] = [
-  {
-    value: 'message',
-    label: 'Show thank-you message',
-    help: 'Display a message right on this page — optionally with CTA buttons like "Continue Application" or "Book a Call."',
-    icon: MessageSquare,
-  },
-  {
-    value: 'redirect_page',
-    label: 'Redirect to a page',
-    help: 'Send visitors to another page on your own site.',
-    icon: FileText,
-  },
-  {
-    value: 'redirect_url',
-    label: 'Redirect to a URL',
-    help: 'Send visitors to any external web address.',
-    icon: Link2,
-  },
-  {
-    value: 'redirect_meeting',
-    label: 'Redirect to a Meeting link',
-    help: 'Send visitors straight to your booking/scheduling page.',
-    icon: CalendarClock,
-  },
-  {
-    value: 'redirect_payment',
-    label: 'Redirect to a Payment link',
-    help: 'Send visitors straight to a checkout or payment page.',
-    icon: CreditCard,
-  },
-]
-
-// Which OnSubmitConfig field holds the URL for each redirect action — kept
-// separate per action (rather than one shared field) so switching between
-// options in the builder never overwrites a link already typed elsewhere.
-const URL_FIELD: Partial<Record<OnSubmitAction, keyof OnSubmitConfig>> = {
-  redirect_page: 'pageUrl',
-  redirect_url: 'externalUrl',
-  redirect_meeting: 'meetingUrl',
-  redirect_payment: 'paymentUrl',
+const ACTION_SUMMARY: Record<OnSubmitConfig['action'], string> = {
+  message: 'show a thank-you message',
+  redirect_page: 'redirect to a page',
+  redirect_url: 'redirect to a URL',
+  redirect_meeting: 'redirect to a meeting link',
+  redirect_payment: 'redirect to a payment link',
 }
 
-const URL_PLACEHOLDER: Partial<Record<OnSubmitAction, string>> = {
-  redirect_page: '/thank-you',
-  redirect_url: 'https://example.com/thank-you',
-  redirect_meeting: 'https://calendly.com/your-team/intro-call',
-  redirect_payment: 'https://buy.stripe.com/your-payment-link',
-}
-
-// Same per-action-field pattern as URL_FIELD, for the same reason: a
-// separate flag per redirect type so switching options never clobbers a
-// choice already made on another one.
-const NEW_TAB_FIELD: Partial<Record<OnSubmitAction, keyof OnSubmitConfig>> = {
-  redirect_page: 'pageOpenInNewTab',
-  redirect_url: 'externalOpenInNewTab',
-  redirect_meeting: 'meetingOpenInNewTab',
-  redirect_payment: 'paymentOpenInNewTab',
-}
-
-export default function OnSubmitPanel({ step, onChange, buttonsCount, onOpenButtonsModal }: OnSubmitPanelProps) {
+export default function OnSubmitPanel({ step, fields, steps, onChange, buttonsCount, onOpenButtonsModal }: OnSubmitPanelProps) {
   const config: OnSubmitConfig = step.onSubmitConfig ?? { action: 'message' }
-  const action = config.action
+  const outcomes = config.conditionalOutcomes ?? []
+  const fieldLabel = buildFieldLabeler(fields, steps)
+
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingOutcome, setEditingOutcome] = useState<ConditionalOutcome | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ConditionalOutcome | null>(null)
 
   const update = (patch: Partial<OnSubmitConfig>) => onChange({ ...config, ...patch })
+  const setOutcomes = (next: ConditionalOutcome[]) => update({ conditionalOutcomes: next })
+
+  const describeCondition = (c: ConditionalOutcome['group']['conditions'][number]): string => {
+    const label = fieldLabel(c.fieldId)
+    const op = OPERATOR_LABELS[c.operator]
+    if (VALUELESS_OPERATORS.includes(c.operator)) return `${label} ${op}`
+    return `${label} ${op} "${c.value ?? ''}"`
+  }
+
+  const openNew = () => { setEditingOutcome(null); setModalOpen(true) }
+  const openEdit = (outcome: ConditionalOutcome) => { setEditingOutcome(outcome); setModalOpen(true) }
+
+  const handleSaveOutcome = (outcome: ConditionalOutcome) => {
+    const isNew = !outcomes.some((o) => o.id === outcome.id)
+    setOutcomes(isNew ? [...outcomes, outcome] : outcomes.map((o) => (o.id === outcome.id ? outcome : o)))
+    setModalOpen(false)
+    setEditingOutcome(null)
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    setOutcomes(outcomes.filter((o) => o.id !== deleteTarget.id))
+    setDeleteTarget(null)
+  }
+
+  const moveOutcome = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= outcomes.length) return
+    const next = [...outcomes]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setOutcomes(next)
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-      <div className="max-w-lg mx-auto space-y-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-700">On submission</p>
-          <p className="text-xs text-gray-400 mt-0.5">What should happen right after someone submits this form?</p>
-        </div>
-
-        <div className="space-y-2">
-          {OPTIONS.map(({ value, label, help, icon: Icon }) => {
-            const isSelected = action === value
-            const urlKey = URL_FIELD[value]
-            const newTabKey = NEW_TAB_FIELD[value]
-
-            return (
-              <div
-                key={value}
-                className={`rounded-xl border transition-colors ${
-                  isSelected ? 'border-indigo-300 bg-indigo-50/40' : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => update({ action: value })}
-                  className="w-full flex items-start gap-3 px-4 py-3 text-left"
-                >
-                  <span
-                    className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                      isSelected ? 'border-indigo-500' : 'border-gray-300'
-                    }`}
-                  >
-                    {isSelected && <span className="w-2 h-2 rounded-full bg-indigo-500" />}
-                  </span>
-                  <Icon size={16} className={`mt-0.5 shrink-0 ${isSelected ? 'text-indigo-500' : 'text-gray-400'}`} />
-                  <span className="flex-1">
-                    <span className="block text-sm font-medium text-gray-700">{label}</span>
-                    <span className="block text-xs text-gray-400 mt-0.5">{help}</span>
-                  </span>
-                </button>
-
-                {isSelected && (
-                  <div className="px-4 pb-4 pl-[3.25rem] space-y-2.5">
-                    {value === 'message' && (
-                      <>
-                        <textarea
-                          value={config.message ?? ''}
-                          onChange={(e) => update({ message: e.target.value })}
-                          rows={2}
-                          placeholder="Thank you! Your submission has been received."
-                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white"
-                        />
-                        <p className="text-xs text-gray-400">Leave blank to use the form's default success message.</p>
-                        <button
-                          type="button"
-                          onClick={onOpenButtonsModal}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-                        >
-                          {buttonsCount > 0
-                            ? `${buttonsCount} CTA button${buttonsCount === 1 ? '' : 's'} configured — edit →`
-                            : 'Add CTA buttons (e.g. "Continue Application") →'}
-                        </button>
-                      </>
-                    )}
-
-                    {urlKey && (
-                      <input
-                        value={(config[urlKey] as string | undefined) ?? ''}
-                        onChange={(e) => update({ [urlKey]: e.target.value } as Partial<OnSubmitConfig>)}
-                        placeholder={URL_PLACEHOLDER[value]}
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                      />
-                    )}
-
-                    {newTabKey && (
-                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={!!config[newTabKey]}
-                          onChange={(e) => update({ [newTabKey]: e.target.checked } as Partial<OnSubmitConfig>)}
-                          className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-300"
-                        />
-                        Open in new tab
-                      </label>
-                    )}
-                  </div>
-                )}
+      <div className="max-w-lg mx-auto space-y-6">
+        {/* Conditional outcomes — evaluated first, in order; the base
+            picker below is the fallback when none match (or none exist). */}
+        <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <GitBranch size={15} className="text-gray-400" />
+              <div>
+                <p className="text-sm font-semibold text-gray-700">Conditional outcomes</p>
+                <p className="text-xs text-gray-400 mt-0.5">Route different submissions to different outcomes — first match wins.</p>
               </div>
-            )
-          })}
+            </div>
+            <button
+              type="button"
+              onClick={openNew}
+              disabled={fields.length === 0}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40 shrink-0"
+            >
+              <Plus size={12} /> New outcome
+            </button>
+          </div>
+
+          {outcomes.length > 0 && (
+            <div className="p-3 space-y-2">
+              {outcomes.map((outcome, i) => (
+                <div key={outcome.id} className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      {outcome.name && <p className="text-xs font-semibold text-gray-700 mb-0.5">{outcome.name}</p>}
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        <span className="font-bold text-indigo-500">WHEN</span>{' '}
+                        {outcome.group.conditions.map(describeCondition).join(outcome.group.logic === 'AND' ? ' AND ' : ' OR ')}
+                        {'  '}
+                        <span className="font-bold text-emerald-600">THEN</span>{' '}
+                        {ACTION_SUMMARY[outcome.config.action]}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button type="button" onClick={() => moveOutcome(i, -1)} disabled={i === 0} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                        <ChevronUp size={13} />
+                      </button>
+                      <button type="button" onClick={() => moveOutcome(i, 1)} disabled={i === outcomes.length - 1} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30">
+                        <ChevronDown size={13} />
+                      </button>
+                      <button type="button" onClick={() => openEdit(outcome)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                        <Pencil size={12} />
+                      </button>
+                      <button type="button" onClick={() => setDeleteTarget(outcome)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Default / fallback behavior */}
+        <div>
+          <p className="text-sm font-semibold text-gray-700">{outcomes.length > 0 ? 'Default outcome' : 'On submission'}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {outcomes.length > 0
+              ? 'Used when none of the conditional outcomes above match.'
+              : "What should happen right after someone submits this form?"}
+          </p>
         </div>
+
+        <OnSubmitActionPicker
+          config={config}
+          onChange={update}
+          ctaButtons={{ count: buttonsCount, onOpen: onOpenButtonsModal }}
+        />
       </div>
+
+      <OutcomeEditorModal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditingOutcome(null) }}
+        onSave={handleSaveOutcome}
+        fields={fields}
+        fieldLabel={fieldLabel}
+        initialOutcome={editingOutcome}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete outcome"
+        message={deleteTarget ? `Delete "${deleteTarget.name || 'this outcome'}"? This can't be undone.` : ''}
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   )
 }

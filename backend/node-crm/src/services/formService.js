@@ -1,5 +1,49 @@
 import Form from "../models/Form.js";
 import crypto from "crypto";
+import { validateRules, validateConditionGroup, validateNotificationRules, validateWebhookRules } from "./ruleEngine.js";
+
+const VALID_ON_SUBMIT_ACTIONS = ["message", "redirect_page", "redirect_url", "redirect_meeting", "redirect_payment"];
+const ON_SUBMIT_URL_FIELD_BY_ACTION = {
+  redirect_page: "pageUrl",
+  redirect_url: "externalUrl",
+  redirect_meeting: "meetingUrl",
+  redirect_payment: "paymentUrl",
+};
+const ON_SUBMIT_NEW_TAB_FIELD_BY_ACTION = {
+  redirect_page: "pageOpenInNewTab",
+  redirect_url: "externalOpenInNewTab",
+  redirect_meeting: "meetingOpenInNewTab",
+  redirect_payment: "paymentOpenInNewTab",
+};
+
+/**
+ * Validates the action/message/url/newTab fields shared by the base
+ * on-submit config AND each conditional outcome's own resolved config (see
+ * frontend types.ts OnSubmitOutcomeConfig) — one schema, reused for both so
+ * they can never drift apart. `conditionalOutcomes` itself (only present on
+ * the base config) is validated separately by the caller, since an
+ * outcome's own config can't recursively have further nested outcomes.
+ */
+function validateOnSubmitOutcomeConfig(cfg, label) {
+  if (!cfg || typeof cfg !== "object" || !VALID_ON_SUBMIT_ACTIONS.includes(cfg.action)) {
+    throw { status: 400, message: `${label} has an invalid action` };
+  }
+  const urlField = ON_SUBMIT_URL_FIELD_BY_ACTION[cfg.action];
+  if (urlField && cfg[urlField] !== undefined && typeof cfg[urlField] !== "string") {
+    throw { status: 400, message: `${label}.${urlField} must be a string` };
+  }
+  // Validate every "open in new tab" flag that's present, not just the one
+  // for the currently-selected action — they're preserved independently
+  // across redirect types, same as the URL fields.
+  for (const newTabField of Object.values(ON_SUBMIT_NEW_TAB_FIELD_BY_ACTION)) {
+    if (cfg[newTabField] !== undefined && typeof cfg[newTabField] !== "boolean") {
+      throw { status: 400, message: `${label}.${newTabField} must be a boolean` };
+    }
+  }
+  if (cfg.message !== undefined && typeof cfg.message !== "string") {
+    throw { status: 400, message: `${label}.message must be a string` };
+  }
+}
 
 /** Convert a form name to a URL-safe slug */
 function slugify(name) {
@@ -79,7 +123,7 @@ function validateFormJson(formJson) {
 
   const VALID_TYPES = new Set([
     "text", "email", "phone", "textarea",
-    "dropdown", "checkbox", "radio", "date", "file", "hidden",
+    "dropdown", "checkbox", "radio", "date", "file", "hidden", "section",
   ]);
 
   for (const [i, field] of formJson.fields.entries()) {
@@ -137,40 +181,47 @@ function validateFormJson(formJson) {
       // never silently reaches the public form renderer.
       if (step.onSubmitConfig !== undefined) {
         const cfg = step.onSubmitConfig;
-        const VALID_ON_SUBMIT_ACTIONS = ["message", "redirect_page", "redirect_url", "redirect_meeting", "redirect_payment"];
-        if (!cfg || typeof cfg !== "object" || !VALID_ON_SUBMIT_ACTIONS.includes(cfg.action)) {
-          throw { status: 400, message: `Step "${step.title}" has an invalid onSubmitConfig action` };
-        }
-        const urlFieldByAction = {
-          redirect_page: "pageUrl",
-          redirect_url: "externalUrl",
-          redirect_meeting: "meetingUrl",
-          redirect_payment: "paymentUrl",
-        };
-        const newTabFieldByAction = {
-          redirect_page: "pageOpenInNewTab",
-          redirect_url: "externalOpenInNewTab",
-          redirect_meeting: "meetingOpenInNewTab",
-          redirect_payment: "paymentOpenInNewTab",
-        };
-        const urlField = urlFieldByAction[cfg.action];
-        if (urlField && cfg[urlField] !== undefined && typeof cfg[urlField] !== "string") {
-          throw { status: 400, message: `Step "${step.title}" onSubmitConfig.${urlField} must be a string` };
-        }
-        // Validate every "open in new tab" flag that's present, not just
-        // the one for the currently-selected action — they're preserved
-        // independently across redirect types, same as the URL fields.
-        for (const newTabField of Object.values(newTabFieldByAction)) {
-          if (cfg[newTabField] !== undefined && typeof cfg[newTabField] !== "boolean") {
-            throw { status: 400, message: `Step "${step.title}" onSubmitConfig.${newTabField} must be a boolean` };
+        validateOnSubmitOutcomeConfig(cfg, `Step "${step.title}" onSubmitConfig`);
+
+        // Conditional outcomes — an ordered list of "WHEN <conditions> THEN
+        // <a different on-submit behavior>" overrides, resolved against the
+        // final submitted data at submit time (first match wins; see
+        // utils/rules.ts resolveOnSubmitOutcome on the frontend). No
+        // circular-dependency risk here the way ConditionalRule has: an
+        // outcome only ever reads field values, it never writes one, so it
+        // can't feed back into anything else's conditions.
+        if (cfg.conditionalOutcomes !== undefined) {
+          if (!Array.isArray(cfg.conditionalOutcomes)) {
+            throw { status: 400, message: `Step "${step.title}" onSubmitConfig.conditionalOutcomes must be an array` };
           }
-        }
-        if (cfg.message !== undefined && typeof cfg.message !== "string") {
-          throw { status: 400, message: `Step "${step.title}" onSubmitConfig.message must be a string` };
+          const outcomeIds = new Set();
+          for (const [i, outcome] of cfg.conditionalOutcomes.entries()) {
+            const outcomeLabel = `Step "${step.title}" onSubmitConfig.conditionalOutcomes[${i}]`;
+            if (!outcome || typeof outcome !== "object") {
+              throw { status: 400, message: `${outcomeLabel} must be an object` };
+            }
+            if (!outcome.id || typeof outcome.id !== "string") {
+              throw { status: 400, message: `${outcomeLabel} is missing a string 'id'` };
+            }
+            if (outcomeIds.has(outcome.id)) {
+              throw { status: 400, message: `${outcomeLabel} has a duplicate outcome id: ${outcome.id}` };
+            }
+            outcomeIds.add(outcome.id);
+            validateConditionGroup(outcome.group, fieldIds, `${outcomeLabel}.group`);
+            validateOnSubmitOutcomeConfig(outcome.config, `${outcomeLabel}.config`);
+          }
         }
       }
     }
   }
+
+  // Conditional logic rules — see ruleEngine.js. Validated regardless of
+  // whether steps are used (rules can target fields on any step, or a
+  // single-step form's flat field list).
+  const allFieldIds = new Set(formJson.fields.map((f) => f.id));
+  validateRules(formJson.rules, allFieldIds, "form_json.rules");
+  validateNotificationRules(formJson.notificationRules, allFieldIds, "form_json.notificationRules");
+  validateWebhookRules(formJson.webhookRules, allFieldIds, "form_json.webhookRules");
 }
 
 /**
@@ -193,7 +244,37 @@ function pruneOrphanedFields(formJson) {
     if (step.isOnSubmit) continue; // the reserved on-submit step never holds fields
     for (const fid of step.fieldIds ?? []) reachableIds.add(fid);
   }
-  return { ...formJson, fields: (formJson.fields ?? []).filter((f) => reachableIds.has(f.id)) };
+  const fields = (formJson.fields ?? []).filter((f) => reachableIds.has(f.id));
+  const keptIds = new Set(fields.map((f) => f.id));
+
+  // A rule referencing a field that just got pruned (moved off every step,
+  // deleted, etc.) would otherwise be left dangling — referencing an id
+  // that no longer exists anywhere in the form. Drop the whole rule rather
+  // than leave a partially-broken condition/action behind; a rule missing
+  // one of its pieces has no well-defined meaning anyway.
+  const rules = formJson.rules === undefined ? undefined : formJson.rules.filter((rule) => {
+    const referencedIds = [
+      ...(rule.group?.conditions ?? []).map((c) => c.fieldId),
+      ...(rule.actions ?? []).map((a) => a.fieldId),
+    ];
+    return referencedIds.every((id) => keptIds.has(id));
+  });
+
+  // Same reasoning as `rules` above, applied to conditional notification
+  // recipients — a rule whose condition references a pruned field is
+  // dropped rather than left dangling.
+  const notificationRules = formJson.notificationRules === undefined ? undefined : formJson.notificationRules.filter((rule) => {
+    const referencedIds = (rule.group?.conditions ?? []).map((c) => c.fieldId);
+    return referencedIds.every((id) => keptIds.has(id));
+  });
+
+  // Same reasoning again, applied to conditional webhooks.
+  const webhookRules = formJson.webhookRules === undefined ? undefined : formJson.webhookRules.filter((rule) => {
+    const referencedIds = (rule.group?.conditions ?? []).map((c) => c.fieldId);
+    return referencedIds.every((id) => keptIds.has(id));
+  });
+
+  return { ...formJson, fields, rules, notificationRules, webhookRules };
 }
 
 /** Create a new form */

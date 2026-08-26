@@ -10,7 +10,7 @@
 
 import { useReducer, useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
-import { Palette, Pencil } from 'lucide-react'
+import { Palette, Pencil, GitBranch } from 'lucide-react'
 import FieldPalette from './FieldPalette'
 import FieldCanvas from './FieldCanvas'
 import FieldEditor from './FieldEditor'
@@ -18,7 +18,8 @@ import StepTabs from './StepTabs'
 import StepButtonsModal from './StepButtonsModal'
 import OnSubmitPanel from './OnSubmitPanel'
 import DesignPanel from './DesignPanel'
-import type { FormField, FormJson, FormStep, FieldType, FormTheme } from '../../types'
+import RulesPanel from './RulesPanel'
+import type { FormField, FormJson, FormStep, FieldType, FormTheme, ConditionalRule } from '../../types'
 
 /** Build a default (field-collecting) step */
 function buildDefaultStep(index: number): FormStep {
@@ -82,7 +83,7 @@ function buildInitialState(formJson?: FormJson): State {
   // Otherwise a valid on-submit step (and its onSubmitConfig) already
   // exists — left exactly as loaded, nothing recreated or reset.
 
-  return { fields, selectedId: null, steps, activeStepIndex: 0, theme: formJson?.theme }
+  return { fields, selectedId: null, steps, activeStepIndex: 0, theme: formJson?.theme, rules: formJson?.rules ?? [] }
 }
 
 // ── Reducer ───────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ type Action =
   | { type: 'SET_ON_SUBMIT_CONFIG'; stepIndex: number; config: FormStep['onSubmitConfig'] }
   | { type: 'SET_THEME'; theme: FormTheme }
   | { type: 'APPLY_TEMPLATE'; theme: FormTheme }
+  | { type: 'SET_RULES'; rules: ConditionalRule[] }
 
 interface State {
   fields: FormField[]
@@ -109,6 +111,7 @@ interface State {
   steps: FormStep[]          // empty array = single-step mode (no step UI shown)
   activeStepIndex: number
   theme: FormTheme | undefined  // undefined = DEFAULT_FORM_THEME (see utils/theme.ts)
+  rules: ConditionalRule[]   // conditional "IF...THEN..." logic — see utils/rules.ts
 }
 
 function buildDefaultField(type: FieldType): FormField {
@@ -193,7 +196,18 @@ function reducer(state: State, action: Action): State {
       const steps = state.steps.map((s) => ({
         ...s, fieldIds: s.fieldIds.filter((fid) => fid !== action.id),
       }))
-      return { ...state, fields, steps, selectedId: state.selectedId === action.id ? null : state.selectedId }
+      // A rule referencing the removed field (in a condition or an action)
+      // has no well-defined meaning anymore — drop the whole rule rather
+      // than leave a dangling reference behind (mirrors the same cleanup
+      // the backend does for orphaned fields in formService.js).
+      const rules = state.rules.filter((rule) => {
+        const referencedIds = [
+          ...rule.group.conditions.map((c) => c.fieldId),
+          ...rule.actions.map((a) => a.fieldId),
+        ]
+        return !referencedIds.includes(action.id)
+      })
+      return { ...state, fields, steps, rules, selectedId: state.selectedId === action.id ? null : state.selectedId }
     }
     case 'UPDATE_FIELD': {
       const fields = state.fields.map((f) =>
@@ -335,6 +349,8 @@ function reducer(state: State, action: Action): State {
           )
       return { ...state, theme: action.theme, fields: starterFields, steps }
     }
+    case 'SET_RULES':
+      return { ...state, rules: action.rules }
     default:
       return state
   }
@@ -350,8 +366,8 @@ interface FormBuilderProps {
   // tree, not <FormBuilder>), so local state here would silently reset to
   // 'build' every time Preview was toggled off, even if the admin had been
   // on the Design tab. Owning it one level up means it survives that.
-  view: 'build' | 'design'
-  onViewChange: (view: 'build' | 'design') => void
+  view: 'build' | 'design' | 'logic'
+  onViewChange: (view: 'build' | 'design' | 'logic') => void
 }
 
 export default function FormBuilder({ initialFormJson, onChange, view, onViewChange }: FormBuilderProps) {
@@ -413,8 +429,9 @@ export default function FormBuilder({ initialFormJson, onChange, view, onViewCha
       fields: state.fields,
       steps: state.steps.length > 0 ? state.steps : undefined,
       theme: state.theme,
+      rules: state.rules.length > 0 ? state.rules : undefined,
     })
-  }, [state.fields, state.steps, state.theme, onChange])
+  }, [state.fields, state.steps, state.theme, state.rules, onChange])
 
   // ── Step handlers ─────────────────────────────────────────────
   const handleAddStep = () => dispatch({ type: 'ADD_STEP' })
@@ -501,6 +518,21 @@ export default function FormBuilder({ initialFormJson, onChange, view, onViewCha
           <Palette size={13} />
           Design
         </button>
+        <button
+          type="button"
+          onClick={() => onViewChange('logic')}
+          className={`flex items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            view === 'logic' ? 'bg-white text-gray-900 border border-b-0 border-gray-200' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <GitBranch size={13} />
+          Logic
+          {state.rules.length > 0 && (
+            <span className="ml-0.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600">
+              {state.rules.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {view === 'design' ? (
@@ -509,6 +541,13 @@ export default function FormBuilder({ initialFormJson, onChange, view, onViewCha
           onChange={(theme) => dispatch({ type: 'SET_THEME', theme })}
           onApplyTemplate={(theme) => dispatch({ type: 'APPLY_TEMPLATE', theme })}
           onSwitchToBuild={() => onViewChange('build')}
+        />
+      ) : view === 'logic' ? (
+        <RulesPanel
+          fields={state.fields}
+          steps={state.steps}
+          rules={state.rules}
+          onChange={(rules) => dispatch({ type: 'SET_RULES', rules })}
         />
       ) : (
         <>
@@ -552,6 +591,8 @@ export default function FormBuilder({ initialFormJson, onChange, view, onViewCha
            config: thank-you message (+ optional CTA buttons) or a redirect. */
         <OnSubmitPanel
           step={activeStep}
+          fields={state.fields}
+          steps={state.steps}
           onChange={handleSetOnSubmitConfig}
           buttonsCount={activeStep.buttons?.length ?? 0}
           onOpenButtonsModal={() => setButtonsModalOpen(true)}

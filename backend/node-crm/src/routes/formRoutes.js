@@ -11,6 +11,7 @@ import {
   handleExportSubmissions,
   handleGetFormAnalytics,
   handleGetGlobalStats,
+  handleListWebhookDeliveries,
 } from "../controllers/formController.js";
 import {
   handleListLeads,
@@ -58,6 +59,7 @@ router.get("/:id/embed", handleGetEmbedCodes);
 router.get("/:id/submissions", handleListFormSubmissions);
 router.get("/:id/submissions/export", handleExportSubmissions);
 router.get("/:id/analytics", handleGetFormAnalytics);
+router.get("/:id/webhook-deliveries", handleListWebhookDeliveries);
 
 // ── Leads ─────────────────────────────────────────────────────────
 router.get("/leads/all", handleListLeads);

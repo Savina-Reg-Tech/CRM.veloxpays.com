@@ -12,6 +12,7 @@ export const formKeys = {
   stats:       () => [...formKeys.all, 'stats'] as const,
   submissions: (formId: number, params: object) => [...formKeys.all, 'submissions', formId, params] as const,
   analytics:   (formId: number) => [...formKeys.all, 'analytics', formId] as const,
+  webhookDeliveries: (formId: number, params: object) => [...formKeys.all, 'webhook-deliveries', formId, params] as const,
   leads:       (params: object) => [...formKeys.all, 'leads', params] as const,
   leadStats:   () => [...formKeys.all, 'lead-stats'] as const,
   domains:     () => [...formKeys.all, 'domains'] as const,
@@ -81,6 +82,14 @@ export function useFormAnalytics(formId: number) {
   return useQuery({
     queryKey: formKeys.analytics(formId),
     queryFn: () => formApi.getAnalytics(formId),
+    enabled: !!formId,
+  })
+}
+
+export function useWebhookDeliveries(formId: number, params?: { limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: formKeys.webhookDeliveries(formId, params ?? {}),
+    queryFn: () => formApi.listWebhookDeliveries(formId, params),
     enabled: !!formId,
   })
 }

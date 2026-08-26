@@ -10,6 +10,7 @@ import {
 import FormSubmission from "../models/FormSubmission.js";
 import Lead from "../models/Lead.js";
 import Form from "../models/Form.js";
+import WebhookDelivery from "../models/WebhookDelivery.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
 const parsePagination = (req) => {
@@ -100,6 +101,23 @@ export const handleListFormSubmissions = async (req, res) => {
       FormSubmission.countByForm(formId, { status }),
     ]);
     return sendSuccess(res, { items, total, limit, offset }, "Submissions fetched");
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
+};
+
+// ── Webhook delivery log (admin-visible, see webhookService.js) ────
+
+export const handleListWebhookDeliveries = async (req, res) => {
+  try {
+    const formId = parseInt(req.params.id, 10);
+    const { limit, offset } = parsePagination(req);
+
+    const [items, total] = await Promise.all([
+      WebhookDelivery.listByForm(formId, { limit, offset }),
+      WebhookDelivery.countByForm(formId),
+    ]);
+    return sendSuccess(res, { items, total, limit, offset }, "Webhook deliveries fetched");
   } catch (err) {
     return sendError(res, err.message, err.status || 500);
   }
