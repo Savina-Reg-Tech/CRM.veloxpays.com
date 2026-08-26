@@ -122,7 +122,7 @@ function validateFormJson(formJson) {
   validateThemeObject(formJson.theme, "form_json.theme");
 
   const VALID_TYPES = new Set([
-    "text", "email", "phone", "textarea",
+    "text", "email", "phone", "number", "textarea",
     "dropdown", "checkbox", "radio", "date", "file", "hidden", "section",
   ]);
 
@@ -217,9 +217,12 @@ function validateFormJson(formJson) {
 
   // Conditional logic rules — see ruleEngine.js. Validated regardless of
   // whether steps are used (rules can target fields on any step, or a
-  // single-step form's flat field list).
+  // single-step form's flat field list). Step navigation actions need the
+  // set of valid step ids too — a single-step form simply has none, so any
+  // rule that tries to use a navigation action on one is rejected.
   const allFieldIds = new Set(formJson.fields.map((f) => f.id));
-  validateRules(formJson.rules, allFieldIds, "form_json.rules");
+  const allStepIds = new Set((formJson.steps ?? []).map((s) => s.id));
+  validateRules(formJson.rules, allFieldIds, allStepIds, "form_json.rules");
   validateNotificationRules(formJson.notificationRules, allFieldIds, "form_json.notificationRules");
   validateWebhookRules(formJson.webhookRules, allFieldIds, "form_json.webhookRules");
 }
@@ -246,18 +249,27 @@ function pruneOrphanedFields(formJson) {
   }
   const fields = (formJson.fields ?? []).filter((f) => reachableIds.has(f.id));
   const keptIds = new Set(fields.map((f) => f.id));
+  const keptStepIds = new Set(formJson.steps.map((s) => s.id));
 
   // A rule referencing a field that just got pruned (moved off every step,
   // deleted, etc.) would otherwise be left dangling — referencing an id
   // that no longer exists anywhere in the form. Drop the whole rule rather
   // than leave a partially-broken condition/action behind; a rule missing
-  // one of its pieces has no well-defined meaning anyway.
+  // one of its pieces has no well-defined meaning anyway. Same logic for a
+  // navigation rule's fromStepId/target stepId if that step itself got
+  // deleted from the builder.
   const rules = formJson.rules === undefined ? undefined : formJson.rules.filter((rule) => {
-    const referencedIds = [
+    const referencedFieldIds = [
       ...(rule.group?.conditions ?? []).map((c) => c.fieldId),
-      ...(rule.actions ?? []).map((a) => a.fieldId),
+      ...(rule.actions ?? []).flatMap((a) => (a.fieldId ? [a.fieldId] : [])),
     ];
-    return referencedIds.every((id) => keptIds.has(id));
+    if (!referencedFieldIds.every((id) => keptIds.has(id))) return false;
+
+    const referencedStepIds = [
+      ...(rule.fromStepId ? [rule.fromStepId] : []),
+      ...(rule.actions ?? []).flatMap((a) => (a.stepId ? [a.stepId] : [])),
+    ];
+    return referencedStepIds.every((id) => keptStepIds.has(id));
   });
 
   // Same reasoning as `rules` above, applied to conditional notification

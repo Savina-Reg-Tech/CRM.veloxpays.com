@@ -1,6 +1,6 @@
 // ── Field types ───────────────────────────────────────────────────
 export const FIELD_TYPES = [
-  'text', 'email', 'phone', 'textarea',
+  'text', 'email', 'phone', 'number', 'textarea',
   'dropdown', 'checkbox', 'radio', 'date', 'file', 'hidden', 'section',
 ] as const
 export type FieldType = (typeof FIELD_TYPES)[number]
@@ -131,8 +131,12 @@ export interface FormStep {
 export const CONDITION_OPERATORS = [
   'equals', 'not_equals',
   'contains', 'not_contains',
+  'starts_with', 'ends_with',
   'is_empty', 'is_not_empty',
   'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal',
+  'between',
+  'one_of', 'none_of',
+  'domain_is',
 ] as const
 export type ConditionOperator = (typeof CONDITION_OPERATORS)[number]
 
@@ -140,11 +144,21 @@ export type ConditionOperator = (typeof CONDITION_OPERATORS)[number]
 // for these).
 export const VALUELESS_OPERATORS: ConditionOperator[] = ['is_empty', 'is_not_empty']
 
+// 'between' needs a second value (the upper bound of the range — `value` is
+// the lower bound). 'one_of'/'none_of' need a whole set of values, not one.
+// Kept as their own optional fields on RuleCondition (rather than overloading
+// `value` with encoded strings) so each operator's UI and evaluator branch
+// reads its inputs from one obvious, correctly-typed place.
+export const RANGE_OPERATORS: ConditionOperator[] = ['between']
+export const MULTI_VALUE_OPERATORS: ConditionOperator[] = ['one_of', 'none_of']
+
 export interface RuleCondition {
   id: string
   fieldId: string
   operator: ConditionOperator
-  value?: string   // omitted for is_empty / is_not_empty
+  value?: string     // single-value comparisons — omitted for is_empty / is_not_empty
+  value2?: string    // 'between' only — the upper bound of the range
+  values?: string[]  // 'one_of' / 'none_of' only — the comparison set
 }
 
 // v1 supports one flat AND/OR group per rule (no nested groups) — the
@@ -164,8 +178,19 @@ export const RULE_ACTION_TYPES = [
   'show_field', 'hide_field',
   'require_field', 'unrequire_field',
   'set_value', 'clear_value',
+  'goto_step', 'skip_step', 'next_step', 'previous_step', 'end_form',
 ] as const
 export type RuleActionType = (typeof RULE_ACTION_TYPES)[number]
+
+// The five navigation actions decide what step a visitor sees next instead
+// of changing a field. A rule may carry at most one of these (enforced by
+// the editor + validateRules) — "go to Step 3 AND go to Step 5" isn't a
+// coherent instruction. goto_step/skip_step name an explicit destination by
+// id; next_step/previous_step move relative to wherever the rule fires from,
+// so they need no id of their own; end_form submits immediately with
+// whatever's been collected so far (the same effect as the existing custom
+// "Submit" step button, just triggered by a condition instead of a click).
+export const NAVIGATION_ACTION_TYPES: RuleActionType[] = ['goto_step', 'skip_step', 'next_step', 'previous_step', 'end_form']
 
 export type RuleAction =
   | { id: string; type: 'show_field'; fieldId: string }
@@ -174,6 +199,18 @@ export type RuleAction =
   | { id: string; type: 'unrequire_field'; fieldId: string }
   | { id: string; type: 'set_value'; fieldId: string; value: string }
   | { id: string; type: 'clear_value'; fieldId: string }
+  | { id: string; type: 'goto_step'; stepId: string }
+  | { id: string; type: 'skip_step'; stepId: string }
+  | { id: string; type: 'next_step' }
+  | { id: string; type: 'previous_step' }
+  | { id: string; type: 'end_form' }
+
+// Narrowed slices of the union above — lets code that only ever deals with
+// one kind (e.g. the rule editor's separate "change fields" vs "then go to"
+// sections) work with a properly narrowed type instead of re-deriving the
+// same `'fieldId' in action` / `'stepId' in action` check everywhere.
+export type FieldRuleAction = Extract<RuleAction, { fieldId: string }>
+export type NavigationRuleAction = Exclude<RuleAction, FieldRuleAction>
 
 export interface ConditionalRule {
   id: string
@@ -181,6 +218,18 @@ export interface ConditionalRule {
   enabled: boolean
   group: ConditionGroup
   actions: RuleAction[]
+  /**
+   * Which step this rule is "attached to" for navigation purposes — required
+   * when `actions` includes a navigation action, ignored otherwise. A
+   * navigation action only means something at the moment a visitor tries to
+   * leave a specific step ("IF Amount > 10,000, THEN go to Step 3" only make
+   * sense as a decision made when leaving the step where Amount was
+   * entered), unlike show/hide/require actions which react continuously to
+   * whatever's currently typed anywhere in the form. This is also what makes
+   * the Flow view and step-loop safety checks possible — it's a clean graph
+   * edge (fromStepId → the navigation action's target).
+   */
+  fromStepId?: string
 }
 
 // ── Conditional "on submission" outcomes ───────────────────────────

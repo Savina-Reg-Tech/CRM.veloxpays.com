@@ -4,27 +4,32 @@
 // (backend/node-crm/src/services/formService.js / submissionService.js)
 // so a hidden-but-required field can never be wrongly enforced — or
 // bypassed — depending on which side is asked.
-import type { ConditionGroup, ConditionOperator, ConditionalRule, FieldType, FormField, NotificationRule, OnSubmitConfig, OnSubmitOutcomeConfig, RuleCondition } from '../types'
+import type { ConditionGroup, ConditionOperator, ConditionalRule, FieldType, FormField, FormStep, NotificationRule, OnSubmitConfig, OnSubmitOutcomeConfig, RuleCondition } from '../types'
+import { NAVIGATION_ACTION_TYPES } from '../types'
 
 // ── Operator applicability ─────────────────────────────────────────
 // Which comparison operators make sense for a given field type — used by
-// the rule editor to only offer relevant choices. The evaluator itself
-// (below) is generic and doesn't enforce this; it's purely a UI affordance.
+// the rule editor to only offer relevant choices, so an admin never sees an
+// operator that couldn't possibly apply (e.g. "contains" on a date). The
+// evaluator itself (below) is generic and doesn't enforce this; it's purely
+// a UI affordance — same reasoning as before, just a richer table now.
 export function operatorsForFieldType(type: FieldType): ConditionOperator[] {
   switch (type) {
-    case 'checkbox':
-      return ['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'is_not_empty']
+    case 'number':
+      return ['equals', 'not_equals', 'greater_than', 'greater_or_equal', 'less_than', 'less_or_equal', 'between', 'is_empty', 'is_not_empty']
+    case 'date':
+      return ['equals', 'not_equals', 'greater_than', 'greater_or_equal', 'less_than', 'less_or_equal', 'between', 'is_empty', 'is_not_empty']
+    case 'email':
+      return ['equals', 'contains', 'domain_is', 'is_empty', 'is_not_empty']
     case 'dropdown':
     case 'radio':
-      return ['equals', 'not_equals', 'is_empty', 'is_not_empty']
-    case 'date':
-      return ['equals', 'not_equals', 'is_empty', 'is_not_empty', 'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal']
+    case 'checkbox':
+      return ['equals', 'not_equals', 'contains', 'not_contains', 'one_of', 'none_of', 'is_empty', 'is_not_empty']
     case 'text':
-    case 'email':
     case 'phone':
     case 'textarea':
     case 'hidden':
-      return ['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'is_not_empty', 'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal']
+      return ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 'ends_with', 'is_empty', 'is_not_empty']
     default:
       return ['is_empty', 'is_not_empty']
   }
@@ -62,6 +67,15 @@ function compare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: 'base' })
 }
 
+/** Domain part of an email-shaped string ("john@company.com" → "company.com"),
+ * lowercased. Empty if there's no '@' — a non-email value can never match
+ * domain_is, rather than throwing or matching everything. */
+function emailDomain(raw: unknown): string {
+  const s = toComparable(raw)
+  const at = s.lastIndexOf('@')
+  return at === -1 ? '' : s.slice(at + 1).toLowerCase()
+}
+
 // ── Condition / group evaluation ────────────────────────────────────
 export function evaluateCondition(condition: RuleCondition, values: Record<string, unknown>): boolean {
   const raw = values[condition.fieldId]
@@ -88,6 +102,10 @@ export function evaluateCondition(condition: RuleCondition, values: Record<strin
       return Array.isArray(raw)
         ? !raw.some((v) => String(v).toLowerCase().includes(target))
         : !toComparable(raw).toLowerCase().includes(target)
+    case 'starts_with':
+      return toComparable(raw).toLowerCase().startsWith(target)
+    case 'ends_with':
+      return toComparable(raw).toLowerCase().endsWith(target)
     case 'greater_than':
       return compare(toComparable(raw), condition.value ?? '') > 0
     case 'less_than':
@@ -96,6 +114,30 @@ export function evaluateCondition(condition: RuleCondition, values: Record<strin
       return compare(toComparable(raw), condition.value ?? '') >= 0
     case 'less_or_equal':
       return compare(toComparable(raw), condition.value ?? '') <= 0
+    case 'between': {
+      // Normalize in case the admin typed the bounds in reverse order —
+      // "between 10 and 5" should behave the same as "between 5 and 10"
+      // rather than never matching anything.
+      const a = condition.value ?? ''
+      const b = condition.value2 ?? ''
+      const [lo, hi] = compare(a, b) <= 0 ? [a, b] : [b, a]
+      const val = toComparable(raw)
+      return compare(val, lo) >= 0 && compare(val, hi) <= 0
+    }
+    case 'one_of': {
+      const set = (condition.values ?? []).map((v) => v.toLowerCase())
+      return Array.isArray(raw)
+        ? raw.some((v) => set.includes(String(v).toLowerCase()))
+        : set.includes(toComparable(raw).toLowerCase())
+    }
+    case 'none_of': {
+      const set = (condition.values ?? []).map((v) => v.toLowerCase())
+      return Array.isArray(raw)
+        ? !raw.some((v) => set.includes(String(v).toLowerCase()))
+        : !set.includes(toComparable(raw).toLowerCase())
+    }
+    case 'domain_is':
+      return emailDomain(raw) === target.replace(/^@/, '')
     default:
       return false
   }
@@ -219,36 +261,12 @@ export function resolveNotificationRecipients(
   return defaultEmails
 }
 
-// ── Circular dependency detection ────────────────────────────────────
-// Every rule adds a directed edge from each field referenced in its
-// conditions to each field targeted by its actions — "condition-field
-// feeds into action-field". A cycle in this graph (A → B → A) means two
-// fields' states could each keep re-triggering the other with no defined
-// order to settle in, so it's blocked outright rather than left to produce
-// undefined runtime behavior. A field referencing only itself (e.g. "if
-// this field is empty, set it to a default") is explicitly allowed — it's
-// a common one-shot pattern, not a real cycle, since set_value only fires
-// once per false→true transition (see evaluateRules).
-export function buildDependencyGraph(rules: ConditionalRule[]): Map<string, Set<string>> {
-  const adjacency = new Map<string, Set<string>>()
-  for (const rule of rules) {
-    const sources = rule.group.conditions.map((c) => c.fieldId)
-    const targets = rule.actions.map((a) => a.fieldId)
-    for (const source of sources) {
-      for (const target of targets) {
-        if (source === target) continue // self-reference allowed
-        if (!adjacency.has(source)) adjacency.set(source, new Set())
-        adjacency.get(source)!.add(target)
-      }
-    }
-  }
-  return adjacency
-}
-
-/** Returns the field-id path of the first cycle found (e.g. ['A','B','A']),
- * or null if the rule set has no circular dependency. */
-export function findRuleCycle(rules: ConditionalRule[]): string[] | null {
-  const adjacency = buildDependencyGraph(rules)
+// ── Generic cycle detection (shared by field-dependency and step-navigation
+// graphs below — same DFS-with-recursion-stack-coloring approach either way,
+// just built on a different adjacency map) ───────────────────────────────
+/** Returns the node path of the first cycle found (e.g. ['A','B','A']), or
+ * null if the graph has none. */
+export function findCycleInGraph(adjacency: Map<string, Set<string>>): string[] | null {
   const WHITE = 0, GRAY = 1, BLACK = 2
   const color = new Map<string, number>()
   const parent = new Map<string, string>()
@@ -286,4 +304,165 @@ export function findRuleCycle(rules: ConditionalRule[]): string[] | null {
     }
   }
   return null
+}
+
+// ── Field circular dependency detection ─────────────────────────────
+// Every rule adds a directed edge from each field referenced in its
+// conditions to each field targeted by one of its FIELD actions (navigation
+// actions target a step, not a field, so they never contribute an edge
+// here) — "condition-field feeds into action-field". A cycle in this graph
+// (A → B → A) means two fields' states could each keep re-triggering the
+// other with no defined order to settle in, so it's blocked outright rather
+// than left to produce undefined runtime behavior. A field referencing only
+// itself (e.g. "if this field is empty, set it to a default") is explicitly
+// allowed — it's a common one-shot pattern, not a real cycle, since
+// set_value only fires once per false→true transition (see evaluateRules).
+function fieldTargetsOf(rule: ConditionalRule): string[] {
+  return rule.actions.flatMap((a) => ('fieldId' in a ? [a.fieldId] : []))
+}
+
+export function buildDependencyGraph(rules: ConditionalRule[]): Map<string, Set<string>> {
+  const adjacency = new Map<string, Set<string>>()
+  for (const rule of rules) {
+    const sources = rule.group.conditions.map((c) => c.fieldId)
+    const targets = fieldTargetsOf(rule)
+    for (const source of sources) {
+      for (const target of targets) {
+        if (source === target) continue // self-reference allowed
+        if (!adjacency.has(source)) adjacency.set(source, new Set())
+        adjacency.get(source)!.add(target)
+      }
+    }
+  }
+  return adjacency
+}
+
+/** Returns the field-id path of the first cycle found (e.g. ['A','B','A']),
+ * or null if the rule set has no circular dependency. */
+export function findRuleCycle(rules: ConditionalRule[]): string[] | null {
+  return findCycleInGraph(buildDependencyGraph(rules))
+}
+
+// ── Step navigation graph ────────────────────────────────────────────
+// A rule "attached" to a step (via fromStepId) with a navigation action
+// describes how a visitor leaves that step. Only goto_step/skip_step name an
+// explicit destination step id — next_step/previous_step/end_form move
+// relative to wherever the rule fires from (or straight to submission), so
+// they contribute no fixed edge to this graph. skip_step's edge points to
+// whatever step comes immediately AFTER the one being skipped, since "skip
+// Step 2" means "treat Step 2 as invisible," landing on Step 3 (or beyond,
+// if Step 3 is itself skipped by another rule — this graph only models the
+// direct edges an admin configured, not multi-hop skip chains).
+export interface StepNavEdge { fromStepId: string; toStepId: string; ruleId: string }
+
+export function buildStepNavEdges(rules: ConditionalRule[], steps: FormStep[]): StepNavEdge[] {
+  const stepIndexById = new Map(steps.map((s, i) => [s.id, i]))
+  const edges: StepNavEdge[] = []
+  for (const rule of rules) {
+    if (!rule.fromStepId) continue
+    for (const action of rule.actions) {
+      if (action.type === 'goto_step') {
+        edges.push({ fromStepId: rule.fromStepId, toStepId: action.stepId, ruleId: rule.id })
+      } else if (action.type === 'skip_step') {
+        const idx = stepIndexById.get(action.stepId)
+        const after = idx !== undefined ? steps[idx + 1] : undefined
+        if (after) edges.push({ fromStepId: rule.fromStepId, toStepId: after.id, ruleId: rule.id })
+      }
+    }
+  }
+  return edges
+}
+
+/** A rule that routes a step to itself isn't "a loop" in the reviewable
+ * sense — it's zero forward progress with no way out, so it's always
+ * invalid and hard-blocked regardless of the multi-step cycle policy below. */
+export function findStepSelfLoopRule(rules: ConditionalRule[]): ConditionalRule | null {
+  for (const rule of rules) {
+    if (!rule.fromStepId) continue
+    for (const action of rule.actions) {
+      if (action.type === 'goto_step' && action.stepId === rule.fromStepId) return rule
+      if (action.type === 'skip_step' && action.stepId === rule.fromStepId) return rule
+    }
+  }
+  return null
+}
+
+/**
+ * Multi-step cycles (Step 3 routes back to Step 2, which routes forward to
+ * Step 3) are deliberately WARNED about rather than hard-blocked: a
+ * graph-only check can't see that the two rules' conditions are mutually
+ * exclusive, so a perfectly safe "go back and fix your answer" pattern would
+ * otherwise be indistinguishable from a genuine dead end. Returns the
+ * step-id path of the first cycle found, or null.
+ */
+export function findStepNavCycle(rules: ConditionalRule[], steps: FormStep[]): string[] | null {
+  const adjacency = new Map<string, Set<string>>()
+  for (const edge of buildStepNavEdges(rules, steps)) {
+    if (edge.fromStepId === edge.toStepId) continue // self-loops are handled by findStepSelfLoopRule, not here
+    if (!adjacency.has(edge.fromStepId)) adjacency.set(edge.fromStepId, new Set())
+    adjacency.get(edge.fromStepId)!.add(edge.toStepId)
+  }
+  return findCycleInGraph(adjacency)
+}
+
+// ── Best-effort conflict detection ───────────────────────────────────
+// Proving two arbitrary AND/OR condition groups can never both be true at
+// once isn't generally solvable, so this is deliberately a heuristic, not a
+// guarantee: it flags rule PAIRS that (a) share at least one condition field
+// — meaning some input could plausibly satisfy both — and (b) would then
+// step on each other, either by changing the same field in opposite ways or
+// by both trying to decide the same step's navigation. It's meant to prompt
+// a second look, not to be exhaustive or ever block a save.
+export interface RuleConflict {
+  ruleAId: string
+  ruleBId: string
+  description: string
+}
+
+const OPPOSITE_FIELD_ACTIONS: Partial<Record<string, string>> = {
+  show_field: 'hide_field', hide_field: 'show_field',
+  require_field: 'unrequire_field', unrequire_field: 'require_field',
+}
+
+export function findPossibleConflicts(rules: ConditionalRule[]): RuleConflict[] {
+  const conflicts: RuleConflict[] = []
+  const enabled = rules.filter((r) => r.enabled)
+
+  for (let i = 0; i < enabled.length; i++) {
+    for (let j = i + 1; j < enabled.length; j++) {
+      const a = enabled[i]
+      const b = enabled[j]
+      const sharesConditionField = a.group.conditions.some((ca) => b.group.conditions.some((cb) => cb.fieldId === ca.fieldId))
+      if (!sharesConditionField) continue
+
+      // Two navigation rules anchored to the same step compete for the same
+      // decision — only the higher-priority (earlier) one actually applies
+      // if both match.
+      if (a.fromStepId && a.fromStepId === b.fromStepId) {
+        const aIsNav = a.actions.some((x) => NAVIGATION_ACTION_TYPES.includes(x.type))
+        const bIsNav = b.actions.some((x) => NAVIGATION_ACTION_TYPES.includes(x.type))
+        if (aIsNav && bIsNav) {
+          conflicts.push({ ruleAId: a.id, ruleBId: b.id, description: 'both navigate away from the same step — the higher rule wins if both match' })
+          continue
+        }
+      }
+
+      // Same field, opposite field actions (show vs hide, require vs
+      // unrequire) — last-write-wins order still applies, but it's worth
+      // flagging since it's easy to lose track of once a form has many rules.
+      outer: for (const actA of a.actions) {
+        if (!('fieldId' in actA)) continue
+        const opposite = OPPOSITE_FIELD_ACTIONS[actA.type]
+        if (!opposite) continue
+        for (const actB of b.actions) {
+          if ('fieldId' in actB && actB.fieldId === actA.fieldId && actB.type === opposite) {
+            conflicts.push({ ruleAId: a.id, ruleBId: b.id, description: 'both change the same field in opposite ways — the lower rule wins if both match' })
+            break outer
+          }
+        }
+      }
+    }
+  }
+
+  return conflicts
 }

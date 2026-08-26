@@ -1,5 +1,5 @@
 import {
-  Type, Mail, Phone, AlignLeft, ChevronDown,
+  Type, Mail, Phone, Hash, AlignLeft, ChevronDown,
   CheckSquare, Circle, Calendar, Paperclip, EyeOff,
 } from 'lucide-react'
 import type { FieldType } from '../../types'
@@ -8,6 +8,7 @@ const PALETTE_FIELDS: { type: FieldType; label: string; icon: React.ElementType;
   { type: 'text',      label: 'Text Input',    icon: Type,        color: 'bg-blue-50 text-blue-600 border-blue-200' },
   { type: 'email',     label: 'Email',         icon: Mail,        color: 'bg-purple-50 text-purple-600 border-purple-200' },
   { type: 'phone',     label: 'Phone',         icon: Phone,       color: 'bg-green-50 text-green-600 border-green-200' },
+  { type: 'number',    label: 'Number',        icon: Hash,        color: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
   { type: 'textarea',  label: 'Textarea',      icon: AlignLeft,   color: 'bg-orange-50 text-orange-600 border-orange-200' },
   { type: 'dropdown',  label: 'Dropdown',      icon: ChevronDown, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
   { type: 'checkbox',  label: 'Checkbox',      icon: CheckSquare, color: 'bg-teal-50 text-teal-600 border-teal-200' },

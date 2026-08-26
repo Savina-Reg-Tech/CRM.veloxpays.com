@@ -18,15 +18,27 @@
 const CONDITION_OPERATORS = [
   "equals", "not_equals",
   "contains", "not_contains",
+  "starts_with", "ends_with",
   "is_empty", "is_not_empty",
   "greater_than", "less_than", "greater_or_equal", "less_or_equal",
+  "between",
+  "one_of", "none_of",
+  "domain_is",
 ];
 
-const RULE_ACTION_TYPES = [
+const FIELD_ACTION_TYPES = [
   "show_field", "hide_field",
   "require_field", "unrequire_field",
   "set_value", "clear_value",
 ];
+
+// Navigation actions decide what step a visitor sees next instead of
+// changing a field — goto_step/skip_step carry a `stepId`, next_step/
+// previous_step/end_form carry none (they move relative to whichever step
+// the rule is attached to via `fromStepId`, or submit immediately).
+const NAVIGATION_ACTION_TYPES = ["goto_step", "skip_step", "next_step", "previous_step", "end_form"];
+
+const RULE_ACTION_TYPES = [...FIELD_ACTION_TYPES, ...NAVIGATION_ACTION_TYPES];
 
 // ── Structural validation ────────────────────────────────────────────
 /** Validates a single { logic, conditions } group — shared by rule
@@ -55,12 +67,24 @@ function validateConditionGroup(group, fieldIds, label) {
     if (!valueless && cond.value !== undefined && typeof cond.value !== "string") {
       throw { status: 400, message: `${condLabel}.value must be a string` };
     }
+    if (cond.operator === "between") {
+      if (typeof cond.value !== "string" || typeof cond.value2 !== "string") {
+        throw { status: 400, message: `${condLabel} (between) must have both 'value' and 'value2'` };
+      }
+    }
+    if (cond.operator === "one_of" || cond.operator === "none_of") {
+      if (!Array.isArray(cond.values) || cond.values.length === 0 || cond.values.some((v) => typeof v !== "string")) {
+        throw { status: 400, message: `${condLabel} (${cond.operator}) must have a non-empty 'values' array of strings` };
+      }
+    }
   }
 }
 
 /** Throws { status: 400, message } on the first violation — same shape as
- * every other validator in formService.js. */
-function validateRules(rules, fieldIds, label = "form_json.rules") {
+ * every other validator in formService.js. `stepIds` may be omitted/empty
+ * for single-step forms; any rule that tries to use a navigation action on
+ * such a form is rejected, since there's nowhere for it to navigate to. */
+function validateRules(rules, fieldIds, stepIds = new Set(), label = "form_json.rules") {
   if (rules === undefined) return;
   if (!Array.isArray(rules)) {
     throw { status: 400, message: `${label} must be an array` };
@@ -85,16 +109,44 @@ function validateRules(rules, fieldIds, label = "form_json.rules") {
     if (!Array.isArray(rule.actions) || rule.actions.length === 0) {
       throw { status: 400, message: `${ruleLabel}.actions must be a non-empty array` };
     }
+
+    let navigationActionCount = 0;
     for (const [k, action] of rule.actions.entries()) {
       const actLabel = `${ruleLabel}.actions[${k}]`;
       if (!RULE_ACTION_TYPES.includes(action.type)) {
         throw { status: 400, message: `${actLabel} has an invalid type: ${action.type}` };
       }
-      if (!action.fieldId || !fieldIds.has(action.fieldId)) {
-        throw { status: 400, message: `${actLabel} references an unknown field id: ${action.fieldId}` };
+
+      if (NAVIGATION_ACTION_TYPES.includes(action.type)) {
+        navigationActionCount++;
+        if ((action.type === "goto_step" || action.type === "skip_step")) {
+          if (!action.stepId || !stepIds.has(action.stepId)) {
+            throw { status: 400, message: `${actLabel} references an unknown step id: ${action.stepId}` };
+          }
+          // A step routing to itself is zero forward progress, not a
+          // reviewable loop — always invalid, independent of the
+          // multi-step cycle check (which only warns, see findStepNavCycle).
+          if (action.stepId === rule.fromStepId) {
+            throw { status: 400, message: `${actLabel} routes step "${rule.fromStepId}" to itself — that traps every visitor who reaches it` };
+          }
+        }
+      } else {
+        // Field actions (show_field, hide_field, require_field, unrequire_field, set_value, clear_value)
+        if (!action.fieldId || !fieldIds.has(action.fieldId)) {
+          throw { status: 400, message: `${actLabel} references an unknown field id: ${action.fieldId}` };
+        }
+        if (action.type === "set_value" && typeof action.value !== "string") {
+          throw { status: 400, message: `${actLabel} (set_value) must have a string 'value'` };
+        }
       }
-      if (action.type === "set_value" && typeof action.value !== "string") {
-        throw { status: 400, message: `${actLabel} (set_value) must have a string 'value'` };
+    }
+
+    if (navigationActionCount > 1) {
+      throw { status: 400, message: `${ruleLabel} has more than one navigation action — a rule can only send a visitor to one place` };
+    }
+    if (navigationActionCount === 1) {
+      if (!rule.fromStepId || !stepIds.has(rule.fromStepId)) {
+        throw { status: 400, message: `${ruleLabel} has a navigation action but no valid 'fromStepId' (which step does this rule fire when leaving?)` };
       }
     }
   }
@@ -106,27 +158,16 @@ function validateRules(rules, fieldIds, label = "form_json.rules") {
       message: `${label} has a circular dependency: ${cycle.join(" → ")}. Remove one of these rules to break the cycle.`,
     };
   }
+  // Note: multi-step navigation cycles are intentionally NOT hard-blocked
+  // here (see findStepNavCycle) — a graph-only check can't tell a genuine
+  // dead end from a safe "go back and fix it" pattern guarded by mutually
+  // exclusive conditions, so that's surfaced as a warning in the builder UI
+  // instead of a save-time rejection.
 }
 
-// ── Circular dependency detection (mirrors utils/rules.ts) ──────────
-function buildDependencyGraph(rules) {
-  const adjacency = new Map();
-  for (const rule of rules) {
-    const sources = (rule.group?.conditions ?? []).map((c) => c.fieldId);
-    const targets = (rule.actions ?? []).map((a) => a.fieldId);
-    for (const source of sources) {
-      for (const target of targets) {
-        if (source === target) continue; // self-reference allowed
-        if (!adjacency.has(source)) adjacency.set(source, new Set());
-        adjacency.get(source).add(target);
-      }
-    }
-  }
-  return adjacency;
-}
-
-function findRuleCycle(rules) {
-  const adjacency = buildDependencyGraph(rules);
+// ── Generic cycle detection (shared by the field-dependency graph and the
+// step-navigation graph below — mirrors utils/rules.ts findCycleInGraph) ──
+function findCycleInGraph(adjacency) {
   const WHITE = 0, GRAY = 1, BLACK = 2;
   const color = new Map();
   const parent = new Map();
@@ -165,6 +206,62 @@ function findRuleCycle(rules) {
   return null;
 }
 
+// ── Field circular dependency detection (mirrors utils/rules.ts) ────
+function buildDependencyGraph(rules) {
+  const adjacency = new Map();
+  for (const rule of rules) {
+    const sources = (rule.group?.conditions ?? []).map((c) => c.fieldId);
+    // Navigation actions target a step (stepId), not a field, so they never
+    // contribute an edge to this graph — only 'fieldId' does.
+    const targets = (rule.actions ?? []).flatMap((a) => (a.fieldId ? [a.fieldId] : []));
+    for (const source of sources) {
+      for (const target of targets) {
+        if (source === target) continue; // self-reference allowed
+        if (!adjacency.has(source)) adjacency.set(source, new Set());
+        adjacency.get(source).add(target);
+      }
+    }
+  }
+  return adjacency;
+}
+
+function findRuleCycle(rules) {
+  return findCycleInGraph(buildDependencyGraph(rules));
+}
+
+// ── Step navigation graph (mirrors utils/rules.ts) ───────────────────
+function buildStepNavEdges(rules, steps) {
+  const stepIndexById = new Map(steps.map((s, i) => [s.id, i]));
+  const edges = [];
+  for (const rule of rules) {
+    if (!rule.fromStepId) continue;
+    for (const action of rule.actions ?? []) {
+      if (action.type === "goto_step") {
+        edges.push({ fromStepId: rule.fromStepId, toStepId: action.stepId, ruleId: rule.id });
+      } else if (action.type === "skip_step") {
+        const idx = stepIndexById.get(action.stepId);
+        const after = idx !== undefined ? steps[idx + 1] : undefined;
+        if (after) edges.push({ fromStepId: rule.fromStepId, toStepId: after.id, ruleId: rule.id });
+      }
+    }
+  }
+  return edges;
+}
+
+/** Multi-step navigation cycles are intentionally not treated as hard save
+ * errors (see the note in validateRules) — exported so it's available if a
+ * future admin-facing endpoint wants to surface the same warning the
+ * builder UI already computes client-side from the identical rule data. */
+function findStepNavCycle(rules, steps) {
+  const adjacency = new Map();
+  for (const edge of buildStepNavEdges(rules, steps)) {
+    if (edge.fromStepId === edge.toStepId) continue; // self-loops are hard-blocked in validateRules, not warned about here
+    if (!adjacency.has(edge.fromStepId)) adjacency.set(edge.fromStepId, new Set());
+    adjacency.get(edge.fromStepId).add(edge.toStepId);
+  }
+  return findCycleInGraph(adjacency);
+}
+
 // ── Runtime evaluation (mirrors utils/rules.ts evaluateRules) ────────
 function isEmptyValue(raw) {
   if (raw === undefined || raw === null) return true;
@@ -193,6 +290,12 @@ function compare(a, b) {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
+function emailDomain(raw) {
+  const s = toComparable(raw);
+  const at = s.lastIndexOf("@");
+  return at === -1 ? "" : s.slice(at + 1).toLowerCase();
+}
+
 function evaluateCondition(condition, values) {
   const raw = values[condition.fieldId];
   const target = (condition.value ?? "").toLowerCase();
@@ -218,6 +321,10 @@ function evaluateCondition(condition, values) {
       return Array.isArray(raw)
         ? !raw.some((v) => String(v).toLowerCase().includes(target))
         : !toComparable(raw).toLowerCase().includes(target);
+    case "starts_with":
+      return toComparable(raw).toLowerCase().startsWith(target);
+    case "ends_with":
+      return toComparable(raw).toLowerCase().endsWith(target);
     case "greater_than":
       return compare(toComparable(raw), condition.value ?? "") > 0;
     case "less_than":
@@ -226,6 +333,27 @@ function evaluateCondition(condition, values) {
       return compare(toComparable(raw), condition.value ?? "") >= 0;
     case "less_or_equal":
       return compare(toComparable(raw), condition.value ?? "") <= 0;
+    case "between": {
+      const a = condition.value ?? "";
+      const b = condition.value2 ?? "";
+      const [lo, hi] = compare(a, b) <= 0 ? [a, b] : [b, a];
+      const val = toComparable(raw);
+      return compare(val, lo) >= 0 && compare(val, hi) <= 0;
+    }
+    case "one_of": {
+      const set = (condition.values ?? []).map((v) => v.toLowerCase());
+      return Array.isArray(raw)
+        ? raw.some((v) => set.includes(String(v).toLowerCase()))
+        : set.includes(toComparable(raw).toLowerCase());
+    }
+    case "none_of": {
+      const set = (condition.values ?? []).map((v) => v.toLowerCase());
+      return Array.isArray(raw)
+        ? !raw.some((v) => set.includes(String(v).toLowerCase()))
+        : !set.includes(toComparable(raw).toLowerCase());
+    }
+    case "domain_is":
+      return emailDomain(raw) === target.replace(/^@/, "");
     default:
       return false;
   }
@@ -389,4 +517,5 @@ export {
   validateRules, validateConditionGroup, findRuleCycle, evaluateRules, evaluateGroup,
   resolveNotificationRecipients, validateNotificationRules,
   resolveMatchingWebhooks, validateWebhookRules,
+  buildStepNavEdges, findStepNavCycle,
 };

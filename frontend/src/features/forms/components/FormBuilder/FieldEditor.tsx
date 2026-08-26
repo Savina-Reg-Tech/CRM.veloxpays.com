@@ -95,7 +95,7 @@ export default function FieldEditor({ field, onChange }: FieldEditorProps) {
         </div>
 
         {/* Default value (text-like fields only) */}
-        {['text', 'email', 'phone', 'textarea', 'hidden'].includes(field.type) && (
+        {['text', 'email', 'phone', 'number', 'textarea', 'hidden'].includes(field.type) && (
           <LabeledInput
             label="Default Value"
             value={field.defaultValue ?? ''}

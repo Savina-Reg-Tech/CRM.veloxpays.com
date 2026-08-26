@@ -38,12 +38,12 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import type { Form, FormField, FormTheme } from '../types'
-import { BORDER_RADIUS_PRESETS } from '../types'
+import type { ConditionalRule, Form, FormField, FormTheme } from '../types'
+import { BORDER_RADIUS_PRESETS, NAVIGATION_ACTION_TYPES } from '../types'
 import { layoutFields } from '../utils/layoutFields'
 import { resolveTheme } from '../utils/theme'
 import { parseInlineLinks } from '../utils/richText'
-import { evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
+import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
@@ -399,7 +399,7 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
         <EmailInput field={field} inputCls={inputCls} inputStyle={inputStyle} focusStyle={focusStyle} theme={theme} required={required} disabled={hidden} />
       ) : (
         <input
-          type={field.type === 'phone' ? 'tel' : 'text'}
+          type={field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : 'text'}
           name={field.id}
           className={inputCls}
           style={{ ...inputStyle, ...focusStyle }}
@@ -462,6 +462,59 @@ function applyValueAction(formEl: HTMLFormElement, fieldId: string, value: strin
   el.value = value ?? ''
   el.dispatchEvent(new Event('input', { bubbles: true }))
   el.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+// ── Step navigation ──────────────────────────────────────────────
+type StepNavResult =
+  | { kind: 'goto'; stepIndex: number }
+  | { kind: 'submit' }
+  | null
+
+/**
+ * Decide what happens when a visitor tries to leave `fromStepId`: check
+ * every enabled rule anchored there (in priority order — first match wins,
+ * same as every other "resolve one outcome" pattern in this codebase), and
+ * translate its navigation action into a concrete step index the caller can
+ * jump to, or a submit signal for `end_form`. Returns null when nothing
+ * matches, meaning "fall back to the normal sequential next step" — so a
+ * form with no navigation rules at all behaves exactly as it always has.
+ */
+function resolveStepNavigation(
+  rules: ConditionalRule[] | undefined,
+  fromStepId: string,
+  currentIndex: number,
+  navigableSteps: { id: string }[],
+  values: Record<string, unknown>,
+): StepNavResult {
+  const stepIndexById = new Map(navigableSteps.map((s, i) => [s.id, i]))
+  const candidates = (rules ?? []).filter(
+    (r) => r.enabled && r.fromStepId === fromStepId && r.actions.some((a) => NAVIGATION_ACTION_TYPES.includes(a.type)),
+  )
+  for (const rule of candidates) {
+    if (!evaluateGroup(rule.group, values)) continue
+    const navAction = rule.actions.find((a) => NAVIGATION_ACTION_TYPES.includes(a.type))!
+    switch (navAction.type) {
+      case 'end_form':
+        return { kind: 'submit' }
+      case 'goto_step': {
+        const idx = stepIndexById.get(navAction.stepId)
+        if (idx !== undefined) return { kind: 'goto', stepIndex: idx }
+        break // dangling reference (step deleted after this rule was saved) — try the next candidate rule
+      }
+      case 'skip_step': {
+        const skippedIdx = stepIndexById.get(navAction.stepId)
+        if (skippedIdx !== undefined) {
+          return skippedIdx + 1 < navigableSteps.length ? { kind: 'goto', stepIndex: skippedIdx + 1 } : { kind: 'submit' }
+        }
+        break
+      }
+      case 'previous_step':
+        return currentIndex > 0 ? { kind: 'goto', stepIndex: currentIndex - 1 } : null
+      case 'next_step':
+        return currentIndex + 1 < navigableSteps.length ? { kind: 'goto', stepIndex: currentIndex + 1 } : { kind: 'submit' }
+    }
+  }
+  return null
 }
 
 // ── Main component ────────────────────────────────────────────────
@@ -593,22 +646,12 @@ export default function PublicFormPage() {
   const showBack = isMultiStep && !isFirstStep && !hasCustomButtons
 
   // ── Navigation handlers ───────────────────────────────────────
-  const handleNext = useCallback((e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formEl = e.currentTarget
-    if (!formEl.reportValidity()) return
-    formDataRef.current = { ...formDataRef.current, ...collectFormData(formEl) }
-    // Clamp so a misconfigured "Continue" button on the literal last step
-    // can't advance past the end into a blank, buttonless dead end.
-    setCurrentStep((s) => Math.min(s + 1, Math.max(totalSteps - 1, 0)))
-    setSubmitError('')
-  }, [totalSteps])
-
-  const handleBack = useCallback(() => {
-    setCurrentStep((s) => Math.max(0, s - 1))
-    setSubmitError('')
-  }, [])
-
+  // handleSubmit is defined before handleNext (rather than in the more
+  // "natural" reading order after it) because handleNext needs to call it
+  // directly for the `end_form` navigation action — a rule can decide "skip
+  // everything else and submit now," which is exactly what a custom
+  // step-level Submit button already does, just condition-triggered instead
+  // of click-triggered.
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (alreadySubmittedRef.current) return
@@ -677,6 +720,45 @@ export default function PublicFormPage() {
       setSubmitting(false)
     }
   }, [id, onSubmitStepIndex, onSubmitConfig])
+
+  const handleNext = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formEl = e.currentTarget
+    if (!formEl.reportValidity()) return
+    const mergedData = { ...formDataRef.current, ...collectFormData(formEl) }
+    formDataRef.current = mergedData
+    setSubmitError('')
+
+    // Conditional step routing — see resolveStepNavigation above. Checked
+    // against the step actually being left (not necessarily `currentStep`
+    // as a raw array index, since the reserved on-submit step is excluded
+    // from the navigable list), first enabled matching rule wins. No match
+    // falls back to the form's original behavior: advance one step.
+    const navigableSteps = steps.filter((s) => !s.isOnSubmit)
+    const leavingStepId = steps[currentStep]?.id
+    const currentNavIndex = navigableSteps.findIndex((s) => s.id === leavingStepId)
+    const nav = leavingStepId
+      ? resolveStepNavigation(form?.form_json.rules, leavingStepId, currentNavIndex, navigableSteps, mergedData)
+      : null
+
+    if (nav?.kind === 'submit') {
+      handleSubmit(e)
+      return
+    }
+    if (nav?.kind === 'goto') {
+      const targetStepId = navigableSteps[nav.stepIndex]?.id
+      const targetIndex = steps.findIndex((s) => s.id === targetStepId)
+      if (targetIndex !== -1) { setCurrentStep(targetIndex); return }
+    }
+    // Clamp so a misconfigured "Continue" button on the literal last step
+    // can't advance past the end into a blank, buttonless dead end.
+    setCurrentStep((s) => Math.min(s + 1, Math.max(totalSteps - 1, 0)))
+  }, [totalSteps, steps, currentStep, form, handleSubmit])
+
+  const handleBack = useCallback(() => {
+    setCurrentStep((s) => Math.max(0, s - 1))
+    setSubmitError('')
+  }, [])
 
   // Single onSubmit for the <form>, regardless of which button triggered it.
   // Reads the actual clicked button via the native SubmitEvent's `submitter`

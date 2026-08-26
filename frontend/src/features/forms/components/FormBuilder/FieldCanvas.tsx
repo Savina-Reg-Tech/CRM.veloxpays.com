@@ -68,7 +68,7 @@ function FieldPreview({ field }: { field: FormField }) {
     default:
       return (
         <input
-          type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}
+          type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : 'text'}
           className={inputClass}
           placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
           readOnly

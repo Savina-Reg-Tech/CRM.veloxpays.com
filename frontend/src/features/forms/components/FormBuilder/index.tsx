@@ -18,7 +18,7 @@ import StepTabs from './StepTabs'
 import StepButtonsModal from './StepButtonsModal'
 import OnSubmitPanel from './OnSubmitPanel'
 import DesignPanel from './DesignPanel'
-import RulesPanel from './RulesPanel'
+import LogicPanel from './LogicPanel'
 import type { FormField, FormJson, FormStep, FieldType, FormTheme, ConditionalRule } from '../../types'
 
 /** Build a default (field-collecting) step */
@@ -161,7 +161,7 @@ function buildStarterFields(): FormField[] {
 
 function labelForType(t: FieldType): string {
   const map: Record<FieldType, string> = {
-    text: 'Text Input', email: 'Email Address', phone: 'Phone Number',
+    text: 'Text Input', email: 'Email Address', phone: 'Phone Number', number: 'Number',
     textarea: 'Message', dropdown: 'Select Option', checkbox: 'Checkboxes',
     radio: 'Radio Buttons', date: 'Date', file: 'File Upload', hidden: 'Hidden Field',
     section: 'Info Section',
@@ -203,7 +203,7 @@ function reducer(state: State, action: Action): State {
       const rules = state.rules.filter((rule) => {
         const referencedIds = [
           ...rule.group.conditions.map((c) => c.fieldId),
-          ...rule.actions.map((a) => a.fieldId),
+          ...rule.actions.flatMap((a) => ('fieldId' in a ? [a.fieldId] : [])),
         ]
         return !referencedIds.includes(action.id)
       })
@@ -290,7 +290,16 @@ function reducer(state: State, action: Action): State {
       const updatedSteps = steps.map((s, i) =>
         i === firstFieldStepIdx ? { ...s, fieldIds: [...s.fieldIds, ...orphaned] } : s
       )
-      return { ...state, steps: updatedSteps, activeStepIndex }
+      // A navigation rule anchored to (fromStepId) or targeting (goto_step/
+      // skip_step) the step that just got deleted has no well-defined
+      // meaning anymore — drop it rather than leave a dangling step
+      // reference behind, mirroring the same cleanup the backend does at
+      // save time in formService.js pruneOrphanedFields.
+      const rules = state.rules.filter((rule) => {
+        if (rule.fromStepId === removedStep.id) return false
+        return !rule.actions.some((a) => 'stepId' in a && a.stepId === removedStep.id)
+      })
+      return { ...state, steps: updatedSteps, activeStepIndex, rules }
     }
     case 'RENAME_STEP': {
       const target = state.steps[action.stepIndex]
@@ -543,7 +552,7 @@ export default function FormBuilder({ initialFormJson, onChange, view, onViewCha
           onSwitchToBuild={() => onViewChange('build')}
         />
       ) : view === 'logic' ? (
-        <RulesPanel
+        <LogicPanel
           fields={state.fields}
           steps={state.steps}
           rules={state.rules}

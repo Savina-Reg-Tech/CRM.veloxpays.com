@@ -43,7 +43,7 @@ function PreviewField({ field, theme }: { field: FormField; theme: Required<Form
       ) : field.type === 'file' ? (
         <div className="border-2 border-dashed rounded-lg p-4 text-center text-sm text-gray-400" style={themeInputBorderStyle(theme)}>Click to upload</div>
       ) : (
-        <input type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'} placeholder={field.placeholder} className={inputCls} style={inputStyle} readOnly />
+        <input type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'number' ? 'number' : 'text'} placeholder={field.placeholder} className={inputCls} style={inputStyle} readOnly />
       )}
       {field.helpText && <p className="text-xs text-gray-400 mt-1">{field.helpText}</p>}
     </div>
