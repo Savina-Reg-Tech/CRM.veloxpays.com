@@ -6,6 +6,7 @@ import {
   handleValidateEmail,
   handleServeEmbedScript,
 } from "../controllers/publicFormController.js";
+import { uploadFormSubmissionFiles } from "../middleware/upload.js";
 
 const router = Router();
 
@@ -30,7 +31,8 @@ const validateLimiter = rateLimit({
 
 // ── Routes ────────────────────────────────────────────────────────
 router.get("/forms/:id",          handleGetPublicForm);
-router.post("/forms/:id/submit",  submissionLimiter, handleSubmitForm);
+// Rate-limit before the (potentially expensive) multipart/file parse, not after.
+router.post("/forms/:id/submit",  submissionLimiter, uploadFormSubmissionFiles, handleSubmitForm);
 router.get("/validate-email",     validateLimiter,   handleValidateEmail);
 router.get("/form.js",            handleServeEmbedScript);
 

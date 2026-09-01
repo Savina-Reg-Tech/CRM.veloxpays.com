@@ -1,4 +1,5 @@
 import { loginUser } from "../services/authService.js";
+import { requestPasswordReset, resetPasswordWithOtp } from "../services/passwordResetService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
 // Auth cookie config. The token never leaves the cookie jar — keeping it
@@ -55,6 +56,39 @@ export const logout = async (_req, res) => {
     path: "/",
   });
   return sendSuccess(res, null, "Logged out");
+};
+
+/**
+ * POST /api/auth/forgot-password
+ *
+ * Public — anyone can request a reset code for any email. The response is
+ * always the same generic message, whether or not that email has an
+ * account, so this endpoint cannot be used to enumerate users.
+ */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return sendError(res, "Email is required", 400);
+    const result = await requestPasswordReset(email);
+    return sendSuccess(res, null, result.message);
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
+};
+
+/**
+ * POST /api/auth/reset-password
+ *
+ * Public — verifies the emailed OTP and sets the new password in one call.
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    const result = await resetPasswordWithOtp({ email, otp, newPassword });
+    return sendSuccess(res, null, result.message);
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
 };
 
 /**

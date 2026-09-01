@@ -39,6 +39,11 @@ export const notify = async ({
   body,
   metadata,
   email = true,
+  // Optional pre-built HTML for the email (e.g. from utils/emailTemplates.js).
+  // When omitted the email is sent as plain text only, same as before — this
+  // is purely additive so every existing caller is unaffected.
+  emailHtml,
+  emailSubject,
 }) => {
   if (!recipient?.id) return null;
 
@@ -54,8 +59,9 @@ export const notify = async ({
     // Fire-and-forget — sendMail swallows its own errors.
     void sendMail({
       to: recipient.email,
-      subject: title,
+      subject: emailSubject || title,
       text: body || title,
+      html: emailHtml,
     });
   }
 

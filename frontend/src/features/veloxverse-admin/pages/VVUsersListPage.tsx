@@ -9,9 +9,14 @@ import Pagination from '@/components/ui/Pagination'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useVVUsers } from '../hooks/useVVUsers'
 import { formatDate } from '../utils'
-import type { VVAdminUser } from '../types'
+import type { VVAdminUser, VVUserRole } from '../types'
 
 const LIMIT = 20
+
+// This page is for VeloxVerse customers only — registered users and guests. ADMIN/SUPER_ADMIN
+// are staff accounts, not customers, and have no business showing up in a customer list (and
+// this list gives no way to promote anyone into those roles either — see the detail page).
+const VV_CUSTOMER_ROLES: VVUserRole[] = ['USER', 'GUEST']
 
 export default function VVUsersListPage() {
   const [search, setSearch] = useState('')
@@ -19,7 +24,7 @@ export default function VVUsersListPage() {
   const debounced = useDebounce(search, 300)
   const { data, isLoading } = useVVUsers(page, debounced || undefined)
 
-  const users = data?.users ?? []
+  const users = (data?.users ?? []).filter((u) => VV_CUSTOMER_ROLES.includes(u.role))
   const pagination = data?.pagination
 
   const columns = [
@@ -44,10 +49,10 @@ export default function VVUsersListPage() {
     },
     {
       key: 'role',
-      header: 'Role',
+      header: 'Account type',
       render: (row: VVAdminUser) => (
         <Badge variant={row.role === 'GUEST' ? 'warning' : 'neutral'}>
-          {row.role}
+          {row.role === 'GUEST' ? 'Guest' : 'Registered'}
         </Badge>
       ),
     },

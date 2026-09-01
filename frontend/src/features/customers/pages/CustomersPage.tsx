@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -8,13 +9,12 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useAuthStore } from '@/store/authStore'
 import { canViewVeloxVerse } from '@/config/roles'
 import type { Customer, UnifiedCustomerRow } from '@/types'
-import type { VVAdminUser, VVUserRole } from '@/features/veloxverse-admin/types'
+import type { VVUserRole } from '@/features/veloxverse-admin/types'
 import { formatCustomerLegalName } from '../utils'
 import { useCustomers, useDeleteCustomer } from '../hooks/useCustomers'
 import CustomersTable from '../components/CustomersTable'
 import CustomerFormModal from '../components/CustomerFormModal'
 import CustomerDetailsModal from '../components/CustomerDetailsModal'
-import VeloxVerseCustomerDetailModal from '../components/VeloxVerseCustomerDetailModal'
 import { useVVUsers } from '@/features/veloxverse-admin/hooks/useVVUsers'
 
 const PAGE_SIZE = 20
@@ -24,6 +24,7 @@ const VV_CUSTOMER_ROLES: VVUserRole[] = ['USER', 'GUEST']
 type VvAccountFilter = 'all' | 'registered' | 'guest'
 
 export default function CustomersPage() {
+  const navigate = useNavigate()
   const userRole = useAuthStore((s) => s.user?.role)
   const canSeeVeloxVerse = canViewVeloxVerse(userRole)
 
@@ -38,7 +39,6 @@ export default function CustomersPage() {
   const [viewCrmCustomer, setViewCrmCustomer] = useState<Customer | null>(null)
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
-  const [viewVvUser, setViewVvUser] = useState<VVAdminUser | null>(null)
 
   const {
     data: crmData,
@@ -111,7 +111,9 @@ export default function CustomersPage() {
 
   const handleView = (row: UnifiedCustomerRow) => {
     if (row._source === 'crm') setViewCrmCustomer(row.data)
-    else if (row._source === 'veloxverse') setViewVvUser(row.data)
+    // VeloxVerse customers get their own full "customer 360" page (spend/refunds/points,
+    // VeloxLounge/eSIM/VeloxClub/Assist/Support/Forms tabs) rather than a cramped popup.
+    else if (row._source === 'veloxverse') navigate(`/dashboard/veloxverse/users/${row.data.id}`)
   }
 
   const handleEdit = (row: UnifiedCustomerRow) => {
@@ -277,12 +279,6 @@ export default function CustomersPage() {
           </p>
         )}
       </Modal>
-
-      <VeloxVerseCustomerDetailModal
-        open={!!viewVvUser}
-        onClose={() => setViewVvUser(null)}
-        user={viewVvUser}
-      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import VerificationGate from '@/routes/VerificationGate'
 import AppLayout from '@/components/layout/AppLayout'
 import AuthLayout from '@/components/layout/AuthLayout'
 import LoginPage from '@/features/auth/pages/LoginPage'
+import ForgotPasswordPage from '@/features/auth/pages/ForgotPasswordPage'
 import SuperAdminDashboard from '@/features/dashboard/super-admin/SuperAdminDashboard'
 import EmployeeDashboard from '@/features/dashboard/employee/EmployeeDashboard'
 import EmployeesPage from '@/features/employees/pages/EmployeesPage'
@@ -34,7 +35,6 @@ import VVUsersListPage from '@/features/veloxverse-admin/pages/VVUsersListPage'
 import VVUserDetailPage from '@/features/veloxverse-admin/pages/VVUserDetailPage'
 import VVSupportListPage from '@/features/veloxverse-admin/pages/VVSupportListPage'
 import VVSupportDetailPage from '@/features/veloxverse-admin/pages/VVSupportDetailPage'
-import VVSettingsPage from '@/features/veloxverse-admin/pages/VVSettingsPage'
 import VVPointsPage from '@/features/veloxverse-admin/pages/VVPointsPage'
 import VVClubPage from '@/features/veloxverse-admin/pages/VVClubPage'
 
@@ -42,7 +42,10 @@ const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
   {
     element: <AuthLayout />,
-    children: [{ path: '/login', element: <LoginPage /> }],
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+    ],
   },
 
   // ── Public embed form (no auth, no layout) ───────────────────────
@@ -90,7 +93,6 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/users/:id',              element: <VVUserDetailPage /> },
               { path: '/dashboard/veloxverse/support',                element: <VVSupportListPage /> },
               { path: '/dashboard/veloxverse/support/:ticketId',      element: <VVSupportDetailPage /> },
-              { path: '/dashboard/veloxverse/settings',               element: <VVSettingsPage /> },
               { path: '/dashboard/veloxverse/points',                 element: <VVPointsPage /> },
               { path: '/dashboard/veloxverse/club',                  element: <VVClubPage /> },
             ],

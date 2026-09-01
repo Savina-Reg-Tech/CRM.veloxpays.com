@@ -12,6 +12,7 @@ import {
   Database,
   CreditCard,
   User,
+  Smartphone,
 } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -60,6 +61,16 @@ function CopyRow({
   )
 }
 
+function UsageBar({ percent }: { percent: number }) {
+  const clamped = Math.min(100, Math.max(0, percent))
+  const color = clamped >= 90 ? 'bg-red-500' : clamped >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className={`h-full ${color}`} style={{ width: `${clamped}%` }} />
+    </div>
+  )
+}
+
 function DetailRow({
   icon: Icon,
   label,
@@ -100,6 +111,12 @@ export default function VVEsimDetailPage() {
     || customerDetail?.user.email
     || (order?.userId ? `User ${order.userId}` : undefined)
   const customerEmail = customerDetail?.user.email
+  // order.deviceId is just a raw id — resolve it against the customer's device list (already
+  // fetched for this page via useVVUserDetail) so we can show a real device name instead of a
+  // UUID with no context.
+  const installedDevice = order?.deviceId
+    ? customerDetail?.devices.find((d) => d.id === order.deviceId)
+    : undefined
 
   const [showSuspendModal, setShowSuspendModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -324,6 +341,11 @@ export default function VVEsimDetailPage() {
               />
               <DetailRow
                 icon={Database}
+                label="Used"
+                value={order.dataUsage != null ? formatBytes(order.dataUsage) : null}
+              />
+              <DetailRow
+                icon={Database}
                 label="Remaining"
                 value={order.remainingVolumeGB != null ? `${order.remainingVolumeGB.toFixed(2)} GB` : null}
               />
@@ -336,6 +358,15 @@ export default function VVEsimDetailPage() {
               <DetailRow icon={Signal} label="eSIM Status" value={order.esimStatus} />
               <DetailRow icon={Signal} label="SMS" value={order.smsStatus} />
             </div>
+            {order.dataUsagePercent != null && (
+              <div className="mt-3 space-y-1">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Data used</span>
+                  <span>{order.dataUsagePercent}%</span>
+                </div>
+                <UsageBar percent={order.dataUsagePercent} />
+              </div>
+            )}
             <div className="mt-2 grid grid-cols-2 gap-4">
               <DetailRow
                 icon={Clock}
@@ -355,6 +386,17 @@ export default function VVEsimDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <DetailRow icon={User} label="Name" value={customerName} />
               <DetailRow icon={User} label="Email" value={customerEmail} />
+              <DetailRow
+                icon={Smartphone}
+                label="Device"
+                value={
+                  installedDevice
+                    ? [installedDevice.brand, installedDevice.model].filter(Boolean).join(' ') || installedDevice.name
+                    : order.deviceId
+                      ? `Unknown device (${order.deviceId})`
+                      : null
+                }
+              />
             </div>
           </Card>
 

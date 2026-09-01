@@ -47,6 +47,12 @@ export const formApi = {
     return res.data.data
   },
 
+  /** Authenticated download URL for a file-type answer on a FormSubmission — mirrors
+   * verificationApi.fileUrl's pattern (a plain `<a href>`, cookie session auth carries over on
+   * the navigation; see SubmissionDataView's `fileUrl` prop). */
+  submissionFileUrl: (formId: number, submissionId: number, fieldId: string): string =>
+    `${api.defaults.baseURL}${BASE}/${formId}/submissions/${submissionId}/files/${encodeURIComponent(fieldId)}`,
+
   getAnalytics: async (formId: number) => {
     const res = await api.get<ApiResponse<{ daily: DailyCount[]; globalStats: Record<string, number> }>>(`${BASE}/${formId}/analytics`)
     return res.data.data
@@ -84,6 +90,13 @@ export const formApi = {
     const res = await api.get<ApiResponse<GlobalStats['leads']>>(`${BASE}/leads/stats`)
     return res.data.data
   },
+
+  /** Authenticated download URL for a file-type answer on a Lead — a separate route from
+   * submissionFileUrl because a Lead's submission_data is its own independent copy taken at
+   * submit time (see the CRM backend's models/Lead.js), not a live join back to the originating
+   * FormSubmission row. */
+  leadFileUrl: (leadId: number, fieldId: string): string =>
+    `${api.defaults.baseURL}${BASE}/leads/${leadId}/files/${encodeURIComponent(fieldId)}`,
 
   // ── Blocked domains ───────────────────────────────────────────
   listDomains: async () => {

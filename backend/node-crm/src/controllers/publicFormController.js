@@ -1,7 +1,10 @@
+import { randomUUID } from "crypto";
 import { getPublicForm } from "../services/formService.js";
 import { processFormSubmission } from "../services/submissionService.js";
 import { validateEmail } from "../services/spamService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { storage } from "../storage/index.js";
+import { FORM_UPLOAD_MIME_EXTENSION } from "../middleware/upload.js";
 
 /** GET /public/forms/:id  — return published form schema */
 export const handleGetPublicForm = async (req, res) => {
@@ -31,9 +34,44 @@ export const handleSubmitForm = async (req, res) => {
     const formId = parseInt(req.params.id, 10);
     if (!Number.isFinite(formId)) throw { status: 400, message: "Invalid form ID" };
 
-    const { data, formLoadedAt } = req.body;
+    // Two shapes reach here. The React embed (PublicFormPage.tsx) always posts multipart now —
+    // uploadFormSubmissionFiles (see routes/publicFormRoutes.js) parses it, and the real
+    // `data`/`formLoadedAt` travel inside a single JSON `payload` field so checkbox arrays /
+    // nested shapes survive exactly, with req.files holding any actual file parts alongside it.
+    // The legacy plain-JS `/form.js` embed widget still posts bare `application/json` — multer
+    // only acts on multipart bodies, so req.body.data/formLoadedAt land there untouched exactly
+    // as before (that widget never had file fields, so nothing is lost).
+    let data, formLoadedAt;
+    if (typeof req.body?.payload === "string") {
+      const parsed = JSON.parse(req.body.payload);
+      data = parsed.data;
+      formLoadedAt = parsed.formLoadedAt;
+    } else {
+      ({ data, formLoadedAt } = req.body);
+    }
     if (!data || typeof data !== "object") {
       throw { status: 400, message: "Submission data is required" };
+    }
+
+    // Persist any uploaded files (memory-buffered by multer) through the pluggable storage
+    // adapter, keyed onto `data[fieldId]` as a structured descriptor — same shape whether the
+    // adapter is local disk (dev) or S3 (prod), and recognized by the admin UI's
+    // SubmissionDataView to render an actual download link instead of stringifying it.
+    for (const file of req.files ?? []) {
+      const ext = FORM_UPLOAD_MIME_EXTENSION[file.mimetype] || "bin";
+      const key = `form-submissions/${formId}/${randomUUID()}.${ext}`;
+      const { storagePath } = await storage.put({
+        key,
+        buffer: file.buffer,
+        contentType: file.mimetype,
+      });
+      data[file.fieldname] = {
+        __type: "file",
+        originalName: file.originalname,
+        storagePath,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      };
     }
 
     const ipAddress = req.ip || req.connection?.remoteAddress || null;

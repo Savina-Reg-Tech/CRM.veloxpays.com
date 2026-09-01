@@ -19,3 +19,21 @@ export function useVVTestEsimApi() {
     mutationFn: () => vvSettingsService.testEsimApi(),
   })
 }
+
+export function useVVTestDragonpassApi() {
+  return useMutation({
+    mutationFn: () => vvSettingsService.testDragonpassApi(),
+  })
+}
+
+export function useVVTestViatoviaApi() {
+  return useMutation({
+    mutationFn: () => vvSettingsService.testViatoviaApi(),
+  })
+}
+
+export function useVVTestMintApi() {
+  return useMutation({
+    mutationFn: () => vvSettingsService.testMintApi(),
+  })
+}

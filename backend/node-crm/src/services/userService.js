@@ -5,6 +5,7 @@ import { ALLOWED_ROLES, ROLE_CREATION_MATRIX, isProtectedAccount } from "../conf
 import { validatePassword, generateStrongPassword } from "../utils/passwordPolicy.js";
 import { insertUserOnboardingApprovalInTransaction } from "./approvalService.js";
 import { notify } from "./notificationService.js";
+import { passwordChangedEmailTemplate } from "../utils/emailTemplates.js";
 import {
   roleRequiresVerification,
   VERIFICATION_WINDOW_DAYS,
@@ -181,11 +182,17 @@ export const resetUserPassword = async ({ userId, password }, requester) => {
   if (!updated) throw { status: 404, message: "User not found" };
 
   // Best-effort — notification delivery must never roll back the reset itself.
+  const adminName = requester?.name ?? requester?.email ?? "an admin";
+  const changedEmail = passwordChangedEmailTemplate(updated.name, {
+    reason: `An administrator (${adminName}) reset it on your behalf.`,
+  });
   void notify({
     recipient: { id: updated.id, email: updated.email },
     event: "password_reset",
-    title: "Your password was reset",
-    body: `An administrator (${requester?.name ?? requester?.email ?? "an admin"}) reset your Velox CRM password. If you did not expect this, contact your administrator immediately.`,
+    title: changedEmail.subject,
+    body: changedEmail.text,
+    emailHtml: changedEmail.html,
+    emailSubject: changedEmail.subject,
   }).catch(() => {});
 
   return {

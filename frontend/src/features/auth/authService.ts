@@ -34,4 +34,26 @@ export const authService = {
     const res = await api.get<ApiResponse<User>>('/auth/me')
     return res.data.data
   },
+
+  /**
+   * Request a 6-digit reset code by email. Always resolves with the same
+   * generic message whether or not that email has an account — the backend
+   * never reveals which via this endpoint.
+   */
+  forgotPassword: async (email: string): Promise<string> => {
+    const res = await api.post<ApiResponse<null>>('/auth/forgot-password', { email })
+    return res.data.message
+  },
+
+  /**
+   * Verify the emailed code and set a new password in one call.
+   */
+  resetPassword: async (email: string, otp: string, newPassword: string): Promise<string> => {
+    const res = await api.post<ApiResponse<null>>('/auth/reset-password', {
+      email,
+      otp,
+      newPassword,
+    })
+    return res.data.message
+  },
 }

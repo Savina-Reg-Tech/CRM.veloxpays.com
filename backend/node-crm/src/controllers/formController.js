@@ -12,6 +12,28 @@ import Lead from "../models/Lead.js";
 import Form from "../models/Form.js";
 import WebhookDelivery from "../models/WebhookDelivery.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { storage } from "../storage/index.js";
+
+/** Shape written by publicFormController's file-upload handling — see FORM_UPLOAD_* in
+ * middleware/upload.js. Distinguishes an actual uploaded-file answer from a plain string/array
+ * answer sharing the same submission_data bag. */
+function isFileDescriptor(v) {
+  return !!v && typeof v === "object" && v.__type === "file" && typeof v.storagePath === "string";
+}
+
+/** Stream (local disk) or redirect (S3 signed URL) a stored form-upload file — mirrors
+ * verificationController.handleDownloadDocument's local-vs-S3 branch. */
+async function sendStoredFile(res, descriptor) {
+  const signedUrl = await storage.getSignedUrl(descriptor.storagePath);
+  if (signedUrl) return res.redirect(signedUrl);
+  const buffer = await storage.read(descriptor.storagePath);
+  res.setHeader("Content-Type", descriptor.mimeType || "application/octet-stream");
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${(descriptor.originalName || "file").replace(/"/g, "")}"`
+  );
+  return res.send(buffer);
+}
 
 const parsePagination = (req) => {
   const rawLimit  = parseInt(req.query.limit, 10);
@@ -106,6 +128,41 @@ export const handleListFormSubmissions = async (req, res) => {
   }
 };
 
+// ── Uploaded-file downloads (admin-only, gated by the router's authorizeRoles) ─────
+// Two entry points because a Lead's submission_data is its own independent JSONB copy taken
+// at submit time (see models/Lead.js), not a live join to form_submissions — so a file
+// attached on a lead (e.g. surfaced in VeloxCRM's VeloxAssist Meet & Greet tab) is looked up
+// straight off the lead row, not through its originating submission.
+
+export const handleDownloadSubmissionFile = async (req, res) => {
+  try {
+    const formId = parseInt(req.params.formId, 10);
+    const submissionId = parseInt(req.params.submissionId, 10);
+    const submission = await FormSubmission.findById(submissionId);
+    if (!submission || submission.form_id !== formId) {
+      return sendError(res, "File not found", 404);
+    }
+    const descriptor = submission.submission_data?.[req.params.fieldId];
+    if (!isFileDescriptor(descriptor)) return sendError(res, "File not found", 404);
+    return sendStoredFile(res, descriptor);
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
+};
+
+export const handleDownloadLeadFile = async (req, res) => {
+  try {
+    const leadId = parseInt(req.params.leadId, 10);
+    const lead = await Lead.findById(leadId);
+    if (!lead) return sendError(res, "File not found", 404);
+    const descriptor = lead.submission_data?.[req.params.fieldId];
+    if (!isFileDescriptor(descriptor)) return sendError(res, "File not found", 404);
+    return sendStoredFile(res, descriptor);
+  } catch (err) {
+    return sendError(res, err.message, err.status || 500);
+  }
+};
+
 // ── Webhook delivery log (admin-visible, see webhookService.js) ────
 
 export const handleListWebhookDeliveries = async (req, res) => {
@@ -167,7 +224,10 @@ export const handleExportSubmissions = async (req, res) => {
     rows.forEach((r) => {
       const data = r.submission_data ?? {};
       const base = [r.id, r.email, r.status, r.spam_score, r.time_taken_seconds, r.ip_address, r.created_at];
-      const extra = extraCols.map((k) => data[k]);
+      const extra = extraCols.map((k) => {
+        const v = data[k];
+        return isFileDescriptor(v) ? v.originalName : v;
+      });
       lines.push([...base, ...extra].map(escape).join(","));
     });
 

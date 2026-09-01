@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
 import { useLogin } from '../hooks/useLogin'
 import Input from '@/components/ui/Input'
@@ -41,25 +42,32 @@ export default function LoginForm() {
       />
 
       {/* Password */}
-      <Input
-        label="Password"
-        type={showPassword ? 'text' : 'password'}
-        autoComplete="current-password"
-        placeholder="••••••••"
-        leftIcon={<Lock size={16} />}
-        rightIcon={
-          <button
-            type="button"
-            className="pointer-events-auto text-gray-400 hover:text-gray-600"
-            onClick={() => setShowPassword((v) => !v)}
-            tabIndex={-1}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        }
-        error={errors.password?.message}
-        {...register('password')}
-      />
+      <div>
+        <Input
+          label="Password"
+          type={showPassword ? 'text' : 'password'}
+          autoComplete="current-password"
+          placeholder="••••••••"
+          leftIcon={<Lock size={16} />}
+          rightIcon={
+            <button
+              type="button"
+              className="pointer-events-auto text-gray-400 hover:text-gray-600"
+              onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          }
+          error={errors.password?.message}
+          {...register('password')}
+        />
+        <div className="mt-1.5 text-right">
+          <Link to="/forgot-password" className="text-sm text-indigo-600 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
+      </div>
 
       <Button
         type="submit"

@@ -356,6 +356,13 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
           ))}
         </div>
       ) : field.type === 'checkbox' ? (
+        // No `required` here — unlike same-name radios (where the browser natively treats
+        // `required` as "at least one of the group"), `required` on a checkbox has no group
+        // concept: the browser demands THAT SPECIFIC box be checked. Putting it on every box in
+        // a required checkbox group used to silently demand ALL options be checked, not "pick
+        // one or more". The real "at least one checked" requirement is enforced in JS via
+        // setCustomValidity inside recomputeRules (applyCheckboxGroupValidity below), which
+        // re-runs on every input/change so it stays correct as boxes are (un)checked.
         <div className="space-y-2">
           {field.options?.map((o) => (
             <label key={o} className="flex items-center gap-2.5 text-sm cursor-pointer" style={{ color: `#${theme.labelColor}` }}>
@@ -363,7 +370,6 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
                 type="checkbox"
                 name={`${field.id}[]`}
                 value={o}
-                required={required}
                 disabled={hidden}
                 style={checkStyle}
               />
@@ -416,9 +422,14 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
 }
 
 // ── Collect FormData into a plain object ──────────────────────────
+// File inputs are deliberately skipped here — a File object can't survive JSON.stringify (it
+// serializes to `{}`, silently discarding the upload). Actual files are appended as their own
+// multipart parts in handleSubmit instead; the backend re-attaches each one onto `data[fieldId]`
+// as a structured descriptor once it's stored (see publicFormController.js's handleSubmitForm).
 function collectFormData(formEl: HTMLFormElement): Record<string, unknown> {
   const data: Record<string, unknown> = {}
   new FormData(formEl).forEach((value, key) => {
+    if (value instanceof File) return
     if (key.endsWith('[]')) {
       const k = key.slice(0, -2)
       if (Array.isArray(data[k])) (data[k] as string[]).push(value as string)
@@ -428,6 +439,26 @@ function collectFormData(formEl: HTMLFormElement): Record<string, unknown> {
     }
   })
   return data
+}
+
+// ── Enforce "at least one checked" on required checkbox-group fields ──
+// See the comment on the checkbox branch of FieldRenderer for why this can't just be the
+// `required` HTML attribute. Sets a custom validity message on the group's first checkbox only
+// (so a required, still-empty group reports exactly one native validation error, not one per
+// option) and clears it — on every checkbox in the group — as soon as any box is checked, or if
+// the field isn't currently required (e.g. hidden by a rule, or unrequired by a rule override).
+function applyCheckboxGroupValidity(formEl: HTMLFormElement, fields: FormField[], ruleState: RuleEvaluationResult) {
+  for (const field of fields) {
+    if (field.type !== 'checkbox') continue
+    const boxes = formEl.querySelectorAll<HTMLInputElement>(`[name="${CSS.escape(field.id)}[]"]`)
+    if (boxes.length === 0) continue
+    const required = !ruleState.hidden.has(field.id) && isEffectivelyRequired(field, ruleState.requiredOverride)
+    const anyChecked = Array.from(boxes).some((b) => b.checked)
+    const needsMessage = required && !anyChecked
+    boxes.forEach((b, i) => {
+      b.setCustomValidity(needsMessage && i === 0 ? 'Please select at least one option.' : '')
+    })
+  }
 }
 
 // ── Apply a rule's set_value/clear_value action directly to the DOM ──
@@ -570,6 +601,7 @@ export default function PublicFormPage() {
       applyValueAction(formEl, action.fieldId, action.value)
     }
     setRuleState(result)
+    applyCheckboxGroupValidity(formEl, form.form_json.fields, result)
   }, [form])
 
   // Re-run once whenever the form first loads and again every time the
@@ -659,10 +691,20 @@ export default function PublicFormPage() {
     setSubmitting(true)
     const data = { ...formDataRef.current, ...collectFormData(e.currentTarget) }
     try {
+      // Always sent as multipart now, file fields or not: a single JSON `payload` field carries
+      // `data`/`formLoadedAt` exactly as before (checkbox arrays and nested shapes survive
+      // untouched — no server-side flat-field reconstruction needed), plus one multipart part
+      // per file input that actually has a file selected. No explicit Content-Type header — the
+      // browser sets the correct multipart boundary itself; setting one manually here would
+      // omit the boundary and break parsing.
+      const body = new FormData()
+      body.append('payload', JSON.stringify({ data, formLoadedAt: loadedAt.current }))
+      e.currentTarget.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach((input) => {
+        if (input.files?.[0]) body.append(input.name, input.files[0])
+      })
       const res = await fetch(`${PUBLIC_API}/forms/${id}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data, formLoadedAt: loadedAt.current }),
+        body,
       })
       const json = await res.json()
       if (!json.success) throw new Error(json.message ?? 'Submission failed')

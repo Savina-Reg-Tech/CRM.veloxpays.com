@@ -133,9 +133,18 @@ export interface AdminOrderDetail {
   profitUsd?: number | null
   paymentMethod: string
   totalVolume?: number
+  /** Bytes used so far, straight from adminOrderService.buildAdminOrderDetail's `dataUsage` —
+   * was already returned by the backend but not previously in this type or rendered anywhere. */
+  dataUsage?: number
+  /** 0-100, pre-computed server-side by buildAdminOrderDetail (null when no live provider profile
+   * was available for this query, e.g. still provisioning). */
+  dataUsagePercent?: number | null
   remainingVolumeGB?: number | null
   totalDuration?: number
   durationUnit?: string
+  /** The customer device this eSIM was installed on, if any — matches an id in
+   * VVAdminUserDetail.devices (fetched separately; the order endpoint only has the raw id). */
+  deviceId?: string | null
   createdAt: string
   packages: { code: string | null; name: string | null; location: string | null; volume: number | null; duration: number | null }[]
 }
@@ -210,24 +219,62 @@ export interface LoungeVisitDetail {
   bookedAt: string | null
 }
 
-// ── Transfers ───────────────────────────────────────────────────────
+// ── Transfers (VeloxAssist Pick & Drop) ───────────────────────────────
 export type TransferBookingStatus = 'PENDING' | 'CONFIRMED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
 
+// Matches VeloxVerse's transferService.listAll() → presentBooking(b) + { customer }. There is
+// no separate "detail" endpoint for admin — this row already carries everything (route, driver,
+// traveler counts, pricing) needed for a full detail view, so "View more" just expands this
+// same object rather than making another request.
 export interface AdminTransferBooking {
+  id: string
   orderNo: string
-  reservationNo?: string
-  customerName: string
-  customerEmail: string
-  pickupLocation: string
-  dropoffLocation: string
+  reservationNo?: string | null
+  searchId?: string | null
+  pickupType?: string
+  pickupName?: string | null
+  dropoffType?: string
+  dropoffName?: string | null
   flightArrival?: string
-  vehicleMake?: string
-  vehicleModel?: string
-  vehicleSegment?: string
-  amountCents: number
+  flightNumber?: string | null
+  vehicleId?: string | null
+  vehicleSegment?: string | null
+  vehicleMake?: string | null
+  vehicleModel?: string | null
+  vehicleImage?: string | null
+  maxPassengers?: number | null
+  adults: number
+  children: number
+  infants: number
+  suitcases: number
+  smallBags: number
+  basePriceCents: number | null
+  salePriceCents: number | null
   currency: string
+  distanceKm?: number | null
   status: TransferBookingStatus
+  cancellationReason?: string | null
+  /** Populated once ViaTovia assigns a driver — typically after status reaches APPROVED. */
+  driverName?: string | null
+  driverPhone?: string | null
+  driverVehiclePlate?: string | null
+  /** Admin-only enrichment (transferService.listAll) — the linked Payment row's provider/status,
+   * looked up separately since TransferBooking itself has no paymentMethod column (unlike
+   * EsimOrder). null means no direct-charge Payment row was found for this booking (e.g. fully
+   * covered by wallet credit or a club benefit redemption). */
+  paymentMethod?: string | null
+  paymentStatus?: string | null
   createdAt: string
+  customer: { id: string; name: string; email: string } | null
+}
+
+export interface TransferCancelReason {
+  id: number
+  label: string
+}
+
+export interface TransferCancelResult extends AdminTransferBooking {
+  refundedCents: number
 }
 
 // ── Promo Codes ─────────────────────────────────────────────────────
@@ -651,9 +698,50 @@ export interface ClubChangeLogPage {
   pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
+// ── Billing (admin, per-customer) ────────────────────────────────────
+// Backed by a new VeloxVerse admin endpoint (routes/admin.billing.routes.ts) that reuses the
+// exact same billingService the customer-facing "My Billing" page uses — just keyed by an
+// admin-supplied userId instead of the logged-in user. One row per direct-charge Payment
+// (debit) or succeeded PaymentRefund (credit), across every VeloxVerse service (eSIM, Lounge,
+// VeloxClub, Pick & Drop, flights) — this is the authoritative source for "how much has this
+// customer spent / been refunded", not a client-side sum of per-service list fields.
+export interface AdminBillingLineItem {
+  id: string
+  date: string
+  orderNo: string
+  invoiceNo: string | null
+  description: string
+  service: string
+  type: string
+  amountUsd: number
+  direction: 'debit' | 'credit'
+  paymentMethod: string | null
+  status: string
+}
+
+export interface AdminBillingTotals {
+  orderCount: number
+  spentUsd: number
+  topUpsUsd: number
+  refundsUsd: number
+  netUsd: number
+}
+
+export interface AdminBillingActivity {
+  items: AdminBillingLineItem[]
+  totals: AdminBillingTotals
+}
+
 // ── Settings ────────────────────────────────────────────────────────
 export interface VVAdminSettings {
   esim: { configured: boolean; credentialsSource: string; apiUrl: string }
+  // VeloxLounge — DragonPass ePass/resource API.
+  dragonpass: { configured: boolean; apiUrl: string }
+  // VeloxAssist Pick & Drop — ViaTovia transfer API.
+  viatovia: { configured: boolean; apiUrl: string }
+  // Card payments — Mint. No safe no-op endpoint upstream, so `configured` is the only signal;
+  // there's no live-verified "connected" state the way eSIM/DragonPass/ViaTovia have.
+  mint: { configured: boolean; apiUrl: string }
   email: { configured: boolean; provider: string; fromAddress: string }
 }
 
@@ -661,4 +749,10 @@ export interface VVEsimApiTestResult {
   ok: boolean
   message: string
   balance?: number
+}
+
+/** Shared shape for the DragonPass / ViaTovia / Mint test-connection buttons. */
+export interface VVApiTestResult {
+  ok: boolean
+  message: string
 }

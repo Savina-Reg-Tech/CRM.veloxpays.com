@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download } from 'lucide-react'
 import { useFormSubmissions, useForm } from '../hooks/useForms'
+import { formApi } from '../formService'
 import { SubmissionDataView } from '../utils/submissionDisplay'
 import { API_BASE_URL } from '@/lib/apiConfig'
 
@@ -127,6 +128,7 @@ export default function FormSubmissionsPage() {
                         <SubmissionDataView
                           data={sub.submission_data}
                           formJson={form?.form_json}
+                          fileUrl={(fieldId) => formApi.submissionFileUrl(formId, sub.id, fieldId)}
                         />
                       </td>
                     </tr>

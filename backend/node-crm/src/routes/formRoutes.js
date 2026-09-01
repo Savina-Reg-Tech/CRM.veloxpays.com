@@ -12,6 +12,8 @@ import {
   handleGetFormAnalytics,
   handleGetGlobalStats,
   handleListWebhookDeliveries,
+  handleDownloadSubmissionFile,
+  handleDownloadLeadFile,
 } from "../controllers/formController.js";
 import {
   handleListLeads,
@@ -58,6 +60,9 @@ router.delete("/:id", handleDeleteForm);
 router.get("/:id/embed", handleGetEmbedCodes);
 router.get("/:id/submissions", handleListFormSubmissions);
 router.get("/:id/submissions/export", handleExportSubmissions);
+// A Form Builder "file" field's uploaded attachment — see FORM_UPLOAD_* in
+// middleware/upload.js and handleSubmitForm's storage.put() for where these get written.
+router.get("/:id/submissions/:submissionId/files/:fieldId", handleDownloadSubmissionFile);
 router.get("/:id/analytics", handleGetFormAnalytics);
 router.get("/:id/webhook-deliveries", handleListWebhookDeliveries);
 
@@ -66,6 +71,9 @@ router.get("/leads/all", handleListLeads);
 router.get("/leads/stats", handleGetLeadStats);
 router.get("/leads/:id", handleGetLead);
 router.patch("/leads/:id/status", handleUpdateLeadStatus);
+// Same file, addressed via a Lead's own (independent) submission_data copy — see
+// models/Lead.js: a lead's submission_data is copied at creation, not joined live.
+router.get("/leads/:leadId/files/:fieldId", handleDownloadLeadFile);
 
 // ── Blocked email domains ─────────────────────────────────────────
 router.get("/email-domains/list", handleListDomains);

@@ -90,13 +90,13 @@ export default function Modal({
           )}
         >
           {/* Header */}
-          <div className="flex items-start justify-between p-6 border-b border-gray-100 shrink-0">
-            <div>
-              <h2 id={titleId} className="text-base font-semibold text-gray-900">
+          <div className="flex items-start justify-between gap-3 p-4 sm:p-6 border-b border-gray-100 shrink-0">
+            <div className="min-w-0">
+              <h2 id={titleId} className="text-base font-semibold text-gray-900 break-words">
                 {title}
               </h2>
               {description && (
-                <p id={descriptionId} className="text-sm text-gray-500 mt-0.5">
+                <p id={descriptionId} className="text-sm text-gray-500 mt-0.5 break-words">
                   {description}
                 </p>
               )}
@@ -105,18 +105,19 @@ export default function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="ml-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             >
               <X size={18} />
             </button>
           </div>
 
           {/* Body */}
-          <div className="p-6 flex-1 min-h-0 overflow-y-auto">{children}</div>
+          <div className="p-4 sm:p-6 flex-1 min-h-0 overflow-y-auto">{children}</div>
 
-          {/* Footer */}
+          {/* Footer — buttons stack full-width on mobile (easier to tap, no cramped
+              side-by-side text) and sit inline on larger screens. */}
           {footer && (
-            <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex flex-wrap items-center justify-end gap-3">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 shrink-0 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3 [&>button]:w-full sm:[&>button]:w-auto">
               {footer}
             </div>
           )}

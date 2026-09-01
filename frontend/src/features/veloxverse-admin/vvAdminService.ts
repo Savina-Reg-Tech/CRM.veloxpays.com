@@ -4,16 +4,17 @@ import type {
   RecentActivity, OrderStats, CustomerSpending,
   AdminOrderRow, AdminOrderDetail, VVPagination,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
-  AdminTransferBooking,
+  AdminTransferBooking, TransferCancelReason, TransferCancelResult,
   PromoCode, PromoCodeStats, CreatePromoCodeInput,
   PricingRule, PricingAuditEntry,
   VVAdminUser, VVAdminUsersPage, VVAdminUserDetail, VVUserRole,
   VVSupportTicket, VVSupportStatistics, VVAdminTicketFilters, VVAdminSearchResult,
-  VVAdminSettings, VVEsimApiTestResult,
+  VVAdminSettings, VVEsimApiTestResult, VVApiTestResult,
   PointsConfigRow, PointsSettings, AdminPointsUsersPage, AdminUserPoints,
   PointsAuditPage, PointsDashboard,
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
   ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType,
+  AdminBillingActivity,
 } from './types'
 
 // Standard VeloxVerse API envelope
@@ -112,11 +113,19 @@ export const vvLoungeService = {
   },
 }
 
-// ── Transfers ───────────────────────────────────────────────────────
+// ── Transfers (VeloxAssist Pick & Drop) ───────────────────────────────
 export const vvTransferService = {
   async getBookings(status?: string) {
     const { data } = await api.get<VVResponse<{ bookings: AdminTransferBooking[] }>>(`${VV}/admin/assist/transfer/bookings`, { params: status ? { status } : undefined })
     return data.data.bookings
+  },
+  async getCancelReasons() {
+    const { data } = await api.get<VVResponse<{ reasons: TransferCancelReason[] }>>(`${VV}/admin/assist/transfer/cancel-reasons`)
+    return data.data.reasons
+  },
+  async cancelBooking(orderNo: string, cancellationId: number) {
+    const { data } = await api.post<VVResponse<TransferCancelResult>>(`${VV}/admin/assist/transfer/bookings/${encodeURIComponent(orderNo)}/cancel`, { cancellationId })
+    return data.data
   },
 }
 
@@ -344,6 +353,16 @@ export const vvClubService = {
   },
 }
 
+// ── Billing (admin, per-customer) ────────────────────────────────────
+export const vvBillingService = {
+  /** Every payment + refund this customer has ever made, across every VeloxVerse service, plus
+   * the lifetime spend/refund/net totals — see AdminBillingActivity's doc comment in types.ts. */
+  async getActivity(userId: string) {
+    const { data } = await api.get<VVResponse<{ activity: AdminBillingActivity }>>(`${VV}/admin/billing/users/${encodeURIComponent(userId)}/activity`)
+    return data.data.activity
+  },
+}
+
 // ── Settings ────────────────────────────────────────────────────────
 export const vvSettingsService = {
   async get() {
@@ -356,6 +375,18 @@ export const vvSettingsService = {
   },
   async testEsimApi() {
     const { data } = await api.post<VVResponse<VVEsimApiTestResult>>(`${VV}/admin/settings/test-esim-api`)
+    return data.data
+  },
+  async testDragonpassApi() {
+    const { data } = await api.post<VVResponse<VVApiTestResult>>(`${VV}/admin/settings/test-dragonpass-api`)
+    return data.data
+  },
+  async testViatoviaApi() {
+    const { data } = await api.post<VVResponse<VVApiTestResult>>(`${VV}/admin/settings/test-viatovia-api`)
+    return data.data
+  },
+  async testMintApi() {
+    const { data } = await api.post<VVResponse<VVApiTestResult>>(`${VV}/admin/settings/test-mint-api`)
     return data.data
   },
 }
