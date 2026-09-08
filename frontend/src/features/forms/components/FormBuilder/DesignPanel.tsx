@@ -260,6 +260,27 @@ export default function DesignPanel({ theme, onChange, onApplyTemplate, onSwitch
                 <p className="text-sm font-semibold text-gray-700">Layout</p>
               </div>
               <div className="p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-700">Show form title &amp; description</p>
+                    <p className="text-xs text-gray-400">Turn off if the page embedding this form already shows its own heading.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={resolved.showHeader}
+                    onClick={() => update({ showHeader: !resolved.showHeader })}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      resolved.showHeader ? 'bg-indigo-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        resolved.showHeader ? 'translate-x-[1.125rem]' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 mb-2">Corner radius</p>
                   <div className="flex gap-2">

@@ -270,11 +270,14 @@ export default function FormBuilderPage() {
             return (
               <div className="flex-1 overflow-y-auto flex items-start justify-center p-10" style={themePageStyle(theme)}>
                 <div className="w-full max-w-lg shadow-lg overflow-hidden" style={themeCardStyle(theme)}>
-                  {/* Header */}
-                  <div className="px-8 py-6" style={themeHeaderStyle(theme)}>
-                    <h2 className="text-xl font-bold" style={themeHeaderTextStyle(theme)}>{name || 'Untitled Form'}</h2>
-                    {description && <p className="text-sm mt-1" style={{ ...themeHeaderTextStyle(theme), opacity: 0.85 }}>{description}</p>}
-                  </div>
+                  {/* Header — hidden when the Design tab's "Show form title
+                      & description" toggle is off, mirroring the live form. */}
+                  {theme.showHeader && (
+                    <div className="px-8 py-6" style={themeHeaderStyle(theme)}>
+                      <h2 className="text-xl font-bold" style={themeHeaderTextStyle(theme)}>{name || 'Untitled Form'}</h2>
+                      {description && <p className="text-sm mt-1" style={{ ...themeHeaderTextStyle(theme), opacity: 0.85 }}>{description}</p>}
+                    </div>
+                  )}
 
                   <div className="px-8 py-6 space-y-5">
                     {isPreviewRedirect ? (

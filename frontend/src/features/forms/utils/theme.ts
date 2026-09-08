@@ -110,6 +110,9 @@ export function validateThemeShape(theme: unknown): string[] {
   if (t.fontFamily !== undefined && !FONT_FAMILY_OPTIONS.some((f) => f.value === t.fontFamily)) {
     errors.push(`theme.fontFamily must be one of: ${FONT_FAMILY_OPTIONS.map((f) => f.value).join(', ')}`)
   }
+  if (t.showHeader !== undefined && typeof t.showHeader !== 'boolean') {
+    errors.push('theme.showHeader must be a boolean')
+  }
   return errors
 }
 

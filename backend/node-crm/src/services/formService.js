@@ -108,6 +108,9 @@ function validateThemeObject(theme, label = "theme") {
   if (theme.fontFamily !== undefined && !THEME_FONT_FAMILY_OPTIONS.includes(theme.fontFamily)) {
     throw { status: 400, message: `${label}.fontFamily must be one of: ${THEME_FONT_FAMILY_OPTIONS.join(", ")}` };
   }
+  if (theme.showHeader !== undefined && typeof theme.showHeader !== "boolean") {
+    throw { status: 400, message: `${label}.showHeader must be a boolean` };
+  }
 }
 
 /** Validate a form's field schema */

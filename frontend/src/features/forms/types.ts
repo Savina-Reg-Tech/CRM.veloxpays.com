@@ -341,6 +341,11 @@ export interface FormTheme {
   inputTextColor?: string    // hex, no '#' — text typed/selected inside inputs
   borderRadius?: BorderRadiusPreset
   fontFamily?: FontFamilyOption
+  /** Whether the title/description band above the fields is shown. Defaults
+   * to true (existing forms with no theme.showHeader saved keep rendering
+   * exactly as before). Set to false for embeds where the host page already
+   * shows its own heading and a second one would be redundant. */
+  showHeader?: boolean
 }
 
 // Mirrors the fallback values `buildTheme()` in PublicFormPage already used
@@ -359,6 +364,7 @@ export const DEFAULT_FORM_THEME: Required<FormTheme> = {
   inputTextColor: '111827',
   borderRadius: 'lg',
   fontFamily: 'system',
+  showHeader: true,
 }
 
 export interface FormJson {

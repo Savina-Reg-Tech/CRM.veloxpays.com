@@ -26,6 +26,8 @@
  *        ?inputBorderColor=D1D5DB — border around text fields/dropdowns
  *        ?inputBgColor=FFFFFF   — background inside text fields/dropdowns
  *        ?inputTextColor=111827 — text typed/selected inside inputs
+ *        ?header=0              — hide the title/description band (also
+ *                                 settable per-form via the Design tab)
  *
  * Every theme value is applied via inline `style` on the specific element it
  * affects (never a global `<style>` tag or `document.documentElement`), so
@@ -47,6 +49,14 @@ import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOut
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
+
+// True when this page is rendered inside an iframe (the normal case for a
+// "Copy embed code" placement on an external site) rather than opened
+// directly as its own page. Used to drop the outer page's horizontal
+// breathing room, since that padding is meant for a full browser tab and
+// just eats into the iframe's already-fixed width when embedded, showing up
+// as unwanted blank strips down the left/right edges of the form.
+const IS_EMBEDDED = typeof window !== 'undefined' && window.self !== window.top
 
 // ── Theme helpers ─────────────────────────────────────────────────
 
@@ -73,6 +83,7 @@ interface Theme {
   inputBorderColor: string
   inputBgColor: string
   inputTextColor: string
+  showHeader: boolean
 }
 
 function buildTheme(params: URLSearchParams, formTheme?: FormTheme): Theme {
@@ -91,6 +102,11 @@ function buildTheme(params: URLSearchParams, formTheme?: FormTheme): Theme {
   const inputBorderColor = params.get('inputBorderColor') ?? resolved.inputBorderColor
   const inputBgColor = params.get('inputBgColor') ?? resolved.inputBgColor
   const inputTextColor = params.get('inputTextColor') ?? resolved.inputTextColor
+  // ?header=0 (or "false") lets an embed hide the title/description band via
+  // the iframe URL without touching the saved theme — otherwise falls back
+  // to whatever was configured in the Design tab (defaults to shown).
+  const headerParam = params.get('header')
+  const showHeader = headerParam !== null ? headerParam !== '0' && headerParam !== 'false' : resolved.showHeader
 
   return {
     primary,
@@ -106,6 +122,7 @@ function buildTheme(params: URLSearchParams, formTheme?: FormTheme): Theme {
     inputBorderColor,
     inputBgColor,
     inputTextColor,
+    showHeader,
   }
 }
 
@@ -846,7 +863,7 @@ export default function PublicFormPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: `#${theme.bg}` }}>
+      <div className={`min-h-screen flex items-center justify-center ${IS_EMBEDDED ? '' : 'px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800">Form Unavailable</h2>
@@ -864,7 +881,7 @@ export default function PublicFormPage() {
   const showCustomOnSubmitScreen = submitted && isOnSubmitStep && hasCustomButtons
   if (submitted && !showCustomOnSubmitScreen) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: `#${theme.bg}` }}>
+      <div className={`min-h-screen flex items-center justify-center ${IS_EMBEDDED ? '' : 'px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="text-center p-8 sm:p-10 max-w-md w-full shadow-lg" style={cardStyle}>
           <div className="text-5xl mb-4">✅</div>
           <h2 className="text-xl font-bold mb-2" style={{ color: `#${theme.labelColor}` }}>You're all set!</h2>
@@ -878,17 +895,21 @@ export default function PublicFormPage() {
 
   return (
     <div
-      className="min-h-screen flex items-start justify-center py-6 sm:py-12 px-4"
+      className={`min-h-screen flex items-start justify-center py-6 sm:py-12 ${IS_EMBEDDED ? '' : 'px-4'}`}
     >
       <div className="w-full max-w-lg">
         {/* Form card */}
         <div className="shadow-lg overflow-hidden" style={cardStyle}>
 
-          {/* Header band */}
-          <div className="px-5 sm:px-8 py-5 sm:py-6" style={headerStyle}>
-            <h1 className="text-lg sm:text-xl font-bold" style={headerTextStyle}>{form!.name}</h1>
-            {form!.description && <p className="text-sm mt-1" style={{ ...headerTextStyle, opacity: 0.8 }}>{form!.description}</p>}
-          </div>
+          {/* Header band — hidden entirely when the theme (or a ?header=0
+              embed override) turns it off, e.g. when the host page already
+              shows its own heading. */}
+          {theme.showHeader && (
+            <div className="px-5 sm:px-8 py-5 sm:py-6" style={headerStyle}>
+              <h1 className="text-lg sm:text-xl font-bold" style={headerTextStyle}>{form!.name}</h1>
+              {form!.description && <p className="text-sm mt-1" style={{ ...headerTextStyle, opacity: 0.8 }}>{form!.description}</p>}
+            </div>
+          )}
 
           {/* Form body */}
           <form
