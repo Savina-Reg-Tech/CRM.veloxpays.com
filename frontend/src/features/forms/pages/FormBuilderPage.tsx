@@ -340,14 +340,25 @@ export default function FormBuilderPage() {
                                   key={b.id}
                                   type="button"
                                   onClick={() => {
-                                    if (b.action === 'next') {
+                                    // Mirrors the live form's handleNext/handleFormSubmit: on
+                                    // the last field step there's no further step to advance
+                                    // to, so "Continue" completes the form exactly like
+                                    // "Submit" does. And "Open a link" always also submits
+                                    // whatever's been collected so far (except when it's a
+                                    // post-submission CTA on the on-submit step itself, where
+                                    // the data's already been recorded) — otherwise a visitor
+                                    // who only clicks the link button would leave no record.
+                                    if (b.action === 'next' && !isPreviewFinalStep) {
                                       setPreviewStep((s) => Math.min(s + 1, totalPreviewSteps - 1))
-                                    } else if (b.action === 'submit') {
+                                      return
+                                    }
+                                    if (b.action === 'external_link' && b.url) {
+                                      window.open(b.url, '_blank', 'noopener,noreferrer')
+                                    }
+                                    if (!isPreviewOnSubmitStep) {
                                       setPreviewSubmitFlash(true)
                                       setTimeout(() => setPreviewSubmitFlash(false), 1500)
                                       if (onSubmitStepIndex !== -1) setPreviewStep(onSubmitStepIndex)
-                                    } else if (b.action === 'external_link' && b.url) {
-                                      window.open(b.url, '_blank', 'noopener,noreferrer')
                                     }
                                   }}
                                   className="flex-1 py-2.5 text-sm font-medium transition-colors"

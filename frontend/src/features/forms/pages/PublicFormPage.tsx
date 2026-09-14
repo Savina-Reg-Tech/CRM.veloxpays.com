@@ -46,6 +46,7 @@ import { layoutFields } from '../utils/layoutFields'
 import { resolveTheme } from '../utils/theme'
 import { parseInlineLinks } from '../utils/richText'
 import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
+import { ensureAbsoluteUrl } from '../utils/url'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
@@ -732,13 +733,22 @@ export default function PublicFormPage() {
       // the final data, or the step's own base config if none do/exist.
       const outcome = resolveOnSubmitOutcome(onSubmitConfig, data)
       const resolvedAction = outcome?.action ?? 'message'
-      const redirectUrl = (
+      // redirect_page intentionally allows a bare relative path (e.g.
+      // "/thank-you") on the CRM's own domain, so it's left alone; the other
+      // three are always meant to be a full external address, so a
+      // schemeless value like "www.veloxpays.com" gets "https://" added —
+      // otherwise the browser resolves it relative to /embed/:id instead of
+      // navigating to that site.
+      const rawRedirectUrl = (
         resolvedAction === 'redirect_page' ? outcome?.pageUrl
           : resolvedAction === 'redirect_url' ? outcome?.externalUrl
           : resolvedAction === 'redirect_meeting' ? outcome?.meetingUrl
           : resolvedAction === 'redirect_payment' ? outcome?.paymentUrl
           : undefined
       )?.trim() || undefined
+      const redirectUrl = rawRedirectUrl && resolvedAction !== 'redirect_page'
+        ? ensureAbsoluteUrl(rawRedirectUrl)
+        : rawRedirectUrl
       const openInNewTab = (
         resolvedAction === 'redirect_page' ? outcome?.pageOpenInNewTab
           : resolvedAction === 'redirect_url' ? outcome?.externalOpenInNewTab
@@ -809,10 +819,22 @@ export default function PublicFormPage() {
       const targetIndex = steps.findIndex((s) => s.id === targetStepId)
       if (targetIndex !== -1) { setCurrentStep(targetIndex); return }
     }
-    // Clamp so a misconfigured "Continue" button on the literal last step
-    // can't advance past the end into a blank, buttonless dead end.
+    // A "Continue"/"Next"-labeled custom button is allowed on the final
+    // field step (so an admin can rename the completing button to whatever
+    // they like), but there's no real field step left to advance to there
+    // — only the reserved on-submit pseudo-step. Without this check,
+    // clicking it would just setCurrentStep straight onto that step and
+    // show the thank-you screen WITHOUT ever posting the data (the exact
+    // "looks done but never actually submitted" bug this used to be
+    // prevented by simply hiding "Continue" as an option here). So on the
+    // final step, any button that isn't an explicit "Open a link" always
+    // really submits, regardless of its own label/action.
+    if (isFinalStep) {
+      handleSubmit(e)
+      return
+    }
     setCurrentStep((s) => Math.min(s + 1, Math.max(totalSteps - 1, 0)))
-  }, [totalSteps, steps, currentStep, form, handleSubmit])
+  }, [totalSteps, steps, currentStep, form, handleSubmit, isFinalStep])
 
   const handleBack = useCallback(() => {
     setCurrentStep((s) => Math.max(0, s - 1))
@@ -827,12 +849,47 @@ export default function PublicFormPage() {
   const handleFormSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null
     const action = submitter?.dataset.stepAction ?? (isFinalStep ? 'submit' : 'next')
-    if (action === 'submit') {
+    if (action === 'external_link') {
+      // Open the button's own link AND record the submission — previously
+      // this only opened the link, so a visitor who clicked it and never
+      // came back to a separate Submit button left no record at all. On the
+      // reserved on-submit step (data already posted) handleSubmit's own
+      // alreadySubmittedRef guard makes the submit half a harmless no-op,
+      // so the same button works correctly whether it's a pre-submission
+      // "Open a link" option or a post-submission CTA.
+      const linkUrl = submitter?.dataset.linkUrl
+      if (linkUrl) window.open(ensureAbsoluteUrl(linkUrl), '_blank', 'noopener,noreferrer')
+      handleSubmit(e)
+    } else if (action === 'submit') {
       handleSubmit(e)
     } else {
       handleNext(e)
     }
   }, [isFinalStep, handleSubmit, handleNext])
+
+  // When embedded, the host page's iframe has a fixed height (see the
+  // generated embed snippet) that has no way of knowing how tall this form
+  // actually is — a short form then leaves a big useless blank gap below
+  // the card, and a tall/multi-step form can get clipped instead. Report
+  // this page's real content height to the parent window on every size
+  // change (steps, validation errors, rule-driven show/hide all resize the
+  // page) so the embed snippet's listener script can live-resize the
+  // iframe to match. A callback ref (rather than a plain useRef + one-time
+  // effect) so the observer re-attaches correctly if React swaps to a
+  // different root element across the loading/error/submitted/main
+  // branches below. No-ops entirely when not embedded.
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const pageRootRef = useCallback((node: HTMLDivElement | null) => {
+    if (!IS_EMBEDDED) return
+    resizeObserverRef.current?.disconnect()
+    resizeObserverRef.current = null
+    if (!node) return
+    const report = () => window.parent.postMessage({ type: 'velox-form-height', height: node.offsetHeight }, '*')
+    const ro = new ResizeObserver(report)
+    ro.observe(node)
+    resizeObserverRef.current = ro
+    report()
+  }, [])
 
   // ── Shared theme styles ───────────────────────────────────────
   const cardStyle: React.CSSProperties = {
@@ -855,7 +912,7 @@ export default function PublicFormPage() {
   // ── Loading / error / success states ─────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: `#${theme.bg}` }}>
+      <div ref={pageRootRef} className={`flex items-center justify-center ${IS_EMBEDDED ? '' : 'min-h-screen'}`} style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `#${theme.primary}`, borderTopColor: 'transparent' }} />
       </div>
     )
@@ -863,7 +920,7 @@ export default function PublicFormPage() {
 
   if (error) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${IS_EMBEDDED ? '' : 'px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
+      <div ref={pageRootRef} className={`flex items-center justify-center ${IS_EMBEDDED ? '' : 'min-h-screen px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800">Form Unavailable</h2>
@@ -881,7 +938,7 @@ export default function PublicFormPage() {
   const showCustomOnSubmitScreen = submitted && isOnSubmitStep && hasCustomButtons
   if (submitted && !showCustomOnSubmitScreen) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${IS_EMBEDDED ? '' : 'px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
+      <div ref={pageRootRef} className={`flex items-center justify-center ${IS_EMBEDDED ? '' : 'min-h-screen px-4'}`} style={{ backgroundColor: `#${theme.bg}` }}>
         <div className="text-center p-8 sm:p-10 max-w-md w-full shadow-lg" style={cardStyle}>
           <div className="text-5xl mb-4">✅</div>
           <h2 className="text-xl font-bold mb-2" style={{ color: `#${theme.labelColor}` }}>You're all set!</h2>
@@ -895,7 +952,8 @@ export default function PublicFormPage() {
 
   return (
     <div
-      className={`min-h-screen flex items-start justify-center py-6 sm:py-12 ${IS_EMBEDDED ? '' : 'px-4'}`}
+      ref={pageRootRef}
+      className={`flex items-start justify-center ${IS_EMBEDDED ? 'py-4' : 'min-h-screen py-6 sm:py-12 px-4'}`}
     >
       <div className="w-full max-w-lg">
         {/* Form card */}
@@ -971,15 +1029,27 @@ export default function PublicFormPage() {
                 <div className="flex-1 flex gap-3">
                   {stepButtons.map((b) =>
                     b.action === 'external_link' ? (
+                      // "Open a link" used to just open the URL and leave —
+                      // if a visitor never came back to click a separate
+                      // Submit button, their answers were never recorded at
+                      // all. It now submits the collected data (exactly like
+                      // Submit does) in the same click, THEN opens the link
+                      // in a new tab, so the lead is always saved either
+                      // way. On the reserved on-submit step this is
+                      // naturally a no-op (data's already posted by then —
+                      // see alreadySubmittedRef in handleSubmit), so the
+                      // same button works correctly in both places.
                       <PrimaryButton
                         key={b.id}
-                        type="button"
-                        onClick={() => { if (b.url) window.open(b.url, '_blank', 'noopener,noreferrer') }}
+                        type="submit"
+                        dataStepAction="external_link"
+                        dataLinkUrl={b.url}
+                        disabled={submitting}
                         style={btnStyle}
                         hoverStyle={btnHoverStyle}
-                        className="flex-1 font-semibold py-2.5 transition-colors text-sm"
+                        className="flex-1 font-semibold py-2.5 transition-colors text-sm disabled:opacity-60"
                       >
-                        {b.label}
+                        {submitting ? 'Submitting…' : b.label}
                       </PrimaryButton>
                     ) : (
                       <PrimaryButton
@@ -1022,7 +1092,7 @@ export default function PublicFormPage() {
 
 // ── Button with hover state ───────────────────────────────────────
 function PrimaryButton({
-  children, style, hoverStyle, className, type, disabled, onClick, dataStepAction,
+  children, style, hoverStyle, className, type, disabled, onClick, dataStepAction, dataLinkUrl,
 }: {
   children: React.ReactNode
   style: React.CSSProperties
@@ -1032,8 +1102,12 @@ function PrimaryButton({
   disabled?: boolean
   onClick?: () => void
   /** Read by handleFormSubmit (via SubmitEvent.submitter) to decide whether
-   *  this specific click should submit the form or advance to the next step. */
-  dataStepAction?: 'next' | 'submit'
+   *  this specific click should submit the form, advance to the next step,
+   *  or submit-and-open-a-link. */
+  dataStepAction?: 'next' | 'submit' | 'external_link'
+  /** Only set for dataStepAction="external_link" — the URL handleFormSubmit
+   *  opens in a new tab once the (also triggered) submission completes. */
+  dataLinkUrl?: string
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -1046,6 +1120,7 @@ function PrimaryButton({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       data-step-action={dataStepAction}
+      data-link-url={dataLinkUrl}
     >
       {children}
     </button>

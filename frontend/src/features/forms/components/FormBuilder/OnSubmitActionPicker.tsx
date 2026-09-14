@@ -1,5 +1,6 @@
 import { MessageSquare, FileText, Link2, CalendarClock, CreditCard } from 'lucide-react'
 import type { OnSubmitAction, OnSubmitOutcomeConfig } from '../../types'
+import { ensureAbsoluteUrl } from '../../utils/url'
 
 interface OnSubmitActionPickerProps {
   config: OnSubmitOutcomeConfig
@@ -139,6 +140,18 @@ export default function OnSubmitActionPicker({ config, onChange, ctaButtons }: O
                   <input
                     value={(config[urlKey] as string | undefined) ?? ''}
                     onChange={(e) => onChange({ [urlKey]: e.target.value } as Partial<OnSubmitOutcomeConfig>)}
+                    // "Redirect to a page" deliberately allows a bare
+                    // relative path like "/thank-you" on the CRM's own
+                    // domain, so it's left as typed; the other three are
+                    // always meant to be a full external address, so a
+                    // missing "https://" is filled in on blur — matching
+                    // what actually happens on submit and avoiding a
+                    // silently-broken redirect back to this same form.
+                    onBlur={(e) => {
+                      if (value === 'redirect_page') return
+                      const normalized = ensureAbsoluteUrl(e.target.value)
+                      if (normalized !== e.target.value) onChange({ [urlKey]: normalized } as Partial<OnSubmitOutcomeConfig>)
+                    }}
                     placeholder={URL_PLACEHOLDER[value]}
                     className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
                   />

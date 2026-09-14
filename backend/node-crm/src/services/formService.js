@@ -383,10 +383,21 @@ async function getPublicForm(formId) {
   return form;
 }
 
-/** Generate iframe embed code for a form */
+/** Generate iframe embed code for a form.
+ *
+ * `height="700"` is only a starting size for the very first paint — the
+ * embedded page (PublicFormPage) reports its real content height to this
+ * script via `postMessage` every time it changes (steps, validation
+ * errors, conditional show/hide), and the listener below live-resizes the
+ * iframe to match. Without this, a short form leaves a useless blank gap
+ * below the card, and a tall/multi-step one can get clipped — both are
+ * fixed by keeping the iframe's actual height in sync with its content
+ * instead of a single fixed guess.
+ */
 function generateIframeEmbed(formId, baseUrl) {
   const url = `${baseUrl}/embed/${formId}`;
-  return `<iframe\n  src="${url}"\n  width="100%"\n  height="700"\n  frameborder="0"\n  style="border:none;"\n></iframe>`;
+  const iframeId = `velox-form-${formId}`;
+  return `<iframe\n  id="${iframeId}"\n  src="${url}"\n  width="100%"\n  height="700"\n  frameborder="0"\n  style="border:none;display:block;"\n></iframe>\n<script>\n  (function () {\n    var iframe = document.getElementById("${iframeId}");\n    if (!iframe) return;\n    window.addEventListener("message", function (event) {\n      if (!event.data || event.data.type !== "velox-form-height" || event.source !== iframe.contentWindow) return;\n      iframe.style.height = event.data.height + "px";\n    });\n  })();\n</script>`;
 }
 
 /** Generate JS embed code for a form */

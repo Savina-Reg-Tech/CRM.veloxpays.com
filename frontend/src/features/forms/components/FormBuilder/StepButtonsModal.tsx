@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { nanoid } from 'nanoid'
 import { Plus, Trash2, MousePointerClick, Send, ExternalLink } from 'lucide-react'
 import type { FormStep, StepButton, StepButtonAction } from '../../types'
+import { ensureAbsoluteUrl } from '../../utils/url'
 
 interface StepButtonsModalProps {
   open: boolean
@@ -49,16 +50,16 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, isO
   const remove = (id: string) => setButtons((prev) => prev.filter((b) => b.id !== id))
 
   const add = () => setButtons((prev) => [...prev, emptyButton(isFinalStep, isOnSubmitStep)])
-  // The reserved on-submit step only ever offers link CTAs (see prop doc).
-  // The last field step before it can't offer "Continue" — there's no
-  // further field step to continue to, and the on-submit step must only be
-  // reached via a genuine submission, never a bare "next" advance (which
-  // would show a completion-looking screen without the data ever posting).
+  // The reserved on-submit step only ever offers link CTAs (see prop doc) —
+  // data's already posted by the time visitors see it, so Continue/Submit
+  // wouldn't do anything meaningful there. Every other step — including the
+  // final field step — offers all three: a "Continue"/"Next" button is
+  // fine even on the last step (the live form makes it actually submit,
+  // exactly like "Submit" would, since there's nothing left to continue
+  // to), so admins can freely rename/re-style the completing button.
   const actionOptions = isOnSubmitStep
     ? ALL_ACTION_OPTIONS.filter((o) => o.value === 'external_link')
-    : isFinalStep
-      ? ALL_ACTION_OPTIONS.filter((o) => o.value !== 'next')
-      : ALL_ACTION_OPTIONS
+    : ALL_ACTION_OPTIONS
 
   const handleClose = () => {
     setSeededFor(null)
@@ -72,8 +73,6 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, isO
     handleClose()
   }
 
-  const hasSubmitButton = buttons.some((b) => b.action === 'submit')
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
@@ -84,7 +83,9 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, isO
             <p className="text-xs text-gray-400 mt-0.5">
               {isOnSubmitStep
                 ? 'Add CTA buttons visitors see right after they submit — e.g. "Continue Application" or "Book a Call." Leave empty to show the default thank-you message instead.'
-                : `Replace the default "${isFinalStep ? 'Submit' : 'Next'}" button with your own options for this step. Any button can submit the form — it doesn't have to be the last field step.`}
+                : isFinalStep
+                  ? 'Replace the default "Submit" button with your own options for this last step. "Continue" and "Submit" both complete the form here — there\'s no step left to continue to — so pick whichever label reads better to visitors.'
+                  : 'Replace the default "Next" button with your own options for this step. Any button can submit the form early — it doesn\'t have to be the last field step.'}
             </p>
           </div>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 shrink-0">✕</button>
@@ -137,12 +138,24 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, isO
               </div>
 
               {b.action === 'external_link' && (
-                <input
-                  value={b.url ?? ''}
-                  onChange={(e) => update(b.id, { url: e.target.value })}
-                  placeholder="https://calendly.com/your-link"
-                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                />
+                <>
+                  <input
+                    value={b.url ?? ''}
+                    onChange={(e) => update(b.id, { url: e.target.value })}
+                    onBlur={(e) => {
+                      const normalized = ensureAbsoluteUrl(e.target.value)
+                      if (normalized !== e.target.value) update(b.id, { url: normalized })
+                    }}
+                    placeholder="https://calendly.com/your-link"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                  {!isOnSubmitStep && (
+                    <p className="text-[11px] text-gray-400">
+                      Clicking this also records the submission (like "Submit" does), then opens
+                      the link in a new tab — so visitors who only click this still get saved.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ))}
@@ -154,13 +167,6 @@ export default function StepButtonsModal({ open, onClose, step, isFinalStep, isO
           >
             <Plus size={14} /> Add button
           </button>
-
-          {!isOnSubmitStep && isFinalStep && buttons.length > 0 && !hasSubmitButton && (
-            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-              None of these buttons actually submits the form — set at least one button's action
-              to "Submit," or visitors reaching this step won't be able to complete it.
-            </p>
-          )}
         </div>
 
         {/* Footer */}
