@@ -826,6 +826,12 @@ export interface AdminBillingLineItem {
   direction: 'debit' | 'credit'
   paymentMethod: string | null
   status: string
+  /** How much of this line item was covered by redeeming a VeloxClub membership benefit
+   * (0/undefined for line items that weren't a club redemption, and for all refund/credit
+   * line items). When `clubRedeemed` is true, the UI should show a "VeloxClub redeemed" label
+   * instead of a bare (possibly zero) amount — see billing.service.ts#paymentLineItem. */
+  clubDiscountCents?: number
+  clubRedeemed?: boolean
 }
 
 export interface AdminBillingTotals {

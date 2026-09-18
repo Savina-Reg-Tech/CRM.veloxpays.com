@@ -313,8 +313,24 @@ export default function VVUserDetailPage() {
                             <span
                               className={`shrink-0 font-medium ${li.direction === 'credit' ? 'text-red-600' : 'text-gray-700'}`}
                             >
-                              {li.direction === 'credit' ? '−' : ''}
-                              {formatMoney(li.amountUsd, li.currency)}
+                              {li.clubRedeemed ? (
+                                // Was showing a bare "INR 0.00" for fully club-covered bookings, which
+                                // read as a data error — show what actually happened instead. A
+                                // partial redemption (some cash still charged) keeps the amount too.
+                                <span className="text-emerald-600">
+                                  VeloxClub redeemed
+                                  {li.amountUsd > 0 && (
+                                    <span className="ml-1 text-gray-500">
+                                      ({formatMoney(li.amountUsd, li.currency)})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <>
+                                  {li.direction === 'credit' ? '−' : ''}
+                                  {formatMoney(li.amountUsd, li.currency)}
+                                </>
+                              )}
                             </span>
                           </li>
                         ))}
