@@ -1,7 +1,7 @@
 import api from '@/lib/axios'
 import type {
-  AnalyticsOverview, RevenueSeries, GrowthSeries, PopularPackage,
-  RecentActivity, OrderStats, CustomerSpending,
+  AnalyticsOverview, RevenueSeries, GrowthSeries, PopularPackagesResult,
+  RecentActivity, OrderStats, CustomerSpendingResult,
   AdminOrderRow, AdminOrderDetail, VVPagination,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
   AdminTransferBooking, TransferCancelReason, TransferCancelResult,
@@ -11,6 +11,7 @@ import type {
   VVSupportTicket, VVSupportStatistics, VVAdminTicketFilters, VVAdminSearchResult,
   VVAdminSettings, VVEsimApiTestResult, VVApiTestResult,
   PointsConfigRow, PointsSettings, AdminPointsUsersPage, AdminUserPoints,
+  ReferralPointsConfigRow,
   PointsAuditPage, PointsDashboard,
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
   ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType,
@@ -24,21 +25,24 @@ const VV = '/vv-admin'
 
 // ── Analytics ───────────────────────────────────────────────────────
 export const vvAnalyticsService = {
-  async getOverview() {
-    const { data } = await api.get<VVResponse<{ overview: AnalyticsOverview }>>(`${VV}/admin/analytics/overview`)
+  async getOverview(currency?: string) {
+    const { data } = await api.get<VVResponse<{ overview: AnalyticsOverview }>>(`${VV}/admin/analytics/overview`, { params: { currency } })
     return data.data.overview
   },
-  async getRevenue(period: string) {
-    const { data } = await api.get<VVResponse<{ revenue: RevenueSeries }>>(`${VV}/admin/analytics/revenue`, { params: { period } })
+  async getRevenue(period: string, currency?: string) {
+    const { data } = await api.get<VVResponse<{ revenue: RevenueSeries }>>(`${VV}/admin/analytics/revenue`, { params: { period, currency } })
     return data.data.revenue
   },
   async getGrowth(period: string) {
     const { data } = await api.get<VVResponse<{ growth: GrowthSeries }>>(`${VV}/admin/analytics/growth`, { params: { period } })
     return data.data.growth
   },
-  async getPopularPackages(limit = 10) {
-    const { data } = await api.get<VVResponse<{ packages: PopularPackage[] }>>(`${VV}/admin/analytics/popular-packages`, { params: { limit } })
-    return data.data.packages
+  async getPopularPackages(limit = 10, currency?: string) {
+    const { data } = await api.get<VVResponse<{ packages: PopularPackagesResult['packages']; currency: string; fxSkippedCurrencies: string[] }>>(
+      `${VV}/admin/analytics/popular-packages`,
+      { params: { limit, currency } }
+    )
+    return data.data
   },
   async getRecentOrders(limit = 10) {
     const { data } = await api.get<VVResponse<{ orders: RecentActivity[] }>>(`${VV}/admin/analytics/recent-orders`, { params: { limit } })
@@ -48,9 +52,12 @@ export const vvAnalyticsService = {
     const { data } = await api.get<VVResponse<{ stats: OrderStats }>>(`${VV}/admin/analytics/order-stats`)
     return data.data.stats
   },
-  async getCustomerSpending(limit = 20) {
-    const { data } = await api.get<VVResponse<{ customers: CustomerSpending[] }>>(`${VV}/admin/analytics/customer-spending`, { params: { limit } })
-    return data.data.customers
+  async getCustomerSpending(limit = 20, currency?: string) {
+    const { data } = await api.get<VVResponse<{ customers: CustomerSpendingResult['customers']; currency: string; fxSkippedCurrencies: string[] }>>(
+      `${VV}/admin/analytics/customer-spending`,
+      { params: { limit, currency } }
+    )
+    return data.data
   },
 }
 
@@ -248,7 +255,7 @@ export const vvPointsService = {
     const { data } = await api.get<VVResponse<{ config: PointsConfigRow[] }>>(`${VV}/admin/points/config`)
     return data.data.config
   },
-  async updateConfig(id: string, patch: { pointsPerDollar?: number; isActive?: boolean; description?: string }) {
+  async updateConfig(id: string, patch: { pointsPerUnit?: number; isActive?: boolean; description?: string }) {
     const { data } = await api.put<VVResponse<{ config: PointsConfigRow }>>(`${VV}/admin/points/config/${id}`, patch)
     return data.data.config
   },
@@ -289,6 +296,30 @@ export const vvPointsService = {
   async getDashboard() {
     const { data } = await api.get<VVResponse<PointsDashboard>>(`${VV}/admin/points/dashboard`)
     return data.data
+  },
+}
+
+// ── Refer & Earn config (per-currency points, CRM is the source of truth) ──────────
+export const vvReferralConfigService = {
+  async getConfig() {
+    const { data } = await api.get<VVResponse<{ config: ReferralPointsConfigRow[] }>>(
+      `${VV}/admin/points/referral-config`
+    )
+    return data.data.config
+  },
+  async updateConfig(id: string, patch: { referrerPoints?: number; refereePoints?: number; isActive?: boolean }) {
+    const { data } = await api.put<VVResponse<{ config: ReferralPointsConfigRow }>>(
+      `${VV}/admin/points/referral-config/${id}`,
+      patch
+    )
+    return data.data.config
+  },
+  async createConfig(input: { currency: string; referrerPoints: number; refereePoints: number }) {
+    const { data } = await api.post<VVResponse<{ config: ReferralPointsConfigRow }>>(
+      `${VV}/admin/points/referral-config`,
+      input
+    )
+    return data.data.config
   },
 }
 

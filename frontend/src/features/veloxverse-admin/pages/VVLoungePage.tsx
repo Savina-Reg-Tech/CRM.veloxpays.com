@@ -27,6 +27,7 @@ import {
   useVVLoungeVisitDetail,
 } from '../hooks/useVVLounge'
 import { formatCents, formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 import type { LoungeVisit, LoungeVisitStatus, AdminLoungeMembership } from '../types'
 
 const PAGE_SIZE = 20
@@ -135,45 +136,76 @@ function VisitDetailModal({ visitId, onClose }: { visitId: string; onClose: () =
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Base cost</span>
-                <span className="text-gray-900">{formatCents(b.baseCents)}</span>
+                <span className="text-gray-900">{formatMoney(b.baseCents / 100, b.currency)}</span>
               </div>
               {profitCents > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Margin + surge</span>
-                  <span className="text-emerald-600">+{formatCents(profitCents)}</span>
+                  <span className="text-emerald-600">+{formatMoney(profitCents / 100, b.currency)}</span>
                 </div>
               )}
               {b.promoDiscountCents > 0 && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Promo discount</span>
-                  <span className="text-red-500">-{formatCents(b.promoDiscountCents)}</span>
+                  <span className="text-red-500">-{formatMoney(b.promoDiscountCents / 100, b.currency)}</span>
                 </div>
               )}
               {visit.isRefundable && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Refund protection fee</span>
-                  <span className="text-gray-900">{formatCents(b.refundFeeCents)}</span>
+                  <span className="text-gray-900">{formatMoney(b.refundFeeCents / 100, b.currency)}</span>
                 </div>
               )}
               <div className="flex justify-between border-t border-gray-300 pt-1.5">
                 <span className="font-semibold text-gray-900">Total charged</span>
-                <span className="font-bold text-gray-900">{formatCents(b.totalCents)}</span>
+                <span className="font-bold text-gray-900">{formatMoney(b.totalCents / 100, b.currency)}</span>
               </div>
             </div>
           </div>
+
+          {/* Currency conversion — #397 (CRM dual-amount generalization), same block already on
+              the VeloxVerse Invoice Details view (#396). Only shown when this booking (Lounge,
+              Dining, Fast Track or Fitness) was priced in a currency other than what was charged. */}
+          {visit.nativePrice && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Currency conversion</h4>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Original Price ({visit.nativePrice.nativeCurrency})</span>
+                  <span className="text-gray-900">
+                    {formatMoney(visit.nativePrice.nativeAmountCents / 100, visit.nativePrice.nativeCurrency)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">
+                    FX Rate ({visit.nativePrice.nativeCurrency} → {visit.nativePrice.paymentCurrency})
+                  </span>
+                  <span className="text-gray-900">
+                    {visit.nativePrice.fxRate.toFixed(4)} (via {visit.nativePrice.fxProvider})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Customer Price ({visit.nativePrice.paymentCurrency})</span>
+                  <span className="text-gray-900">
+                    {formatMoney(visit.nativePrice.convertedAmountCents / 100, visit.nativePrice.paymentCurrency)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Profit + Refund info */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
               <p className="text-xs text-emerald-600">Profit (margin + surge)</p>
-              <p className="text-lg font-bold text-emerald-700">{formatCents(profitCents)}</p>
+              <p className="text-lg font-bold text-emerald-700">{formatMoney(profitCents / 100, b.currency)}</p>
             </div>
             <div className={`rounded-lg border p-3 ${visit.isRefundable ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
               <p className={`text-xs ${visit.isRefundable ? 'text-amber-600' : 'text-gray-500'}`}>
                 {visit.isRefundable ? 'Refundable amount' : 'Non-refundable'}
               </p>
               <p className={`text-lg font-bold ${visit.isRefundable ? 'text-amber-700' : 'text-gray-400'}`}>
-                {visit.isRefundable ? formatCents(visit.refundableCents) : '—'}
+                {visit.isRefundable ? formatMoney(visit.refundableCents / 100, b.currency) : '—'}
               </p>
             </div>
           </div>
@@ -184,7 +216,7 @@ function VisitDetailModal({ visitId, onClose }: { visitId: string; onClose: () =
               <p className="font-medium text-red-700">Cancelled</p>
               <p className="text-xs text-red-600">
                 {formatDateTime(visit.cancelledAt)}
-                {visit.isRefundable && ` · ${formatCents(visit.refundableCents)} refunded`}
+                {visit.isRefundable && ` · ${formatMoney(visit.refundableCents / 100, b.currency)} refunded`}
               </p>
             </div>
           )}
@@ -244,7 +276,7 @@ function VisitsTable({ bookingType, resourceType }: { bookingType: 'lounge' | 'b
             : s === 'COMPLETED'
             ? 'text-emerald-600'
             : 'text-gray-700'
-        return <span className={`font-medium ${color}`}>{formatCents(v.totalCost)}</span>
+        return <span className={`font-medium ${color}`}>{formatMoney(v.totalCost / 100, v.currency)}</span>
       },
     },
     {

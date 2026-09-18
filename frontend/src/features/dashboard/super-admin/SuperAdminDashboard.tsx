@@ -3,14 +3,12 @@ import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   ArrowUpRight,
-  DollarSign,
   BarChart3,
   PlaneTakeoff,
   Plus,
   Users,
   UserCheck,
   UserX,
-  Utensils,
   Wifi,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
@@ -108,7 +106,8 @@ export default function SuperAdminDashboard() {
   const inactive = stats?.inactive ?? 0
   const recentItems = recent?.items ?? []
 
-  const maxSpend = Math.max(...(vvSpending.data ?? []).map((c) => c.totalSpendUsd), 1)
+  const vvSpendingCustomers = vvSpending.data?.customers ?? []
+  const maxSpend = Math.max(...vvSpendingCustomers.map((c) => c.totalSpend), 1)
 
   return (
     <div className="space-y-8 max-w-full">
@@ -162,6 +161,11 @@ export default function SuperAdminDashboard() {
       </section>
 
       {/* ══════════ VeloxVerse Overview ══════════ */}
+      {/* Revenue StatCards (Total/eSIM/Lounge/Benefit) intentionally removed — this compact
+       * dashboard widget has no currency selector, so a single $ figure was silently summing
+       * bookings charged in different real currencies (INR, GBP, etc.) into one meaningless USD
+       * number. The full, currency-correct breakdown (with a currency selector, real per-currency
+       * FX conversion, and a caveat banner) lives on the Analytics page — link below. */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">VeloxVerse</h3>
@@ -169,45 +173,35 @@ export default function SuperAdminDashboard() {
             to="/dashboard/veloxverse/analytics"
             className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
           >
-            Full analytics <ArrowRight size={12} />
+            Full analytics (multi-currency) <ArrowRight size={12} />
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {vvOverview.isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)
+            Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)
           ) : (
             <>
               <StatCard
-                icon={<DollarSign size={20} className="text-emerald-500" />}
-                tint="bg-emerald-50"
-                label="Total Revenue"
-                value={formatUsd(vvOverview.data?.totalRevenueUsd ?? 0)}
-                sub={`${vvOverview.data?.totalOrders ?? 0} orders`}
-                to="/dashboard/veloxverse/analytics"
+                icon={<Users size={20} className="text-fuchsia-500" />}
+                tint="bg-fuchsia-50"
+                label="Active Users"
+                value={vvOverview.data?.activeUsers ?? 0}
+                to="/dashboard/veloxverse/users"
               />
               <StatCard
                 icon={<Wifi size={20} className="text-blue-500" />}
                 tint="bg-blue-50"
-                label="eSIM Revenue"
-                value={formatUsd(vvOverview.data?.esimRevenueUsd ?? 0)}
-                sub={`${vvOverview.data?.esimOrders ?? 0} orders`}
+                label="Active eSIMs"
+                value={vvOverview.data?.activeEsims ?? 0}
+                sub={`${vvOverview.data?.esimOrders ?? 0} total orders`}
                 to="/dashboard/veloxverse/esim-orders"
               />
               <StatCard
                 icon={<PlaneTakeoff size={20} className="text-violet-500" />}
                 tint="bg-violet-50"
-                label="Lounge Revenue"
-                value={formatUsd(vvOverview.data?.loungeRevenueUsd ?? 0)}
-                sub={`${vvOverview.data?.loungeBookings ?? 0} bookings`}
+                label="Lounge & Benefit Bookings"
+                value={(vvOverview.data?.loungeBookings ?? 0) + (vvOverview.data?.benefitBookings ?? 0)}
                 to="/dashboard/veloxverse/lounge"
-              />
-              <StatCard
-                icon={<Utensils size={20} className="text-teal-500" />}
-                tint="bg-teal-50"
-                label="Benefit Revenue"
-                value={formatUsd(vvOverview.data?.benefitRevenueUsd ?? 0)}
-                sub={`${vvOverview.data?.benefitBookings ?? 0} bookings`}
-                to="/dashboard/veloxverse/analytics"
               />
             </>
           )}
@@ -333,7 +327,7 @@ export default function SuperAdminDashboard() {
                       </div>
                     </div>
                     <span className={`shrink-0 text-sm font-semibold tabular-nums ${isCredit ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {formatActivityAmount(o.amountUsd, direction)}
+                      {formatActivityAmount(o.amountUsd, direction, o.currency)}
                     </span>
                   </li>
                 )
@@ -361,7 +355,7 @@ export default function SuperAdminDashboard() {
           <div className="flex justify-center py-10">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
           </div>
-        ) : (vvSpending.data ?? []).length === 0 ? (
+        ) : vvSpendingCustomers.length === 0 ? (
           <p className="py-10 text-center text-sm text-gray-500">No spending data yet.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -376,8 +370,8 @@ export default function SuperAdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {(vvSpending.data ?? []).slice(0, 5).map((c: CustomerSpending, idx: number) => {
-                  const barPct = maxSpend > 0 ? (c.totalSpendUsd / maxSpend) * 100 : 0
+                {vvSpendingCustomers.slice(0, 5).map((c: CustomerSpending, idx: number) => {
+                  const barPct = maxSpend > 0 ? (c.totalSpend / maxSpend) * 100 : 0
                   return (
                     <tr key={c.userId} className="transition-colors hover:bg-indigo-50/40">
                       <td className="px-4 py-3 text-xs font-medium text-gray-400">{idx + 1}</td>
@@ -392,7 +386,7 @@ export default function SuperAdminDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatUsd(c.totalSpendUsd)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatUsd(c.totalSpend)}</td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                           <div

@@ -6,6 +6,7 @@ import type { UnifiedCustomerRow } from '@/types'
 import type { VVAdminUser } from '@/features/veloxverse-admin/types'
 import { CUSTOMER_SOURCES_CONFIG } from '@/config/customerSources'
 import { formatCustomerLegalName } from '../utils'
+import { formatMoney } from '@/lib/utils'
 
 interface Props {
   rows: UnifiedCustomerRow[]
@@ -169,10 +170,11 @@ export default function CustomersTable({
                 </span>
               )
             }
-            const { totalOrders, totalSpent } = row.data
+            const { totalOrders, totalSpent, totalSpentCurrency } = row.data
             return (
               <span className="text-gray-700 text-xs whitespace-nowrap">
-                {totalOrders} {totalOrders === 1 ? 'order' : 'orders'} · ${totalSpent.toFixed(2)}
+                {totalOrders} {totalOrders === 1 ? 'order' : 'orders'} ·{' '}
+                {formatMoney(totalSpent, totalSpentCurrency)}
               </span>
             )
           },

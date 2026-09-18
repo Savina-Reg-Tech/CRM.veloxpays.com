@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Database,
   Calculator,
+  Gift,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -35,14 +36,18 @@ import {
   useVVRecalculateBalance,
   useVVPointsAuditLog,
   useVVPointsDashboard,
+  useVVReferralConfig,
+  useVVUpdateReferralConfig,
 } from '../hooks/useVVPoints'
-import { formatDateTime } from '../utils'
+import { formatDateTime, ANALYTICS_CURRENCIES } from '../utils'
+import { formatMoney } from '@/lib/utils'
 import type {
   PointsConfigRow,
   PointsSettings,
   AdminPointsUser,
   PointsLedgerEntry,
   PointsTransactionType,
+  ReferralPointsConfigRow,
 } from '../types'
 
 // ─────────────────────────── Helpers ───────────────────────────────
@@ -85,17 +90,26 @@ function ErrorBanner({ error }: { error: unknown }) {
 
 // ─────────────────────────── Tab 1: Earning Rules ─────────────────
 
+/**
+ * REFERRAL never appears in `config` — its rows are filtered server-side (see
+ * `pointsAdminService.listConfig` in veloxverse), since that reward moved to the dedicated
+ * Refer & Earn config (the "Referral" tab below). Every row here is a genuine (service,
+ * currency) earning rule: `pointsPerUnit` is a direct, admin-set points count per 1 unit of
+ * that row's `currency` — not a monetary value converted via live FX — so each currency is
+ * tuned independently and a rate never drifts with exchange rates.
+ */
 function EarningRulesTab() {
   const { data: config, isLoading, error } = useVVPointsConfig()
   const updateMut = useVVUpdatePointsConfig()
   const { showToast } = useToast()
+  const [currency, setCurrency] = useState<string>('USD')
   const [editRow, setEditRow] = useState<PointsConfigRow | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editDesc, setEditDesc] = useState('')
 
   function openEdit(row: PointsConfigRow) {
     setEditRow(row)
-    setEditValue(String(row.pointsPerDollar))
+    setEditValue(String(row.pointsPerUnit))
     setEditDesc(row.description ?? '')
   }
 
@@ -105,7 +119,7 @@ function EarningRulesTab() {
     const pts = parseInt(editValue, 10)
     if (isNaN(pts) || pts < 0) return
     updateMut.mutate(
-      { id: editRow.id, patch: { pointsPerDollar: pts, description: editDesc || undefined } },
+      { id: editRow.id, patch: { pointsPerUnit: pts, description: editDesc || undefined } },
       {
         onSuccess: () => { showToast({ type: 'success', title: 'Earning rule updated' }); setEditRow(null) },
         onError: () => showToast({ type: 'error', title: 'Failed to update rule' }),
@@ -117,7 +131,7 @@ function EarningRulesTab() {
     updateMut.mutate(
       { id: row.id, patch: { isActive: !row.isActive } },
       {
-        onSuccess: () => showToast({ type: 'success', title: `${SERVICE_LABELS[row.serviceType] ?? row.serviceType} ${!row.isActive ? 'enabled' : 'disabled'}` }),
+        onSuccess: () => showToast({ type: 'success', title: `${SERVICE_LABELS[row.serviceType] ?? row.serviceType} (${row.currency}) ${!row.isActive ? 'enabled' : 'disabled'}` }),
         onError: () => showToast({ type: 'error', title: 'Toggle failed' }),
       }
     )
@@ -126,14 +140,36 @@ function EarningRulesTab() {
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
   if (error) return <ErrorBanner error={error} />
 
+  const rows = (config ?? []).filter((r) => r.currency === currency)
+
   return (
     <>
+      {/* Each currency has its own independent set of rates — no live FX conversion between
+          them, an admin tunes each one directly. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-gray-500">Currency:</span>
+        {ANALYTICS_CURRENCIES.map((code) => (
+          <button
+            key={code}
+            type="button"
+            onClick={() => setCurrency(code)}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              code === currency
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            {code}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Service</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Points / $1</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Points / 1 {currency}</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Active</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Version</th>
               <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
@@ -141,10 +177,10 @@ function EarningRulesTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {(config ?? []).map((row) => (
+            {rows.map((row) => (
               <tr key={row.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{SERVICE_LABELS[row.serviceType] ?? row.serviceType}</td>
-                <td className="px-4 py-3 text-gray-700">{row.serviceType === 'REFERRAL' ? `${fmtNum(row.pointsPerDollar)} flat` : fmtNum(row.pointsPerDollar)}</td>
+                <td className="px-4 py-3 text-gray-700">{fmtNum(row.pointsPerUnit)}</td>
                 <td className="px-4 py-3"><Switch checked={row.isActive} onChange={() => toggleActive(row)} /></td>
                 <td className="px-4 py-3 text-gray-500">v{row.version}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
@@ -153,15 +189,18 @@ function EarningRulesTab() {
                 </td>
               </tr>
             ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No earning rules configured for {currency} yet</td></tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${SERVICE_LABELS[editRow?.serviceType ?? ''] ?? ''} Earning Rule`} size="md">
+      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${SERVICE_LABELS[editRow?.serviceType ?? ''] ?? ''} Earning Rule (${editRow?.currency ?? ''})`} size="md">
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              {editRow?.serviceType === 'REFERRAL' ? 'Points (flat reward)' : 'Points per $1 spent'}
+              Points per 1 {editRow?.currency ?? 'unit'} spent
             </label>
             <Input type="number" min={0} value={editValue} onChange={(e) => setEditValue(e.target.value)} required />
           </div>
@@ -171,7 +210,125 @@ function EarningRulesTab() {
           </div>
           {editRow && (
             <p className="text-xs text-gray-500">
-              Current: {fmtNum(editRow.pointsPerDollar)} pts{editRow.serviceType !== 'REFERRAL' ? '/$1' : ' flat'} → New: {editValue || '0'} pts{editRow.serviceType !== 'REFERRAL' ? '/$1' : ' flat'}
+              Current: {fmtNum(editRow.pointsPerUnit)} pts/{editRow.currency} → New: {editValue || '0'} pts/{editRow.currency}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setEditRow(null)}>Cancel</Button>
+            <Button type="submit" loading={updateMut.isPending}>Save</Button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  )
+}
+
+// ─────────────────────────── Tab: Referral (Refer & Earn) ─────────
+// CRM is the source of truth for the Refer & Earn reward: one row per supported preferred
+// currency, each a direct admin-set points count (not a monetary value converted via FX) for
+// both the referrer and the referee. VeloxVerse applies the row matching each recipient's own
+// preferred currency at award time — see points-referral.service.ts#awardReferralPoints.
+
+function ReferralConfigTab() {
+  const { data: config, isLoading, error } = useVVReferralConfig()
+  const updateMut = useVVUpdateReferralConfig()
+  const { showToast } = useToast()
+  const [editRow, setEditRow] = useState<ReferralPointsConfigRow | null>(null)
+  const [referrerValue, setReferrerValue] = useState('')
+  const [refereeValue, setRefereeValue] = useState('')
+
+  function openEdit(row: ReferralPointsConfigRow) {
+    setEditRow(row)
+    setReferrerValue(String(row.referrerPoints))
+    setRefereeValue(String(row.refereePoints))
+  }
+
+  function handleSave(e: FormEvent) {
+    e.preventDefault()
+    if (!editRow) return
+    const referrerPoints = parseInt(referrerValue, 10)
+    const refereePoints = parseInt(refereeValue, 10)
+    if (isNaN(referrerPoints) || referrerPoints < 0 || isNaN(refereePoints) || refereePoints < 0) return
+    updateMut.mutate(
+      { id: editRow.id, patch: { referrerPoints, refereePoints } },
+      {
+        onSuccess: () => { showToast({ type: 'success', title: `${editRow.currency} referral reward updated` }); setEditRow(null) },
+        onError: () => showToast({ type: 'error', title: 'Failed to update referral reward' }),
+      }
+    )
+  }
+
+  function toggleActive(row: ReferralPointsConfigRow) {
+    updateMut.mutate(
+      { id: row.id, patch: { isActive: !row.isActive } },
+      {
+        onSuccess: () => showToast({ type: 'success', title: `${row.currency} referral reward ${!row.isActive ? 'enabled' : 'disabled'}` }),
+        onError: () => showToast({ type: 'error', title: 'Toggle failed' }),
+      }
+    )
+  }
+
+  if (isLoading) return <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+  if (error) return <ErrorBanner error={error} />
+
+  return (
+    <>
+      <Card className="p-4 mb-4">
+        <p className="text-sm text-gray-600">
+          <Gift className="inline h-4 w-4 mr-1 text-indigo-500" />
+          Each currency's reward is a fixed points count set here — not a dollar amount converted at a live rate — so
+          the value can never drift after a referral is redeemed. VeloxVerse prices each side of a referral by that
+          person's own Preferred Currency.
+        </p>
+      </Card>
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Currency</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Referrer earns</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Referee earns</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Active</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Version</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {(config ?? []).map((row) => (
+              <tr key={row.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900">{row.currency}</td>
+                <td className="px-4 py-3 text-gray-700">{fmtNum(row.referrerPoints)} pts</td>
+                <td className="px-4 py-3 text-gray-700">{fmtNum(row.refereePoints)} pts</td>
+                <td className="px-4 py-3"><Switch checked={row.isActive} onChange={() => toggleActive(row)} /></td>
+                <td className="px-4 py-3 text-gray-500">v{row.version}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
+                <td className="px-4 py-3 text-right">
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(row)}><Pencil className="h-4 w-4" /></Button>
+                </td>
+              </tr>
+            ))}
+            {(config ?? []).length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No currencies configured yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${editRow?.currency ?? ''} Referral Reward`} size="md">
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Referrer points (per successful referral)</label>
+            <Input type="number" min={0} value={referrerValue} onChange={(e) => setReferrerValue(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Referee points (sign-up welcome bonus)</label>
+            <Input type="number" min={0} value={refereeValue} onChange={(e) => setRefereeValue(e.target.value)} required />
+          </div>
+          {editRow && (
+            <p className="text-xs text-gray-500">
+              Current: {fmtNum(editRow.referrerPoints)} / {fmtNum(editRow.refereePoints)} pts → New: {referrerValue || '0'} / {refereeValue || '0'} pts
             </p>
           )}
           <div className="flex justify-end gap-2 pt-2">
@@ -200,12 +357,20 @@ function GlobalSettingsTab() {
       minRedeemPoints: settings.minRedeemPoints,
       maxRedeemPerDayCents: settings.maxRedeemPerDayCents,
       pointsExpiryDays: settings.pointsExpiryDays,
+      // Pre-fill from the EFFECTIVE preview (override or live-FX fallback) for every currency —
+      // the admin edits the same numbers already shown, and saving fixes each one directly.
+      redemptionRates: { ...(settings.redemptionPreview ?? {}) },
     })
     setEditing(true)
   }
 
-  function handleSave(e: FormEvent) {
-    e.preventDefault()
+  function setRate(cur: string, v: string) {
+    const n = parseInt(v, 10) || 0
+    setForm((p) => ({ ...p, redemptionRates: { ...(p.redemptionRates ?? {}), [cur]: n } }))
+  }
+
+  function handleSave(e?: FormEvent) {
+    e?.preventDefault()
     updateMut.mutate(form, {
       onSuccess: () => { showToast({ type: 'success', title: 'Settings updated' }); setEditing(false) },
       onError: () => showToast({ type: 'error', title: 'Failed to update settings' }),
@@ -217,7 +382,7 @@ function GlobalSettingsTab() {
   if (!settings) return null
 
   const fields: { label: string; key: keyof PointsSettings; suffix: string; help: string }[] = [
-    { label: 'Redemption Rate', key: 'pointsPerDollarRedeem', suffix: 'pts = $1', help: 'How many points equal one dollar when redeeming' },
+    { label: 'Redemption Rate', key: 'pointsPerDollarRedeem', suffix: 'pts per $1 USD', help: 'How many points equal one US dollar when redeeming — the base rate. Actual redemptions in other currencies are converted from this via live FX (see preview below).' },
     { label: 'Minimum Redeem', key: 'minRedeemPoints', suffix: 'pts', help: 'Minimum points required to redeem' },
     { label: 'Daily Redeem Cap', key: 'maxRedeemPerDayCents', suffix: 'cents (0=no limit)', help: 'Maximum dollar value redeemable per day in cents' },
     { label: 'Points Expiry', key: 'pointsExpiryDays', suffix: 'days (0=never)', help: 'Days until earned points expire' },
@@ -235,7 +400,7 @@ function GlobalSettingsTab() {
         </div>
 
         {editing ? (
-          <form onSubmit={handleSave} className="space-y-4">
+          <div className="space-y-4">
             {fields.map((f) => (
               <div key={f.key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
@@ -252,11 +417,7 @@ function GlobalSettingsTab() {
                 <p className="text-xs text-gray-400 mt-0.5">{f.help}</p>
               </div>
             ))}
-            <div className="flex gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button type="submit" loading={updateMut.isPending}>Save Changes</Button>
-            </div>
-          </form>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {fields.map((f) => (
@@ -274,11 +435,53 @@ function GlobalSettingsTab() {
       <Card className="p-4 mt-4">
         <p className="text-sm text-gray-600">
           <Calculator className="inline h-4 w-4 mr-1 text-amber-500" />
-          Current conversion: <strong>{fmtNum(settings.pointsPerDollarRedeem)} points = $1.00</strong>
+          Base rate: <strong>{fmtNum(settings.pointsPerDollarRedeem)} points = {formatMoney(1, 'USD')}</strong>
           {settings.pointsExpiryDays > 0 && <> · Points expire after <strong>{settings.pointsExpiryDays} days</strong></>}
           {settings.pointsExpiryDays === 0 && <> · Points <strong>never expire</strong></>}
         </p>
       </Card>
+
+      {settings.redemptionPreview && (
+        <Card className="p-4 mt-4">
+          <p className="text-sm font-medium text-gray-900 mb-1">Redemption rate by currency</p>
+          <p className="text-xs text-gray-500 mb-3">
+            {editing
+              ? 'Editable per currency — this is exactly what customers see and pay at checkout. Leave a currency as-is to keep it live-FX-converted from the base rate above; change a number and save to fix that currency’s rate directly (no more FX for it, same as the earning rates).'
+              : 'The base rate above, converted live (same FX pipeline used at real checkout) into what customers actually see in each currency, unless an admin has set that currency’s rate directly.'}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {ANALYTICS_CURRENCIES.map((cur) => {
+              const pts = settings.redemptionPreview?.[cur]
+              if (pts == null) return null
+              return (
+                <div key={cur} className="rounded-lg border border-gray-100 p-3">
+                  <p className="text-xs text-gray-500 mb-1">{cur}</p>
+                  {editing ? (
+                    <Input
+                      type="number"
+                      min={1}
+                      className="h-8"
+                      value={String(form.redemptionRates?.[cur] ?? pts)}
+                      onChange={(e) => setRate(cur, e.target.value)}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-gray-900">
+                      {fmtNum(pts)} pts = {formatMoney(1, cur)}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {editing && (
+        <div className="flex gap-2 pt-4">
+          <Button type="button" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+          <Button type="button" onClick={() => handleSave()} loading={updateMut.isPending}>Save Changes</Button>
+        </div>
+      )}
     </>
   )
 }
@@ -665,6 +868,7 @@ export default function VVPointsPage() {
       <Tabs defaultValue="rules" value={tab} onChange={setTab}>
         <TabsList>
           <TabsTrigger value="rules">Earning Rules</TabsTrigger>
+          <TabsTrigger value="referral">Referral</TabsTrigger>
           <TabsTrigger value="settings">Global Settings</TabsTrigger>
           <TabsTrigger value="users">User Points</TabsTrigger>
           <TabsTrigger value="log">Change Log</TabsTrigger>
@@ -675,6 +879,7 @@ export default function VVPointsPage() {
       {/* Content */}
       <div className="pt-2">
         {tab === 'rules' && <EarningRulesTab />}
+        {tab === 'referral' && <ReferralConfigTab />}
         {tab === 'settings' && <GlobalSettingsTab />}
         {tab === 'users' && <UserPointsTab />}
         {tab === 'log' && <ChangeLogTab />}

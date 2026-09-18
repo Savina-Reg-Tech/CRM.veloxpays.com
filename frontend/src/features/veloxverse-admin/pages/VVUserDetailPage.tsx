@@ -19,6 +19,7 @@ import { useVeloxVerseCustomerProfile } from '@/features/customers/hooks/useVelo
 import { CustomerActivityList } from '@/features/customers/components/CustomerActivityList'
 import { useVVUserDetail, useVVSetUserStatus } from '../hooks/useVVUsers'
 import { formatUsd, formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 
 function StatTile({
   icon,
@@ -254,7 +255,7 @@ export default function VVUserDetailPage() {
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                               <Badge variant={statusBadgeVariant(o.status)}>{o.status}</Badge>
-                              <span className="text-gray-500">{formatUsd(o.sellingPrice)}</span>
+                              <span className="text-gray-500">{formatMoney(o.priceUsd ?? 0, o.currency)}</span>
                             </div>
                           </li>
                         ))}
@@ -313,7 +314,7 @@ export default function VVUserDetailPage() {
                               className={`shrink-0 font-medium ${li.direction === 'credit' ? 'text-red-600' : 'text-gray-700'}`}
                             >
                               {li.direction === 'credit' ? '−' : ''}
-                              {formatUsd(li.amountUsd)}
+                              {formatMoney(li.amountUsd, li.currency)}
                             </span>
                           </li>
                         ))}
@@ -344,7 +345,7 @@ export default function VVUserDetailPage() {
                             <Badge variant={statusBadgeVariant(m.status)}>{m.status}</Badge>
                           </div>
                           <div className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs text-gray-500 sm:grid-cols-2">
-                            <p>Purchased {formatDate(m.purchasedAt)} · {formatUsd(m.purchasePriceCents / 100)}</p>
+                            <p>Purchased {formatDate(m.purchasedAt)} · {formatMoney(m.purchasePriceCents / 100, m.currency)}</p>
                             <p>
                               Billing cycle {formatDate(m.billingCycleStart)} – {formatDate(m.billingCycleEnd)}
                             </p>
@@ -393,7 +394,7 @@ export default function VVUserDetailPage() {
                           <div className="flex shrink-0 items-center gap-2">
                             <Badge variant={statusBadgeVariant(t.status)}>{t.status}</Badge>
                             <span className="text-gray-500">
-                              {formatUsd((t.salePriceCents ?? 0) / 100)}
+                              {formatMoney((t.salePriceCents ?? 0) / 100, t.currency)}
                             </span>
                           </div>
                         </li>

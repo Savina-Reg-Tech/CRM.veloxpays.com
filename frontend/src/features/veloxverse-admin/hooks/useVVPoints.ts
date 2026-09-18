@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vvPointsService } from '../vvAdminService'
+import { vvPointsService, vvReferralConfigService } from '../vvAdminService'
 
 // ── Earning Rules ──────────────────────────────────────────────────
 
@@ -13,7 +13,7 @@ export function useVVPointsConfig() {
 export function useVVUpdatePointsConfig() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { pointsPerDollar?: number; isActive?: boolean; description?: string } }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: { pointsPerUnit?: number; isActive?: boolean; description?: string } }) =>
       vvPointsService.updateConfig(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points'] }),
   })
@@ -88,5 +88,40 @@ export function useVVPointsDashboard() {
   return useQuery({
     queryKey: ['vv-points', 'dashboard'],
     queryFn: () => vvPointsService.getDashboard(),
+  })
+}
+
+// ── Refer & Earn config (per-currency points) ─────────────────────
+// CRM is the source of truth: each row is a direct, admin-set points count for one supported
+// preferred currency (referrer + referee sides) — VeloxVerse applies the row matching each
+// recipient's own preferred currency at award time. See referralPointsConfig.admin.service.ts.
+
+export function useVVReferralConfig() {
+  return useQuery({
+    queryKey: ['vv-points', 'referral-config'],
+    queryFn: () => vvReferralConfigService.getConfig(),
+  })
+}
+
+export function useVVUpdateReferralConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string
+      patch: { referrerPoints?: number; refereePoints?: number; isActive?: boolean }
+    }) => vvReferralConfigService.updateConfig(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points', 'referral-config'] }),
+  })
+}
+
+export function useVVCreateReferralConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { currency: string; referrerPoints: number; refereePoints: number }) =>
+      vvReferralConfigService.createConfig(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points', 'referral-config'] }),
   })
 }

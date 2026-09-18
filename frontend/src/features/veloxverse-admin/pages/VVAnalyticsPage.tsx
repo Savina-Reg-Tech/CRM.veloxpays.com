@@ -4,8 +4,9 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BarChart3,
-  CreditCard,
   DollarSign,
+  Globe,
+  Info,
   PlaneTakeoff,
   Search,
   TrendingUp,
@@ -16,15 +17,17 @@ import {
 import Skeleton from '@/components/ui/Skeleton'
 import Badge from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { formatMoney } from '@/lib/utils'
 import { LineChart, BarChart } from '../components/Charts'
 import {
   ACTIVITY_TYPE_BADGE_CLASS,
   activityDirection,
   formatActivityAmount,
-  formatUsd,
   timeAgo,
   getInitials,
   statusBadgeVariant,
+  ANALYTICS_CURRENCIES,
+  ANALYTICS_CURRENCY_NAMES,
 } from '../utils'
 import {
   useVVOverview,
@@ -133,29 +136,50 @@ export default function VVAnalyticsPage() {
   const navigate = useNavigate()
   const [period, setPeriod] = useState('30d')
   const [spendingSearch, setSpendingSearch] = useState('')
+  // Drives every platform-wide aggregate below (Overview, revenue breakdown, the revenue chart,
+  // Customer spending, Top eSIM packages) — the backend FX-converts each one into this currency
+  // from whatever real currency each underlying booking was actually charged in. "Recent
+  // activity" is intentionally NOT affected by this — it always shows each transaction's own
+  // real currency, never converted, since that's the one place an admin needs the raw truth.
+  const [currency, setCurrency] = useState('USD')
 
-  const overview = useVVOverview()
-  const revenue = useVVRevenue(period)
+  const overview = useVVOverview(currency)
+  const revenue = useVVRevenue(period, currency)
   const growth = useVVGrowth(period)
-  const popular = useVVPopularPackages(10)
+  const popular = useVVPopularPackages(10, currency)
   const recent = useVVRecentOrders(15)
   const orderStats = useVVOrderStats()
-  const spending = useVVCustomerSpending(20)
+  const spending = useVVCustomerSpending(20, currency)
+
+  const spendingCustomers = spending.data?.customers ?? []
+  const packages = popular.data?.packages ?? []
 
   // filtered + ranked spending
   const filteredSpending = useMemo(() => {
-    const list = spending.data ?? []
-    if (!spendingSearch.trim()) return list
+    if (!spendingSearch.trim()) return spendingCustomers
     const q = spendingSearch.toLowerCase()
-    return list.filter(
+    return spendingCustomers.filter(
       (c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
     )
-  }, [spending.data, spendingSearch])
+  }, [spendingCustomers, spendingSearch])
 
   const maxSpend = useMemo(
-    () => Math.max(...(spending.data ?? []).map((c) => c.totalSpendUsd), 1),
-    [spending.data]
+    () => Math.max(...spendingCustomers.map((c) => c.totalSpend), 1),
+    [spendingCustomers]
   )
+
+  // Native currencies the FX provider couldn't convert for this request, across every
+  // aggregate panel — their amounts are excluded from the totals above rather than silently
+  // added in unconverted (see analytics.service.ts's convertGroupedCentsTo).
+  const fxSkippedCurrencies = useMemo(() => {
+    const all = [
+      ...(overview.data?.fxSkippedCurrencies ?? []),
+      ...(revenue.data?.fxSkippedCurrencies ?? []),
+      ...(popular.data?.fxSkippedCurrencies ?? []),
+      ...(spending.data?.fxSkippedCurrencies ?? []),
+    ]
+    return [...new Set(all)]
+  }, [overview.data, revenue.data, popular.data, spending.data])
 
   return (
     <div className="max-w-full space-y-6">
@@ -168,28 +192,71 @@ export default function VVAnalyticsPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to dashboard
         </Link>
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-lg">
-            <BarChart3 className="h-6 w-6" />
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-lg">
+              <BarChart3 className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+              <p className="text-sm text-gray-500">Revenue, growth, and customer spending across all services.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-sm text-gray-500">Revenue, growth, and customer spending across all services.</p>
-          </div>
+
+          {/* Currency selector — converts every aggregate panel below via live FX rates. */}
+          <label className="flex shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <Globe className="h-4 w-4 text-gray-400" />
+            <span className="text-xs font-medium text-gray-500">Show totals in</span>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="bg-transparent text-sm font-semibold text-gray-900 focus:outline-none"
+            >
+              {ANALYTICS_CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {code} — {ANALYTICS_CURRENCY_NAMES[code]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
+      {/* Note: totals below are converted, live, from each booking's real currency — this isn't
+       * a caveat so much as an explanation of what "Show totals in" does. A separate warning
+       * (below, conditional) covers the case where a specific currency's rate wasn't available. */}
+      <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
+        <p className="text-xs text-indigo-700">
+          Total revenue, the revenue breakdown, the revenue chart, customer spending, and package revenue are
+          converted from each booking's real charged currency into <strong>{currency}</strong> using live FX
+          rates. &ldquo;Recent activity&rdquo; below is the exception — it always shows each transaction in its
+          own real currency, unconverted.
+        </p>
+      </div>
+
+      {fxSkippedCurrencies.length > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <p className="text-xs text-amber-700">
+            Couldn&rsquo;t fetch a live FX rate for {fxSkippedCurrencies.join(', ')} right now — bookings in{' '}
+            {fxSkippedCurrencies.length > 1 ? 'those currencies are' : 'that currency is'} excluded from the totals
+            below rather than added in unconverted. Try reloading in a moment.
+          </p>
+        </div>
+      )}
+
       {/* Overview — top row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {overview.isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
+          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
         ) : (
           <>
             <StatCard
               icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
               tint="bg-emerald-50"
               label="Total revenue"
-              value={formatUsd(overview.data?.totalRevenueUsd ?? 0)}
+              value={formatMoney(overview.data?.totalRevenue ?? 0, currency)}
               sub={`${overview.data?.totalOrders ?? 0} orders`}
             />
             <StatCard
@@ -204,39 +271,40 @@ export default function VVAnalyticsPage() {
               label="Active eSIMs"
               value={String(overview.data?.activeEsims ?? 0)}
             />
-            <StatCard
-              icon={<CreditCard className="h-5 w-5 text-sky-500" />}
-              tint="bg-sky-50"
-              label="Wallet top-ups"
-              value={formatUsd(overview.data?.totalWalletTopUpsUsd ?? 0)}
-            />
           </>
         )}
       </div>
 
       {/* Revenue breakdown by service */}
       {!overview.isLoading && overview.data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             icon={<Wifi className="h-5 w-5 text-blue-500" />}
             tint="bg-blue-50"
             label="eSIM revenue"
-            value={formatUsd(overview.data.esimRevenueUsd)}
+            value={formatMoney(overview.data.esimRevenue, currency)}
             sub={`${overview.data.esimOrders} orders`}
           />
           <StatCard
             icon={<PlaneTakeoff className="h-5 w-5 text-violet-500" />}
             tint="bg-violet-50"
             label="Lounge revenue"
-            value={formatUsd(overview.data.loungeRevenueUsd)}
+            value={formatMoney(overview.data.loungeRevenue, currency)}
             sub={`${overview.data.loungeBookings} bookings`}
           />
           <StatCard
             icon={<Utensils className="h-5 w-5 text-teal-500" />}
             tint="bg-teal-50"
             label="Benefit revenue"
-            value={formatUsd(overview.data.benefitRevenueUsd)}
+            value={formatMoney(overview.data.benefitRevenue, currency)}
             sub={`${overview.data.benefitBookings} bookings`}
+          />
+          <StatCard
+            icon={<ArrowUpRight className="h-5 w-5 text-rose-500" />}
+            tint="bg-rose-50"
+            label="Transfer revenue"
+            value={formatMoney(overview.data.transferRevenue, currency)}
+            sub={`${overview.data.transferBookings} bookings`}
           />
         </div>
       )}
@@ -262,12 +330,12 @@ export default function VVAnalyticsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card padding="sm">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue — All Services (USD)</h2>
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue — All Services ({currency})</h2>
           {revenue.isLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : (
             <LineChart
-              valuePrefix="$"
+              valuePrefix={`${currency} `}
               points={(revenue.data?.points ?? []).map((p) => ({ label: p.date, value: p.amount }))}
             />
           )}
@@ -338,8 +406,8 @@ export default function VVAnalyticsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filteredSpending.map((c: CustomerSpending) => {
-                  const rank = (spending.data ?? []).indexOf(c) + 1
-                  const barPct = maxSpend > 0 ? (c.totalSpendUsd / maxSpend) * 100 : 0
+                  const rank = spendingCustomers.indexOf(c) + 1
+                  const barPct = maxSpend > 0 ? (c.totalSpend / maxSpend) * 100 : 0
                   return (
                     <tr
                       key={c.userId}
@@ -358,10 +426,10 @@ export default function VVAnalyticsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatUsd(c.esimSpendUsd)}</td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatUsd(c.loungeSpendUsd)}</td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatUsd(c.benefitSpendUsd)}</td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatUsd(c.totalSpendUsd)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.esimSpend, currency)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.loungeSpend, currency)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.benefitSpend, currency)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatMoney(c.totalSpend, currency)}</td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                           <div
@@ -390,13 +458,13 @@ export default function VVAnalyticsPage() {
           <h2 className="mb-3 text-sm font-semibold text-gray-900">Top eSIM packages</h2>
           {popular.isLoading ? (
             <Skeleton className="h-40 w-full" />
-          ) : (popular.data ?? []).length === 0 ? (
+          ) : packages.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-500">No sales yet.</p>
           ) : (
             <ul className="space-y-2">
-              {popular.data!.map((p, i) => {
-                const topRevenue = Math.max(...popular.data!.map((x) => x.revenueUsd), 1)
-                const pct = (p.revenueUsd / topRevenue) * 100
+              {packages.map((p, i) => {
+                const topRevenue = Math.max(...packages.map((x) => x.revenue), 1)
+                const pct = (p.revenue / topRevenue) * 100
                 return (
                   <li key={p.packageCode} className="group">
                     <div className="flex items-center justify-between gap-2 text-sm">
@@ -407,7 +475,7 @@ export default function VVAnalyticsPage() {
                         <span className="truncate text-gray-900">{p.packageName ?? p.packageCode}</span>
                       </div>
                       <span className="shrink-0 text-gray-500 tabular-nums">
-                        {p.count} sold · {formatUsd(p.revenueUsd)}
+                        {p.count} sold · {formatMoney(p.revenue, currency)}
                       </span>
                     </div>
                     <div className="mt-1 ml-7 h-1 w-full overflow-hidden rounded-full bg-gray-100">
@@ -426,7 +494,10 @@ export default function VVAnalyticsPage() {
         {/* Recent activity */}
         <Card padding="sm">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
+              <p className="mt-0.5 text-[11px] text-gray-400">Each amount shown in its real transaction currency</p>
+            </div>
             <TrendingUp className="h-4 w-4 text-gray-300" />
           </div>
           {recent.isLoading ? (
@@ -475,7 +546,7 @@ export default function VVAnalyticsPage() {
                         isCredit ? 'text-emerald-600' : 'text-red-500'
                       }`}
                     >
-                      {formatActivityAmount(o.amountUsd, direction)}
+                      {formatActivityAmount(o.amountUsd, direction, o.currency)}
                     </span>
                   </li>
                 )

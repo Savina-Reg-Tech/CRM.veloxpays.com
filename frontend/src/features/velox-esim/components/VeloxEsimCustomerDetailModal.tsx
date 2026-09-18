@@ -1,7 +1,7 @@
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
-import { formatDate, formatDateTime } from '@/lib/utils'
+import { formatDate, formatDateTime, formatMoney } from '@/lib/utils'
 import type { VeloxEsimCustomer, VeloxEsimPurchase } from '@/types'
 
 interface Props {
@@ -11,14 +11,28 @@ interface Props {
   isLoading?: boolean
 }
 
+const CATEGORY_LABEL: Record<string, string> = {
+  ESIM_ORDER: 'eSIM',
+  ESIM_TOPUP: 'eSIM Top-up',
+  LOUNGE_VISIT: 'Lounge / Benefit',
+  TRANSFER: 'Pick & Drop',
+  CLUB_MEMBERSHIP: 'VeloxClub',
+  FLIGHT_BOOKING: 'Flight',
+}
+
+/** Title-cases an unmapped resourceType (e.g. a future module) rather than showing it raw. */
+function categoryLabel(category: string | null | undefined): string {
+  if (!category) return 'Purchase'
+  if (CATEGORY_LABEL[category]) return CATEGORY_LABEL[category]
+  return category
+    .toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 function planLabel(p: VeloxEsimPurchase) {
-  if (p.planType === 'country_specific' && p.countryCode) {
-    return `${p.planName ?? p.planCode ?? 'Plan'} · ${p.countryCode}`
-  }
-  if (p.planType === 'regional' && p.region) {
-    return `${p.planName ?? p.planCode ?? 'Plan'} · ${p.region}`
-  }
-  return p.planName ?? p.planCode ?? 'Plan'
+  return p.planName ?? p.planCode ?? 'Purchase'
 }
 
 export default function VeloxEsimCustomerDetailModal({
@@ -75,14 +89,18 @@ export default function VeloxEsimCustomerDetailModal({
             <div>
               <p className="text-xs text-gray-500">Total spent</p>
               <p className="font-medium text-gray-900">
-                ${customer.totalSpent.toFixed(2)}
+                {formatMoney(customer.totalSpent, customer.totalSpentCurrency)}
               </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Preferred currency</p>
+              <p className="font-medium text-gray-900">{customer.preferredCurrency ?? 'USD'}</p>
             </div>
           </div>
 
           <div>
             <p className="text-sm font-semibold text-gray-900 mb-2">
-              eSIM purchases ({customer.purchases.length})
+              Purchases ({customer.purchases.length})
             </p>
             {customer.purchases.length === 0 ? (
               <p className="text-gray-500 text-sm">No purchases yet.</p>
@@ -95,17 +113,22 @@ export default function VeloxEsimCustomerDetailModal({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="font-medium text-gray-900">{planLabel(p)}</p>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="neutral">{categoryLabel(p.category)}</Badge>
+                          <p className="font-medium text-gray-900">{planLabel(p)}</p>
+                        </div>
                         <p className="text-xs text-gray-500 mt-0.5">
                           {p.orderNo ?? p.orderId} · {formatDateTime(p.purchasedAt)}
                         </p>
-                        <p className="text-xs text-gray-500 capitalize">
-                          {p.planType?.replace(/_/g, ' ') ?? '—'}
-                        </p>
+                        {p.planType && (
+                          <p className="text-xs text-gray-500 capitalize">
+                            {p.planType.toLowerCase().replace(/_/g, ' ')}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-medium text-gray-900">
-                          ${p.amountPaid.toFixed(2)} {p.currency}
+                          {formatMoney(p.amountPaid, p.currency)}
                         </p>
                         <Badge variant="neutral" className="mt-1">
                           {p.status ?? '—'}

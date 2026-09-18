@@ -37,6 +37,27 @@ export function formatDateTime(dateString: string | null | undefined): string {
   })
 }
 
+/**
+ * Format a decimal money amount with its real currency — never a hardcoded `$`. Used for
+ * Velox eSIM purchase/customer amounts, which are charged (and reported) in whatever currency
+ * the customer actually paid in, not always USD.
+ * Example: `formatMoney(57.54, 'INR')` -> "INR 57.54" (falls back gracefully if `currency`
+ * isn't a valid ISO 4217 code `Intl` recognizes).
+ */
+export function formatMoney(amount: number | null | undefined, currency?: string | null): string {
+  const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0
+  const code = (currency || 'USD').toUpperCase()
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      currencyDisplay: 'code',
+    }).format(value)
+  } catch {
+    return `${code} ${value.toFixed(2)}`
+  }
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

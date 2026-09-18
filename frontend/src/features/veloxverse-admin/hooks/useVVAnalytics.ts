@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { vvAnalyticsService } from '../vvAdminService'
 
-export function useVVOverview() {
+export function useVVOverview(currency?: string) {
   return useQuery({
-    queryKey: ['vv-analytics', 'overview'],
-    queryFn: () => vvAnalyticsService.getOverview(),
+    queryKey: ['vv-analytics', 'overview', currency],
+    queryFn: () => vvAnalyticsService.getOverview(currency),
   })
 }
 
-export function useVVRevenue(period: string) {
+export function useVVRevenue(period: string, currency?: string) {
   return useQuery({
-    queryKey: ['vv-analytics', 'revenue', period],
-    queryFn: () => vvAnalyticsService.getRevenue(period),
+    queryKey: ['vv-analytics', 'revenue', period, currency],
+    queryFn: () => vvAnalyticsService.getRevenue(period, currency),
   })
 }
 
@@ -22,10 +22,10 @@ export function useVVGrowth(period: string) {
   })
 }
 
-export function useVVPopularPackages(limit = 10) {
+export function useVVPopularPackages(limit = 10, currency?: string) {
   return useQuery({
-    queryKey: ['vv-analytics', 'popular-packages', limit],
-    queryFn: () => vvAnalyticsService.getPopularPackages(limit),
+    queryKey: ['vv-analytics', 'popular-packages', limit, currency],
+    queryFn: () => vvAnalyticsService.getPopularPackages(limit, currency),
   })
 }
 
@@ -43,9 +43,9 @@ export function useVVOrderStats() {
   })
 }
 
-export function useVVCustomerSpending(limit = 20) {
+export function useVVCustomerSpending(limit = 20, currency?: string) {
   return useQuery({
-    queryKey: ['vv-analytics', 'customer-spending', limit],
-    queryFn: () => vvAnalyticsService.getCustomerSpending(limit),
+    queryKey: ['vv-analytics', 'customer-spending', limit, currency],
+    queryFn: () => vvAnalyticsService.getCustomerSpending(limit, currency),
   })
 }

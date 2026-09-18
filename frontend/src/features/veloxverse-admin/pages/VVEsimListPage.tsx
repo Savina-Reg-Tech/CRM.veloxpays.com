@@ -7,7 +7,8 @@ import Button from '@/components/ui/Button'
 import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
 import { useVVEsimOrders } from '../hooks/useVVEsim'
-import { formatUsd, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 import type { AdminOrderRow } from '../types'
 
 const LIMIT = 20
@@ -86,14 +87,19 @@ export default function VVEsimListPage() {
       key: 'costUsd',
       header: 'Cost',
       render: (row: AdminOrderRow) => (
-        <span className="text-gray-500">{formatUsd(row.costUsd ?? 0)}</span>
+        <span className="text-gray-500">
+          {formatMoney(row.costUsd ?? 0, row.currency)}
+          {row.costCurrencyFallback && (
+            <span className="ml-1 text-amber-500" title="FX unavailable — showing native USD cost">≈</span>
+          )}
+        </span>
       ),
     },
     {
       key: 'sellingPriceUsd',
       header: 'Selling Price',
       render: (row: AdminOrderRow) => (
-        <span className="text-gray-900">{formatUsd(row.sellingPriceUsd ?? 0)}</span>
+        <span className="text-gray-900">{formatMoney(row.sellingPriceUsd ?? 0, row.currency)}</span>
       ),
     },
     {
@@ -103,7 +109,7 @@ export default function VVEsimListPage() {
         const profit = row.profitUsd ?? (row.sellingPriceUsd ?? 0) - (row.costUsd ?? 0)
         return (
           <span className={profit > 0 ? 'text-emerald-600' : 'text-red-600'}>
-            {formatUsd(profit)}
+            {formatMoney(profit, row.currency)}
           </span>
         )
       },

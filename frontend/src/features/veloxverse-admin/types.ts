@@ -4,18 +4,28 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // ── Analytics ───────────────────────────────────────────────────────
+// Overview/revenue/popular-packages/customer-spending are true platform-wide aggregates that can
+// combine bookings made in several different real currencies, so — unlike a single order/visit's
+// own currency — these are now FX-converted server-side into whichever `currency` the admin picks
+// (see the currency selector on the Analytics page), not fixed to USD. `fxSkippedCurrencies` lists
+// any native currency the FX provider couldn't convert for this request; its amount is excluded
+// from the total rather than silently added in unconverted, so a request with skipped currencies
+// under-reports slightly instead of mis-reporting.
 export interface AnalyticsOverview {
-  totalRevenueUsd: number
+  currency: string
+  totalRevenue: number
   totalOrders: number
   activeUsers: number
   activeEsims: number
-  esimRevenueUsd: number
+  esimRevenue: number
   esimOrders: number
-  loungeRevenueUsd: number
+  loungeRevenue: number
   loungeBookings: number
-  benefitRevenueUsd: number
+  benefitRevenue: number
   benefitBookings: number
-  totalWalletTopUpsUsd: number
+  transferRevenue: number
+  transferBookings: number
+  fxSkippedCurrencies: string[]
 }
 
 export interface TimeSeriesPoint {
@@ -26,7 +36,9 @@ export interface TimeSeriesPoint {
 
 export interface RevenueSeries {
   period: string
+  currency: string
   points: { date: string; amount: number }[]
+  fxSkippedCurrencies: string[]
 }
 
 export interface GrowthSeries {
@@ -38,7 +50,13 @@ export interface PopularPackage {
   packageCode: string
   packageName: string
   count: number
-  revenueUsd: number
+  revenue: number
+}
+
+export interface PopularPackagesResult {
+  currency: string
+  packages: PopularPackage[]
+  fxSkippedCurrencies: string[]
 }
 
 export type ActivityDirection = 'credit' | 'debit'
@@ -49,6 +67,9 @@ export interface RecentActivity {
   type: ActivityType
   description: string
   amountUsd: number
+  /** Real currency `amountUsd` is charged/refunded in — "Usd" in that field's name is legacy,
+   * not a guarantee; each row can be a different real currency. */
+  currency: string
   direction?: ActivityDirection
   status: string
   createdAt: string
@@ -64,12 +85,34 @@ export interface CustomerSpending {
   userId: string
   name: string
   email: string
-  totalSpendUsd: number
-  esimSpendUsd: number
-  loungeSpendUsd: number
-  benefitSpendUsd: number
-  travelSpendUsd: number
+  totalSpend: number
+  esimSpend: number
+  loungeSpend: number
+  benefitSpend: number
+  travelSpend: number
+  transferSpend: number
   orderCount: number
+}
+
+export interface CustomerSpendingResult {
+  currency: string
+  customers: CustomerSpending[]
+  fxSkippedCurrencies: string[]
+}
+
+// Finding #397 (CRM dual-amount generalization) — the same "Original Price (native) / FX Rate /
+// Customer Price (converted)" shape already used on the VeloxVerse Invoice Details view (#396),
+// now shared by the CRM's eSIM and Lounge/Benefit admin detail views. Null on both when the
+// booking's payment has no linked PriceQuote (pre-#392 booking, or fully covered by wallet/club
+// redemption) — the plain single-currency fields elsewhere on the object are unaffected either way.
+export interface AdminNativePrice {
+  nativeAmountCents: number
+  nativeCurrency: string
+  convertedAmountCents: number
+  paymentCurrency: string
+  fxRate: number
+  fxRateFetchedAt: string
+  fxProvider: string
 }
 
 // ── eSIM Orders ─────────────────────────────────────────────────────
@@ -90,6 +133,12 @@ export interface AdminOrderRow {
   costUsd: number | null
   sellingPriceUsd: number | null
   profitUsd?: number | null
+  /** The real currency cost/sellingPrice/profit are denominated in — despite the "Usd" field
+   * suffix (kept for API back-compat), these are NOT always USD. Always read this field. */
+  currency?: string
+  /** True when cost couldn't be converted into `currency` (FX unavailable) and is shown in its
+   * native USD instead — an approximation flag, not a currency mismatch. */
+  costCurrencyFallback?: boolean
   iccid?: string
   esimStatus?: string
   smdpStatus?: string
@@ -131,6 +180,7 @@ export interface AdminOrderDetail {
   costUsd: number | null
   sellingPriceUsd: number | null
   profitUsd?: number | null
+  costCurrencyFallback?: boolean
   paymentMethod: string
   totalVolume?: number
   /** Bytes used so far, straight from adminOrderService.buildAdminOrderDetail's `dataUsage` —
@@ -145,6 +195,9 @@ export interface AdminOrderDetail {
   /** The customer device this eSIM was installed on, if any — matches an id in
    * VVAdminUserDetail.devices (fetched separately; the order endpoint only has the raw id). */
   deviceId?: string | null
+  /** #397 — see AdminNativePrice's docblock. Detail-only (not on AdminOrderRow), matching the
+   * existing Transfer CRM precedent of showing dual amounts only in the expanded/detail view. */
+  nativePrice?: AdminNativePrice | null
   createdAt: string
   packages: { code: string | null; name: string | null; location: string | null; volume: number | null; duration: number | null }[]
 }
@@ -161,6 +214,9 @@ export interface LoungeVisit {
   guestCount: number
   status: LoungeVisitStatus
   totalCost: number
+  /** Real charged currency for `totalCost` — falls back to 'USD' for bookings from before this
+   * was tracked. Never assume USD from the absence of a `$` sign upstream. */
+  currency: string
   createdAt: string
 }
 
@@ -198,6 +254,7 @@ export interface LoungeVisitDetail {
   guestCount: number
   status: LoungeVisitStatus
   totalCost: number
+  currency: string
   createdAt: string
   customer: { name: string; email: string } | null
   pricePerVisitCents: number | null
@@ -214,6 +271,9 @@ export interface LoungeVisitDetail {
     totalCents: number
     currency: string
   }
+  /** #397 — see AdminNativePrice's docblock. Covers Lounge, Dining, Fast Track and Fitness since
+   * they all share this same visit detail endpoint. */
+  nativePrice?: AdminNativePrice | null
   cancelledAt: string | null
   cancelledBy: string | null
   bookedAt: string | null
@@ -251,6 +311,10 @@ export interface AdminTransferBooking {
   basePriceCents: number | null
   salePriceCents: number | null
   currency: string
+  /** The currency `basePriceCents` (the native ViaTovia vehicle cost) is actually denominated
+   * in — NOT necessarily `currency`, which is the frozen payment currency `salePriceCents` was
+   * charged in. Falls back to `currency` for bookings that predate this field. */
+  nativeCurrency: string
   distanceKm?: number | null
   status: TransferBookingStatus
   cancellationReason?: string | null
@@ -378,7 +442,10 @@ export interface VVAdminUsersPage {
 export interface VVAdminUserDetail {
   user: VVAdminUser
   wallet: { balance: number; balanceCents: number; currency: string; lastUpdated: string }
-  orders: { orderNo: string; packageName: string; status: string; sellingPrice: number }[]
+  /** Matches `presentOrder()` in veloxverse's order.service.ts — `priceUsd` (major units,
+   * "Usd" is legacy naming) paired with the order's real `currency`, NOT a `sellingPrice`
+   * field (that name doesn't exist on the actual API response). */
+  orders: { orderNo: string; packageName: string; status: string; priceUsd: number | null; currency: string }[]
   devices: { id: string; name: string; brand?: string; model?: string; deviceType: string; esimCompatible?: boolean }[]
 }
 
@@ -437,12 +504,38 @@ export interface VVAdminSearchResult {
 export type PointsTransactionType = 'EARN' | 'REDEEM' | 'EXPIRE' | 'ADMIN_CREDIT' | 'ADMIN_DEBIT' | 'REFERRAL'
 export type PointsServiceType = 'LOUNGE' | 'ESIM' | 'FLIGHT' | 'HOTEL' | 'TRANSFER' | 'INSURANCE' | 'MONEY_TRANSFER' | 'TUITION' | 'UTILITY' | 'REFERRAL'
 
+/**
+ * One row of the (service, currency) earning-rules matrix — `pointsPerUnit` is a direct,
+ * admin-set points count per 1 unit of `currency` (e.g. LOUNGE+USD -> 5 pts per $1, LOUNGE+INR ->
+ * a separately configured rate per ₹1), NOT a monetary rate converted via live FX, mirroring the
+ * same design as `ReferralPointsConfigRow` below. REFERRAL never appears in this list — its
+ * historical single-currency row is legacy/unused since Refer & Earn moved to
+ * `ReferralPointsConfigRow` (filtered server-side).
+ */
 export interface PointsConfigRow {
   id: string
   serviceType: PointsServiceType
-  pointsPerDollar: number
+  currency: string
+  pointsPerUnit: number
   isActive: boolean
   description: string | null
+  version: number
+  updatedBy?: string | null
+  updatedAt: string
+}
+
+/**
+ * Refer & Earn per-currency points config — the CRM-managed source of truth VeloxVerse's
+ * `points-referral.service.ts#awardReferralPoints` reads at award time. One row per supported
+ * preferred currency; `referrerPoints`/`refereePoints` are direct, admin-set point counts (not a
+ * monetary amount converted via a live FX rate), so the reward's value can never drift day to day.
+ */
+export interface ReferralPointsConfigRow {
+  id: string
+  currency: string
+  referrerPoints: number
+  refereePoints: number
+  isActive: boolean
   version: number
   updatedBy?: string | null
   updatedAt: string
@@ -456,6 +549,15 @@ export interface PointsSettings {
   pointsExpiryDays: number
   version: number
   updatedAt: string
+  /** EFFECTIVE points-needed-to-redeem-1-unit for every supported currency, e.g.
+   * `{ USD: 1000, INR: 12, GBP: 1270 }` — an explicit admin override from `redemptionRates` where
+   * one is set, else a live-FX-derived value off `pointsPerDollarRedeem`. What real checkouts
+   * actually use, and the right values to pre-fill an edit form with. */
+  redemptionPreview?: Record<string, number>
+  /** Currently-saved admin overrides only (may omit currencies never explicitly set — those fall
+   * back to live FX in `redemptionPreview` above). Editable: PUT the same field back with new
+   * values to set/change a currency's redemption rate directly. */
+  redemptionRates?: Record<string, number>
 }
 
 export interface PointsLedgerEntry {
@@ -606,6 +708,9 @@ export interface ClubMemberRow {
   billingCycleEnd: string
   invoiceNumber: string | null
   purchasePriceCents: number
+  /** Real currency `purchasePriceCents` was charged in (club-admin.service.ts already returns
+   * this per-row — falls back to 'USD' only for pre-currency-migration memberships). */
+  currency: string
   autoRenew: boolean
 }
 
@@ -633,6 +738,7 @@ export interface ClubMembershipDetail {
   gracePeriodEnd: string | null
   purchasedAt: string
   purchasePriceCents: number
+  currency: string
   paymentMethod: string
   paymentReferenceId: string
   invoiceNumber: string | null
@@ -714,6 +820,9 @@ export interface AdminBillingLineItem {
   service: string
   type: string
   amountUsd: number
+  /** Real currency this line item was charged/refunded in — "Usd" in the field name above is
+   * legacy naming from before multi-currency existed, not a guarantee the value is in USD. */
+  currency: string
   direction: 'debit' | 'credit'
   paymentMethod: string | null
   status: string

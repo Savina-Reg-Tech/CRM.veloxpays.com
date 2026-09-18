@@ -1,4 +1,5 @@
 import type { BadgeVariant } from '@/components/ui/Badge'
+import { formatMoney } from '@/lib/utils'
 import type { ActivityDirection, ActivityType } from './types'
 
 /**
@@ -19,6 +20,24 @@ export function formatUsd(value: number): string {
   return `$${(value ?? 0).toFixed(2)}`
 }
 
+/** Mint-confirmed currencies VeloxVerse can charge/convert — mirrors backend
+ * `SUPPORTED_PREFERRED_CURRENCIES` (veloxverse/backend/src/constants/index.ts). Used to drive the
+ * Analytics page's currency selector; the backend re-validates and falls back to USD for anything
+ * not on this list, so this is a display-only mirror, not the source of truth. */
+export const ANALYTICS_CURRENCIES = ['USD', 'GBP', 'EUR', 'AUD', 'NZD', 'INR', 'BDT', 'CAD'] as const
+export type AnalyticsCurrency = (typeof ANALYTICS_CURRENCIES)[number]
+
+export const ANALYTICS_CURRENCY_NAMES: Record<string, string> = {
+  USD: 'US Dollar',
+  GBP: 'British Pound',
+  EUR: 'Euro',
+  AUD: 'Australian Dollar',
+  NZD: 'New Zealand Dollar',
+  INR: 'Indian Rupee',
+  BDT: 'Bangladeshi Taka',
+  CAD: 'Canadian Dollar',
+}
+
 /** Badge colors for recent-activity type labels (independent of amount sign). */
 export const ACTIVITY_TYPE_BADGE_CLASS: Record<ActivityType, string> = {
   ESIM: 'bg-blue-50 text-blue-700 ring-blue-200',
@@ -36,10 +55,11 @@ export function activityDirection(item: {
   return item.direction ?? (item.type === 'REFUND' ? 'debit' : 'credit')
 }
 
-/** Format a recent-activity amount with +/- sign from direction only. */
-export function formatActivityAmount(amountUsd: number, direction: ActivityDirection): string {
+/** Format a recent-activity amount with +/- sign from direction, in its real currency.
+ * `currency` defaults to USD only for legacy rows that predate the field. */
+export function formatActivityAmount(amountUsd: number, direction: ActivityDirection, currency?: string): string {
   const sign = direction === 'credit' ? '+' : '−'
-  return `${sign}$${(amountUsd ?? 0).toFixed(2)}`
+  return `${sign}${formatMoney(amountUsd, currency)}`
 }
 
 /** Format integer cents (e.g. lounge cost, transfer amount) as $X.XX */

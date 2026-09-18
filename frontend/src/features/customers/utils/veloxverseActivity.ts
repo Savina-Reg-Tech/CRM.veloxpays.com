@@ -14,6 +14,9 @@ export interface CustomerActivityItem {
   subtitle?: string
   status: string
   amountUsd?: number
+  /** Real currency `amountUsd` is denominated in — "Usd" in that field's name is legacy, not a
+   * guarantee. Undefined only for kinds that carry no amountUsd (SUPPORT, FORM). */
+  currency?: string
   isPending: boolean
   isCancelled: boolean
   at: string
@@ -72,7 +75,8 @@ export function buildVeloxVerseActivity(input: {
       title: o.packageName || 'eSIM order',
       subtitle: o.orderNo,
       status: o.status,
-      amountUsd: o.sellingPrice,
+      amountUsd: o.priceUsd ?? 0,
+      currency: o.currency,
       isPending: isPendingStatus(o.status),
       isCancelled: isCancelledStatus(o.status),
       at: o.orderNo,
@@ -87,6 +91,7 @@ export function buildVeloxVerseActivity(input: {
       subtitle: t.orderNo,
       status: t.status,
       amountUsd: (t.salePriceCents ?? 0) / 100,
+      currency: t.currency,
       isPending: isPendingStatus(t.status),
       isCancelled: isCancelledStatus(t.status),
       at: t.createdAt ?? t.orderNo,
@@ -116,6 +121,7 @@ export function buildVeloxVerseActivity(input: {
       subtitle: `Renews ${formatDate(m.billingCycleEnd)}`,
       status: m.status,
       amountUsd: m.purchasePriceCents / 100,
+      currency: m.currency,
       isPending: isPendingStatus(m.status),
       isCancelled: isCancelledStatus(m.status),
       at: m.purchasedAt,

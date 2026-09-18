@@ -5,7 +5,7 @@ import Pagination from '@/components/ui/Pagination'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { useDebounce } from '@/hooks/useDebounce'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatMoney } from '@/lib/utils'
 import { useVeloxEsimCustomers, useVeloxEsimHealth } from '../hooks/useVeloxEsim'
 import VeloxEsimCustomerDetailModal from '../components/VeloxEsimCustomerDetailModal'
 import { useVeloxEsimCustomer } from '../hooks/useVeloxEsim'
@@ -96,6 +96,7 @@ export default function VeloxEsimCustomersPage() {
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Orders</th>
               <th className="px-4 py-3 font-medium">Spent</th>
+              <th className="px-4 py-3 font-medium">Currency</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Last purchase</th>
               <th className="px-4 py-3 font-medium text-right">Actions</th>
@@ -104,13 +105,13 @@ export default function VeloxEsimCustomersPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                   No eSIM customers found.
                 </td>
               </tr>
@@ -132,7 +133,10 @@ export default function VeloxEsimCustomersPage() {
                     <p className="text-xs text-gray-500">{row.phone ?? '—'}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{row.totalOrders}</td>
-                  <td className="px-4 py-3 text-gray-700">${row.totalSpent.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {formatMoney(row.totalSpent, row.totalSpentCurrency)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{row.preferredCurrency ?? 'USD'}</td>
                   <td className="px-4 py-3">
                     <Badge variant={row.isActive ? 'success' : 'danger'} dot>
                       {row.isActive ? 'Active' : 'Inactive'}

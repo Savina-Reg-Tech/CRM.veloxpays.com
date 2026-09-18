@@ -354,6 +354,19 @@ export interface AppNotification {
 // ── Velox eSIM platform (proxied via CRM backend) ─────────────────
 export type VeloxEsimPlanType = 'country_specific' | 'regional'
 
+/** A `Payment.resourceType` value from VeloxVerse — the endpoint sources purchases from the
+ * same billing pipeline as the customer's own Billing & Invoice page, so this spans every
+ * chargeable module, not just eSIM. Typed as `string` (with the known values below) rather than
+ * a closed union so an unmapped future resourceType still renders instead of failing to type-check. */
+export type VeloxPurchaseCategory =
+  | 'ESIM_ORDER'
+  | 'ESIM_TOPUP'
+  | 'TRANSFER'
+  | 'LOUNGE_VISIT'
+  | 'CLUB_MEMBERSHIP'
+  | 'FLIGHT_BOOKING'
+  | (string & {})
+
 export interface VeloxEsimPurchase {
   orderId: string | null
   orderNo: string | null
@@ -366,6 +379,7 @@ export interface VeloxEsimPurchase {
   currency: string
   status: string | null
   purchasedAt: string | null
+  category?: VeloxPurchaseCategory | null
 }
 
 export interface VeloxEsimCustomer {
@@ -379,6 +393,11 @@ export interface VeloxEsimCustomer {
   registeredAt: string | null
   totalOrders: number
   totalSpent: number
+  /** Currency totalSpent is denominated in — VeloxVerse sums each purchase's real charged
+   * amount into the customer's own preferredCurrency, not a blind USD total. */
+  totalSpentCurrency?: string
+  /** The customer's selected display/payment currency on VeloxVerse (ISO 4217, e.g. "INR"). */
+  preferredCurrency?: string
   lastPurchaseAt: string | null
   purchases: VeloxEsimPurchase[]
 }

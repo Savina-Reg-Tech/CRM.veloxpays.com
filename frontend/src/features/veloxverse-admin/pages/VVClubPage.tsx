@@ -40,6 +40,7 @@ import {
 import ClubBenefitsEditor from '../components/ClubBenefitsEditor'
 import Switch from '@/components/ui/Switch'
 import { formatCents, formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 import type {
   ClubTierRow,
   ClubMemberRow,
@@ -393,7 +394,7 @@ function MembersTab() {
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${TIER_COLORS[m.tierSlug] ?? 'bg-gray-100'}`}>{m.tier}</span>
                     </td>
                     <td className="px-4 py-3"><Badge variant={statusBadgeVariant(m.status)}>{m.status}</Badge></td>
-                    <td className="px-4 py-3">{formatCents(m.purchasePriceCents)}</td>
+                    <td className="px-4 py-3">{formatMoney(m.purchasePriceCents / 100, m.currency)}</td>
                     <td className="px-4 py-3">{formatDate(m.billingCycleEnd)}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{m.invoiceNumber ?? '—'}</td>
                     <td className="px-4 py-3">
@@ -437,7 +438,7 @@ function MembersTab() {
                   <span className="text-xs text-gray-500">v{ms.benefitVersion}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
-                  <div>Paid: <span className="font-medium text-gray-900">{formatCents(ms.purchasePriceCents)}</span></div>
+                  <div>Paid: <span className="font-medium text-gray-900">{formatMoney(ms.purchasePriceCents / 100, ms.currency)}</span></div>
                   <div>Method: {ms.paymentMethod}</div>
                   <div>Cycle: {formatDate(ms.billingCycleStart)} – {formatDate(ms.billingCycleEnd)}</div>
                   <div>Auto-renew: {ms.autoRenew ? 'Yes' : 'No'}</div>

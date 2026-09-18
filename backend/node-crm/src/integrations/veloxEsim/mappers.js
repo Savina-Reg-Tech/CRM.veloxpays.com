@@ -21,6 +21,11 @@ export function mapVeloxPurchase(raw) {
     currency: p.currency ?? "USD",
     status: p.status ?? null,
     purchasedAt: p.purchasedAt ?? null,
+    // Which VeloxVerse module this purchase came from — a Payment.resourceType value
+    // (ESIM_ORDER / ESIM_TOPUP / TRANSFER / LOUNGE_VISIT / CLUB_MEMBERSHIP / FLIGHT_BOOKING).
+    // Sourced from the same billing pipeline as the customer's own Billing & Invoice page, so
+    // this covers every chargeable module, not just eSIM.
+    category: p.category ?? null,
   };
 }
 
@@ -46,6 +51,12 @@ export function mapVeloxCustomer(raw) {
     registeredAt: c.registeredAt ?? null,
     totalOrders: typeof c.totalOrders === "number" ? c.totalOrders : Number(c.totalOrders) || 0,
     totalSpent: typeof c.totalSpent === "number" ? c.totalSpent : Number(c.totalSpent) || 0,
+    // Currency the totalSpent figure above is denominated in (the customer's own preferred
+    // currency — VeloxVerse sums each purchase's real charged amount into this currency rather
+    // than a blind USD total).
+    totalSpentCurrency: c.totalSpentCurrency ?? "USD",
+    // The customer's selected display/payment currency on VeloxVerse (ISO 4217).
+    preferredCurrency: c.preferredCurrency ?? "USD",
     lastPurchaseAt: c.lastPurchaseAt ?? null,
     purchases,
   };

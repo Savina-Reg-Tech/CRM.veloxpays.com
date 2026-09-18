@@ -28,7 +28,8 @@ import { Card } from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import { useToast } from '@/app/providers/ToastProvider'
 import { useVVTransferBookings, useVVTransferCancelReasons, useVVCancelTransfer } from '../hooks/useVVTransfers'
-import { formatCents, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 import type { AdminTransferBooking, TransferBookingStatus } from '../types'
 import MeetGreetSection from '../components/MeetGreetSection'
 
@@ -187,7 +188,7 @@ function BookingCard({
       </div>
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
-        <span className="text-base font-semibold text-gray-900">{formatCents(booking.salePriceCents ?? 0)}</span>
+        <span className="text-base font-semibold text-gray-900">{formatMoney((booking.salePriceCents ?? 0) / 100, booking.currency)}</span>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => onViewMore(booking)}>
             <Eye className="h-3.5 w-3.5" />
@@ -249,9 +250,16 @@ export default function VVTransfersPage() {
   const stats = useMemo(() => {
     const all = bookings ?? []
     const charged = all.filter((b) => b.status !== 'CANCELLED' && b.status !== 'FAILED')
-    const revenueCents = charged.reduce((s, b) => s + (b.salePriceCents ?? 0), 0)
+    // Bookings can be charged in different currencies (INR, AUD, USD…) per customer's preferred
+    // currency — summing raw cents across them would silently mix units, so revenue is kept as
+    // one subtotal per currency rather than a single (wrong) number.
+    const revenueByCurrency = new Map<string, number>()
+    for (const b of charged) {
+      const cur = b.currency || 'USD'
+      revenueByCurrency.set(cur, (revenueByCurrency.get(cur) ?? 0) + (b.salePriceCents ?? 0))
+    }
     const cancelled = all.filter((b) => b.status === 'CANCELLED').length
-    return { total: all.length, revenue: revenueCents, cancelled }
+    return { total: all.length, revenueByCurrency, cancelled }
   }, [bookings])
 
   const handleCopyReservation = (reservationNo: string) => {
@@ -284,7 +292,7 @@ export default function VVTransfersPage() {
         title: 'Booking cancelled',
         message:
           result.refundedCents > 0
-            ? `${who}'s transfer was cancelled and ${formatCents(result.refundedCents)} refunded.`
+            ? `${who}'s transfer was cancelled and ${formatMoney(result.refundedCents / 100, result.currency)} refunded.`
             : `${who}'s transfer was cancelled. No refund was issued (non-refundable).`,
       })
       setDetailBooking(null)
@@ -360,7 +368,13 @@ export default function VVTransfersPage() {
             />
             <StatCard
               label="Revenue (charged)"
-              value={formatCents(stats.revenue)}
+              value={
+                stats.revenueByCurrency.size === 0
+                  ? formatMoney(0, 'USD')
+                  : [...stats.revenueByCurrency.entries()]
+                      .map(([currency, cents]) => formatMoney(cents / 100, currency))
+                      .join(' + ')
+              }
               icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
               tint="bg-emerald-50"
             />
@@ -461,7 +475,7 @@ export default function VVTransfersPage() {
                 </div>
               </div>
               <span className="text-xl font-bold text-gray-900">
-                {formatCents(detailBooking.salePriceCents ?? 0)}
+                {formatMoney((detailBooking.salePriceCents ?? 0) / 100, detailBooking.currency)}
               </span>
             </div>
 
@@ -594,11 +608,19 @@ export default function VVTransfersPage() {
                 <DetailRow label="Method" value={paymentMethodLabel(detailBooking.paymentMethod)} />
                 <DetailRow
                   label="Base price"
-                  value={detailBooking.basePriceCents != null ? formatCents(detailBooking.basePriceCents) : null}
+                  value={
+                    detailBooking.basePriceCents != null
+                      ? formatMoney(detailBooking.basePriceCents / 100, detailBooking.nativeCurrency)
+                      : null
+                  }
                 />
                 <DetailRow
                   label="Sale price"
-                  value={detailBooking.salePriceCents != null ? formatCents(detailBooking.salePriceCents) : null}
+                  value={
+                    detailBooking.salePriceCents != null
+                      ? formatMoney(detailBooking.salePriceCents / 100, detailBooking.currency)
+                      : null
+                  }
                 />
               </div>
             </SectionCard>

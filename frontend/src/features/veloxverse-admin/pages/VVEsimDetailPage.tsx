@@ -27,7 +27,8 @@ import {
   useVVUnsuspendEsim,
 } from '../hooks/useVVEsim'
 import { useVVUserDetail } from '../hooks/useVVUsers'
-import { formatUsd, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatDateTime, statusBadgeVariant } from '../utils'
+import { formatMoney } from '@/lib/utils'
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return '—'
@@ -403,16 +404,49 @@ export default function VVEsimDetailPage() {
           <Card>
             <CardHeader title="Pricing" />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <DetailRow icon={CreditCard} label="Cost" value={formatUsd(order.costUsd ?? 0)} />
+              <DetailRow
+                icon={CreditCard}
+                label="Cost"
+                value={
+                  formatMoney(order.costUsd ?? 0, order.currency) +
+                  (order.costCurrencyFallback ? ' (approx., FX unavailable)' : '')
+                }
+              />
               <DetailRow
                 icon={CreditCard}
                 label="Selling Price"
-                value={formatUsd(order.sellingPriceUsd ?? 0)}
+                value={formatMoney(order.sellingPriceUsd ?? 0, order.currency)}
               />
-              <DetailRow icon={CreditCard} label="Profit" value={formatUsd(profit)} />
+              <DetailRow icon={CreditCard} label="Profit" value={formatMoney(profit, order.currency)} />
               <DetailRow icon={CreditCard} label="Payment" value={order.paymentMethod} />
             </div>
           </Card>
+
+          {/* Currency conversion — #397 (CRM dual-amount generalization), same block already on
+              the VeloxVerse Invoice Details view (#396). Only shown when the order was priced in a
+              currency other than what was actually charged. */}
+          {order.nativePrice && (
+            <Card>
+              <CardHeader title="Currency conversion" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <DetailRow
+                  icon={CreditCard}
+                  label={`Original Price (${order.nativePrice.nativeCurrency})`}
+                  value={formatMoney(order.nativePrice.nativeAmountCents / 100, order.nativePrice.nativeCurrency)}
+                />
+                <DetailRow
+                  icon={CreditCard}
+                  label={`FX Rate (${order.nativePrice.nativeCurrency} → ${order.nativePrice.paymentCurrency})`}
+                  value={`${order.nativePrice.fxRate.toFixed(4)} (via ${order.nativePrice.fxProvider})`}
+                />
+                <DetailRow
+                  icon={CreditCard}
+                  label={`Customer Price (${order.nativePrice.paymentCurrency})`}
+                  value={formatMoney(order.nativePrice.convertedAmountCents / 100, order.nativePrice.paymentCurrency)}
+                />
+              </div>
+            </Card>
+          )}
 
           {order.packages && order.packages.length > 0 && (
             <Card padding="none">

@@ -1,7 +1,8 @@
 import type { ComponentType } from 'react'
 import { Smartphone, Car, Headphones, HandHelping, Crown } from 'lucide-react'
 import Badge from '@/components/ui/Badge'
-import { formatUsd, statusBadgeVariant } from '@/features/veloxverse-admin/utils'
+import { statusBadgeVariant } from '@/features/veloxverse-admin/utils'
+import { formatMoney } from '@/lib/utils'
 import type { CustomerActivityItem } from '../utils/veloxverseActivity'
 
 const KIND_ICON: Record<CustomerActivityItem['kind'], ComponentType<{ className?: string }>> = {
@@ -32,7 +33,7 @@ function ActivityRow({ item }: { item: CustomerActivityItem }) {
       </div>
       {item.amountUsd != null && (
         <span className="shrink-0 text-sm font-medium text-gray-900">
-          {formatUsd(item.amountUsd)}
+          {formatMoney(item.amountUsd, item.currency)}
         </span>
       )}
     </li>
