@@ -11,12 +11,12 @@ import { layoutFields } from '../utils/layoutFields'
 import {
   resolveTheme, themePageStyle, themeCardStyle, themeHeaderStyle,
   themeHeaderTextStyle, themeButtonStyle, themeButtonHoverColor, themeLabelStyle,
-  themeInputBorderStyle, themeInputStyle, themeCheckStyle,
+  themeInputBorderStyle, themeInputStyle, themeCheckStyle, FORM_CONTROL_TEXT_CLS,
 } from '../utils/theme'
 import { parseInlineLinks } from '../utils/richText'
 
 function PreviewField({ field, theme }: { field: FormField; theme: Required<FormTheme> }) {
-  const inputCls = 'w-full px-3 py-2 text-sm border'
+  const inputCls = `w-full px-3 py-2 ${FORM_CONTROL_TEXT_CLS} border`
   const inputStyle = {
     borderRadius: `calc(${themeCardStyle(theme).borderRadius} * 0.6)`,
     ...themeInputStyle(theme),

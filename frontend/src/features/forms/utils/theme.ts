@@ -178,6 +178,12 @@ export function themeInputStyle(theme: Required<FormTheme>): React.CSSProperties
   }
 }
 
+/** Font-size classes for every text-entry control (input/textarea/select) in a
+ * rendered form. iOS Safari auto-zooms the page when a focused control's font
+ * is under 16px, so controls are 16px below the `sm` breakpoint and keep the
+ * original 14px (`text-sm`) from `sm` up. Checkbox/radio inputs don't use it. */
+export const FORM_CONTROL_TEXT_CLS = 'text-base sm:text-sm'
+
 /** Style for a native checkbox/radio `<input>` — accent color plus the same
  * light-appearance forcing as themeInputStyle, so the box itself stays
  * visible against a dark card instead of picking up OS dark-mode UA styles. */

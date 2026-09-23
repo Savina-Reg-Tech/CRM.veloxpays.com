@@ -43,7 +43,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import type { ConditionalRule, Form, FormField, FormTheme } from '../types'
 import { BORDER_RADIUS_PRESETS, NAVIGATION_ACTION_TYPES } from '../types'
 import { layoutFields } from '../utils/layoutFields'
-import { resolveTheme } from '../utils/theme'
+import { resolveTheme, FORM_CONTROL_TEXT_CLS } from '../utils/theme'
 import { parseInlineLinks } from '../utils/richText'
 import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
 import { ensureAbsoluteUrl } from '../utils/url'
@@ -323,7 +323,7 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
     color: `#${theme.inputTextColor}`,
     colorScheme: 'light',
   }
-  const inputCls = 'w-full px-3 py-2 text-sm border focus:outline-none focus:ring-2 transition-shadow'
+  const inputCls = `w-full px-3 py-2 ${FORM_CONTROL_TEXT_CLS} border focus:outline-none focus:ring-2 transition-shadow`
   const focusStyle = { '--tw-ring-color': `#${theme.primary}55` } as React.CSSProperties
   const checkStyle: React.CSSProperties = { accentColor: `#${theme.primary}`, colorScheme: 'light' }
   const required = !hidden && effectiveRequired
