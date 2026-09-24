@@ -27,7 +27,12 @@ export function useVVSetUserStatus() {
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       vvUsersService.setStatus(id, isActive),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-users'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['vv-users'] })
+      // Blocking a referred user claws back the referrer's reward — refresh any open points
+      // ledger (the referrer isn't known here, so refresh all points views).
+      qc.invalidateQueries({ queryKey: ['vv-points'] })
+    },
   })
 }
 

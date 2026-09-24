@@ -10,7 +10,7 @@ import type {
   VVAdminUser, VVAdminUsersPage, VVAdminUserDetail, VVUserRole,
   VVSupportTicket, VVSupportStatistics, VVAdminTicketFilters, VVAdminSearchResult,
   VVAdminSettings, VVEsimApiTestResult, VVApiTestResult,
-  PointsConfigRow, PointsSettings, AdminPointsUsersPage, AdminUserPoints,
+  PointsConfigRow, PointsSettings, PointsSettingsUpdate, AdminPointsUsersPage, AdminUserPoints,
   ReferralPointsConfigRow,
   PointsAuditPage, PointsDashboard,
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
@@ -264,7 +264,7 @@ export const vvPointsService = {
     const { data } = await api.get<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`)
     return data.data.settings
   },
-  async updateSettings(patch: Partial<Omit<PointsSettings, 'id' | 'version' | 'updatedAt'>>) {
+  async updateSettings(patch: PointsSettingsUpdate) {
     const { data } = await api.put<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`, patch)
     return data.data.settings
   },
@@ -278,6 +278,17 @@ export const vvPointsService = {
   async getUserPoints(userId: string, page = 1) {
     const { data } = await api.get<VVResponse<AdminUserPoints>>(`${VV}/admin/points/users/${userId}`, { params: { page } })
     return data.data
+  },
+  /** Every ledger row for a user (all pages, 100 at a time) — referral history is rebuilt from the
+   * whole ledger, since award and reversal rows can sit on different pages. */
+  async getUserLedgerAll(userId: string, maxPages = 50) {
+    const all: AdminUserPoints['history'] = []
+    for (let page = 1; page <= maxPages; page++) {
+      const { data } = await api.get<VVResponse<AdminUserPoints>>(`${VV}/admin/points/users/${userId}`, { params: { page, limit: 100 } })
+      all.push(...data.data.history)
+      if (page >= data.data.pagination.totalPages) break
+    }
+    return all
   },
   async adjustPoints(userId: string, amount: number, reason: string) {
     const { data } = await api.post<VVResponse<{ entry: unknown }>>(`${VV}/admin/points/users/${userId}/adjust`, { amount, reason })

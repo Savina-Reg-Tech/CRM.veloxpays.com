@@ -9,10 +9,13 @@ import type { ClubBenefits, ClubTierRow } from '../types'
 const selectClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-sm text-gray-600">{label}</span>
+      <div className="min-w-0">
+        <span className="text-sm text-gray-600">{label}</span>
+        {help && <p className="text-xs text-gray-400">{help}</p>}
+      </div>
       <div className="w-40 shrink-0">{children}</div>
     </div>
   )
@@ -79,8 +82,11 @@ export default function ClubBenefitsEditor({ tier, open, onClose, onSuccess }: C
 
   function handleSave() {
     if (!tier || !benefits) return
+    // Credit cashback and bank bonus aren't delivered by VeloxVerse yet, so they're hidden here and
+    // always saved as 0 — members must not be promised something they don't get.
+    const toSave: ClubBenefits = { ...benefits, credit_cashback_max_cents: 0, bank_bonus_bdt: 0 }
     update.mutate(
-      { tierId: tier.id, benefits, changeNote: note || undefined },
+      { tierId: tier.id, benefits: toSave, changeNote: note || undefined },
       {
         onSuccess: () => {
           onSuccess?.()
@@ -122,7 +128,12 @@ export default function ClubBenefitsEditor({ tier, open, onClose, onSuccess }: C
 
         <div className="py-2">
           <p className="mb-1 text-xs font-semibold uppercase text-gray-400">eSIM & Transfers</p>
-          <Row label="eSIM free GB"><Num value={esim?.gb ?? 0} min={0} onChange={(n) => set('esim.gb', n)} /></Row>
+          <Row
+            label="Free eSIM data (GB per membership year)"
+            help="Members can redeem any fixed-data eSIM package(s) until this many GB are used. A package must fit in the GB left; unlimited plans aren't covered."
+          >
+            <Num value={esim?.gb ?? 0} min={0} onChange={(n) => set('esim.gb', Math.max(0, Math.floor(n)))} />
+          </Row>
           <Row label="Pick & Drop rides"><Num value={pickDrop?.rides ?? 0} onChange={(n) => set('pick_drop.rides', n)} /></Row>
           <Row label="Pick & Drop discount %"><Num value={pickDrop?.discount_pct ?? 0} min={0} onChange={(n) => set('pick_drop.discount_pct', n)} /></Row>
           <Row label="Meet & Greet (-1 = unltd)"><Num value={meetGreet?.visits ?? 0} onChange={(n) => set('meet_greet.visits', n)} /></Row>
@@ -144,8 +155,6 @@ export default function ClubBenefitsEditor({ tier, open, onClose, onSuccess }: C
               <option value="24_7_vip">24/7 VIP</option>
             </select>
           </Row>
-          <Row label="Cashback max (cents)"><Num value={Number(benefits.credit_cashback_max_cents ?? 0)} min={0} onChange={(n) => set('credit_cashback_max_cents', n)} /></Row>
-          <Row label="Bank bonus (BDT)"><Num value={Number(benefits.bank_bonus_bdt ?? 0)} min={0} onChange={(n) => set('bank_bonus_bdt', n)} /></Row>
           <Row label="Point multiplier"><Num value={Number(benefits.point_multiplier ?? 0)} min={0} onChange={(n) => set('point_multiplier', n)} /></Row>
         </div>
       </div>

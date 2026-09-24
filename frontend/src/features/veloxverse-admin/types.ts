@@ -516,7 +516,11 @@ export interface PointsConfigRow {
   id: string
   serviceType: PointsServiceType
   currency: string
+  /** May be fractional (up to 4 dp), e.g. 0.1 pts per ₹1. */
   pointsPerUnit: number
+  /** Computed by VeloxVerse: pointsPerUnit ÷ pointsPerUnitRedeem[currency] × 100, before the club
+   * multiplier. null when the currency has no redemption rate (redemption off). */
+  percentBack: number | null
   isActive: boolean
   description: string | null
   version: number
@@ -543,21 +547,30 @@ export interface ReferralPointsConfigRow {
 
 export interface PointsSettings {
   id: string
-  pointsPerDollarRedeem: number
+  /** Fixed "points needed to redeem 1 unit" per supported currency — no live FX anywhere.
+   * null = redemption is switched off for customers paying in that currency. */
+  pointsPerUnitRedeem: Record<string, number | null>
   minRedeemPoints: number
+  /** USD cents, 0 = no cap. Valued at the fixed USD redemption rate. */
   maxRedeemPerDayCents: number
+  /** 0 = never. */
   pointsExpiryDays: number
   version: number
   updatedAt: string
-  /** EFFECTIVE points-needed-to-redeem-1-unit for every supported currency, e.g.
-   * `{ USD: 1000, INR: 12, GBP: 1270 }` — an explicit admin override from `redemptionRates` where
-   * one is set, else a live-FX-derived value off `pointsPerDollarRedeem`. What real checkouts
-   * actually use, and the right values to pre-fill an edit form with. */
-  redemptionPreview?: Record<string, number>
-  /** Currently-saved admin overrides only (may omit currencies never explicitly set — those fall
-   * back to live FX in `redemptionPreview` above). Editable: PUT the same field back with new
-   * values to set/change a currency's redemption rate directly. */
+  /** @deprecated alias of `pointsPerUnitRedeem.USD` — do not build on it. */
+  pointsPerDollarRedeem?: number
+  /** @deprecated raw saved map — use `pointsPerUnitRedeem`. */
   redemptionRates?: Record<string, number>
+  /** @deprecated alias of `pointsPerUnitRedeem`. */
+  redemptionPreview?: Record<string, number | null>
+}
+
+export interface PointsSettingsUpdate {
+  /** Partial map OK — only listed currencies change. Integers ≥ 1. */
+  pointsPerUnitRedeem?: Record<string, number>
+  minRedeemPoints?: number
+  maxRedeemPerDayCents?: number
+  pointsExpiryDays?: number
 }
 
 export interface PointsLedgerEntry {
@@ -723,6 +736,9 @@ export interface ClubMemberUsage {
   benefitKey: string
   bookingId: string
   bookingType: string
+  /** How much of the benefit this claim used: GB for `esim` (the metered data grant), 1 for
+   * every other benefit. Pre-release eSIM claims were backfilled with the member's full grant. */
+  units: number
   consumedAt: string
 }
 

@@ -45,6 +45,7 @@ import type {
   ClubTierRow,
   ClubMemberRow,
   ClubMembershipDetail,
+  ClubMemberUsage,
   ClubPromoRow,
   ClubBenefitVersion,
   ClubMembershipStatus,
@@ -82,6 +83,34 @@ function ErrorBanner({ error }: { error: unknown }) {
     <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       <AlertCircle className="h-4 w-4 flex-shrink-0" />
       <span>{msg}</span>
+    </div>
+  )
+}
+
+// ─────────────────────────── eSIM data grant ──────────────────────
+// The eSIM benefit is metered in GB: each claim's `units` is the GB it used (package GB × qty).
+// Never show it as a count of eSIMs or compute it as `gb − number of claims`.
+
+/** VeloxVerse switched to GB metering with migration 20260924000002; eSIM claims before it were
+ * backfilled as using the member's whole grant. */
+const ESIM_METERED_SINCE = '2026-09-24T00:00:00Z'
+
+function fmtGb(gb: number): string {
+  return `${Number(gb.toFixed(3)).toLocaleString(undefined, { maximumFractionDigits: 3 })} GB`
+}
+
+function isPreReleaseEsimClaim(u: ClubMemberUsage, grantGb: number): boolean {
+  return u.benefitKey === 'esim' && u.consumedAt < ESIM_METERED_SINCE && Number(u.units) >= grantGb
+}
+
+function EsimGrantSummary({ ms }: { ms: ClubMembershipDetail }) {
+  const grant = Number(ms.benefitsSnapshot?.esim?.gb ?? 0)
+  if (!(grant > 0)) return null
+  const used = ms.usage.filter((u) => u.benefitKey === 'esim').reduce((sum, u) => sum + Number(u.units ?? 0), 0)
+  const left = Math.max(0, grant - used)
+  return (
+    <div className="rounded bg-green-50 px-2 py-1 text-xs text-green-800">
+      Travel eSIM data: <span className="font-medium">{fmtGb(used)} used of {fmtGb(grant)}</span> · {fmtGb(left)} left
     </div>
   )
 }
@@ -281,12 +310,12 @@ function TiersTab() {
                         if (key === 'point_multiplier') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">{String(val)}x pts</span>
                         if (key === 'support_level') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Support: {String(val)}</span>
                         if (key === 'dedicated_manager') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Manager: {val ? 'Yes' : 'No'}</span>
-                        if (key === 'credit_cashback_max_cents') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Cashback: {formatCents(val as number)}</span>
-                        if (key === 'bank_bonus_bdt') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Bank: {String(val)} BDT</span>
+                        // Not delivered by VeloxVerse yet — hidden until the feature exists.
+                        if (key === 'credit_cashback_max_cents' || key === 'bank_bonus_bdt') return null
                         const label = BENEFIT_LABELS[key] ?? key
                         const v2 = val as Record<string, unknown>
                         if (v2?.type === 'quota') return <span key={key} className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{label}: {String((v2.visits ?? v2.rides) === -1 ? '∞' : (v2.visits ?? v2.rides ?? 0))} free{v2.discount_pct ? ` / ${String(v2.discount_pct)}% off` : ''}</span>
-                        if (v2?.type === 'data_grant') return <span key={key} className="rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">{label}: {String(v2.gb)}GB</span>
+                        if (v2?.type === 'data_grant') return <span key={key} className="rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">{label}: {fmtGb(Number(v2.gb ?? 0))} free data / year</span>
                         if (v2?.type === 'boolean') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">{label}: {v2.enabled ? 'Yes' : 'No'}</span>
                         return null
                       })}
@@ -445,15 +474,24 @@ function MembersTab() {
                   <div>Invoice: {ms.invoiceNumber ?? '—'}</div>
                   <div>Order: {ms.orderNo ?? '—'}</div>
                 </div>
+                <EsimGrantSummary ms={ms} />
                 {ms.usage.length > 0 && (
                   <div>
                     <div className="text-xs font-medium text-gray-500 mb-1">Usage ({ms.usage.length})</div>
                     <div className="flex flex-wrap gap-1">
-                      {ms.usage.map((u, i) => (
-                        <span key={i} className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                          {BENEFIT_LABELS[u.benefitKey] ?? u.benefitKey} — {u.bookingType}
-                        </span>
-                      ))}
+                      {ms.usage.map((u, i) => {
+                        const preRelease = isPreReleaseEsimClaim(u, Number(ms.benefitsSnapshot?.esim?.gb ?? 0))
+                        return (
+                          <span
+                            key={i}
+                            className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+                            title={preRelease ? 'Claimed under the previous one-claim rule' : undefined}
+                          >
+                            {BENEFIT_LABELS[u.benefitKey] ?? u.benefitKey} — {u.bookingType}
+                            {u.benefitKey === 'esim' && <> · {fmtGb(Number(u.units ?? 0))}{preRelease ? ' *' : ''}</>}
+                          </span>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

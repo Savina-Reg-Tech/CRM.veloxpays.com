@@ -55,6 +55,15 @@ export function useVVUserPoints(userId: string | undefined, page = 1) {
   })
 }
 
+/** Full ledger for rebuilding a user's Refer & Earn history (see referralHistory.ts). */
+export function useVVUserLedgerAll(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['vv-points', 'user-ledger-all', userId],
+    queryFn: () => vvPointsService.getUserLedgerAll(userId!),
+    enabled: !!userId,
+  })
+}
+
 export function useVVAdjustPoints() {
   const qc = useQueryClient()
   return useMutation({

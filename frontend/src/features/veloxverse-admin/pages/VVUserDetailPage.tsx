@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -12,6 +13,8 @@ import {
 import { Card } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Switch from '@/components/ui/Switch'
+import Modal from '@/components/ui/Modal'
+import Button from '@/components/ui/Button'
 import Spinner from '@/components/ui/Spinner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { useToast } from '@/app/providers/ToastProvider'
@@ -53,6 +56,7 @@ export default function VVUserDetailPage() {
   const { data, isLoading } = useVVUserDetail(id)
   const setStatus = useVVSetUserStatus()
   const { showToast } = useToast()
+  const [confirmBlock, setConfirmBlock] = useState(false)
 
   // Every order, booking, VeloxClub membership, support ticket, form request, and dollar of
   // spend/refund tied to this VeloxVerse account — this page is the CRM's single "customer 360"
@@ -60,10 +64,18 @@ export default function VVUserDetailPage() {
   // more" on a VeloxVerse row, which now opens this page directly instead of a popup).
   const profile = useVeloxVerseCustomerProfile(data?.user.id ?? null, data?.user.email)
 
+  // Blocking goes through a confirm step: VeloxVerse claws back the referrer's reward when a
+  // referred account is blocked. Re-activating applies straight away.
+  const handleToggle = (isActive: boolean) => {
+    if (isActive) void handleStatus(true)
+    else setConfirmBlock(true)
+  }
+
   const handleStatus = async (isActive: boolean) => {
     if (!data) return
     try {
       await setStatus.mutateAsync({ id: data.user.id, isActive })
+      setConfirmBlock(false)
       showToast({
         type: 'success',
         title: 'Status updated',
@@ -141,7 +153,7 @@ export default function VVUserDetailPage() {
                   <Switch
                     checked={data.user.isActive}
                     disabled={setStatus.isPending}
-                    onChange={handleStatus}
+                    onChange={handleToggle}
                   />
                 </div>
                 {/* Account type only — this is a customer record (guest or registered), so
@@ -471,6 +483,21 @@ export default function VVUserDetailPage() {
           </Card>
         </div>
       )}
+
+      <Modal open={confirmBlock} onClose={() => setConfirmBlock(false)} title="Deactivate account?" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            {data?.user.email} will no longer be able to sign in.
+          </p>
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            If this user was referred, the referrer's referral reward will be clawed back.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setConfirmBlock(false)}>Cancel</Button>
+            <Button variant="danger" onClick={() => void handleStatus(false)} loading={setStatus.isPending}>Deactivate</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
