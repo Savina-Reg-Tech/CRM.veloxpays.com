@@ -1,6 +1,6 @@
 import { GripVertical, Trash2, LayoutTemplate } from 'lucide-react'
 import type { FormField } from '../../types'
-import { parseInlineLinks } from '../../utils/richText'
+import { InlineLinks } from '../../utils/richText'
 
 interface FieldCanvasProps {
   fields: FormField[]
@@ -32,8 +32,8 @@ function FieldPreview({ field }: { field: FormField }) {
       return (
         <div className="space-y-1 pointer-events-none">
           {(field.options ?? []).map((o) => (
-            <label key={o} className="flex items-center gap-2 text-sm text-gray-400">
-              <input type="checkbox" disabled /> {parseInlineLinks(o)}
+            <label key={o} className="flex items-start gap-2 text-sm text-gray-400">
+              <input type="checkbox" disabled className="mt-0.5 shrink-0" /> <InlineLinks text={o} />
             </label>
           ))}
         </div>
@@ -42,8 +42,8 @@ function FieldPreview({ field }: { field: FormField }) {
       return (
         <div className="space-y-1 pointer-events-none">
           {(field.options ?? []).map((o) => (
-            <label key={o} className="flex items-center gap-2 text-sm text-gray-400">
-              <input type="radio" disabled /> {parseInlineLinks(o)}
+            <label key={o} className="flex items-start gap-2 text-sm text-gray-400">
+              <input type="radio" disabled className="mt-0.5 shrink-0" /> <InlineLinks text={o} />
             </label>
           ))}
         </div>

@@ -13,7 +13,7 @@ import {
   themeHeaderTextStyle, themeButtonStyle, themeButtonHoverColor, themeLabelStyle,
   themeInputBorderStyle, themeInputStyle, themeCheckStyle, FORM_CONTROL_TEXT_CLS,
 } from '../utils/theme'
-import { parseInlineLinks } from '../utils/richText'
+import { InlineLinks } from '../utils/richText'
 
 function PreviewField({ field, theme }: { field: FormField; theme: Required<FormTheme> }) {
   const inputCls = `w-full px-3 py-2 ${FORM_CONTROL_TEXT_CLS} border`
@@ -35,9 +35,9 @@ function PreviewField({ field, theme }: { field: FormField; theme: Required<Form
           {field.options?.map((o) => <option key={o}>{o}</option>)}
         </select>
       ) : field.type === 'radio' ? (
-        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm" style={themeLabelStyle(theme)}><input type="radio" readOnly style={checkStyle} /> {parseInlineLinks(o)}</label>)}</div>
+        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-start gap-2 text-sm" style={themeLabelStyle(theme)}><input type="radio" readOnly className="mt-0.5 shrink-0" style={checkStyle} /> <InlineLinks text={o} /></label>)}</div>
       ) : field.type === 'checkbox' ? (
-        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-center gap-2 text-sm" style={themeLabelStyle(theme)}><input type="checkbox" readOnly style={checkStyle} /> {parseInlineLinks(o)}</label>)}</div>
+        <div className="space-y-1">{field.options?.map((o) => <label key={o} className="flex items-start gap-2 text-sm" style={themeLabelStyle(theme)}><input type="checkbox" readOnly className="mt-0.5 shrink-0" style={checkStyle} /> <InlineLinks text={o} /></label>)}</div>
       ) : field.type === 'date' ? (
         <input type="date" className={inputCls} style={inputStyle} readOnly />
       ) : field.type === 'file' ? (

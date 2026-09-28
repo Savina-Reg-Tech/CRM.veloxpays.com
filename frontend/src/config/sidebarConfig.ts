@@ -16,6 +16,7 @@ import {
   Headphones,
   Star,
   Crown,
+  Gift,
 } from 'lucide-react'
 import type { NavItem, UserRole } from '@/types'
 
@@ -37,6 +38,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },
     { label: 'VV Support',     path: '/dashboard/veloxverse/support',      icon: Headphones },
     { label: 'VV Points',      path: '/dashboard/veloxverse/points',       icon: Star },
+    { label: 'VV Refer & Earn', path: '/dashboard/veloxverse/refer-earn', icon: Gift },
     { label: 'VV Club',        path: '/dashboard/veloxverse/club',         icon: Crown },
   ],
 
@@ -57,6 +59,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },
     { label: 'VV Support',     path: '/dashboard/veloxverse/support',      icon: Headphones },
     { label: 'VV Points',      path: '/dashboard/veloxverse/points',       icon: Star },
+    { label: 'VV Refer & Earn', path: '/dashboard/veloxverse/refer-earn', icon: Gift },
     { label: 'VV Club',        path: '/dashboard/veloxverse/club',         icon: Crown },
   ],
 

@@ -187,11 +187,11 @@ export const handleServeEmbedScript = (req, res) => {
           html += '</select>';
         } else if (field.type === 'radio') {
           (field.options || []).forEach(function(opt){
-            html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-weight:normal;"><input type="radio" ' + name + ' value="' + CRMForm._esc(opt) + '" ' + req + '> ' + CRMForm._esc(opt) + '</label>';
+            html += '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;font-weight:normal;"><input type="radio" ' + name + ' value="' + CRMForm._esc(opt) + '" ' + req + ' style="margin-top:3px;flex-shrink:0;"> ' + CRMForm._optLabel(opt) + '</label>';
           });
         } else if (field.type === 'checkbox') {
           (field.options || []).forEach(function(opt){
-            html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-weight:normal;"><input type="checkbox" name="' + CRMForm._esc(field.id) + '[]" value="' + CRMForm._esc(opt) + '"> ' + CRMForm._esc(opt) + '</label>';
+            html += '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;font-weight:normal;"><input type="checkbox" name="' + CRMForm._esc(field.id) + '[]" value="' + CRMForm._esc(opt) + '" style="margin-top:3px;flex-shrink:0;"> ' + CRMForm._optLabel(opt) + '</label>';
           });
         } else if (field.type === 'date') {
           html += '<input type="date" ' + name + ' ' + req + ' style="' + inputStyle + '">';
@@ -252,6 +252,22 @@ export const handleServeEmbedScript = (req, res) => {
 
     _esc: function(str) {
       return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    },
+    // A radio/checkbox option's text as ONE inline run, with [label](url) rendered as links
+    // (mirrors the React form's InlineLinks). Keeping it in a single span stops the label's flex
+    // layout from splitting "…I accept [Terms] and [Privacy Policy]" into separate columns.
+    _optLabel: function(opt) {
+      var text = String(opt || ''), out = '', last = 0, m;
+      var re = /\\[([^\\]]+)\\]\\(([^)]+)\\)/g;
+      while ((m = re.exec(text)) !== null) {
+        out += CRMForm._esc(text.slice(last, m.index));
+        var url = m[2].trim();
+        out += /^(https?:|mailto:|\\/)/i.test(url)
+          ? '<a href="' + CRMForm._esc(url) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">' + CRMForm._esc(m[1]) + '</a>'
+          : CRMForm._esc(m[0]);
+        last = re.lastIndex;
+      }
+      return '<span style="flex:1;min-width:0;line-height:1.4;overflow-wrap:anywhere;">' + out + CRMForm._esc(text.slice(last)) + '</span>';
     }
   };
 

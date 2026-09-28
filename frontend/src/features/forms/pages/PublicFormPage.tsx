@@ -44,7 +44,7 @@ import type { ConditionalRule, Form, FormField, FormTheme } from '../types'
 import { BORDER_RADIUS_PRESETS, NAVIGATION_ACTION_TYPES } from '../types'
 import { layoutFields } from '../utils/layoutFields'
 import { resolveTheme, FORM_CONTROL_TEXT_CLS } from '../utils/theme'
-import { parseInlineLinks } from '../utils/richText'
+import { InlineLinks } from '../utils/richText'
 import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
 import { ensureAbsoluteUrl } from '../utils/url'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
@@ -360,16 +360,17 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
       ) : field.type === 'radio' ? (
         <div className="space-y-2">
           {field.options?.map((o) => (
-            <label key={o} className="flex items-center gap-2.5 text-sm cursor-pointer" style={{ color: `#${theme.labelColor}` }}>
+            <label key={o} className="flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: `#${theme.labelColor}` }}>
               <input
                 type="radio"
                 name={field.id}
                 value={o}
                 required={required}
                 disabled={hidden}
+                className="mt-0.5 shrink-0"
                 style={checkStyle}
               />
-              {parseInlineLinks(o)}
+              <InlineLinks text={o} />
             </label>
           ))}
         </div>
@@ -383,15 +384,16 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
         // re-runs on every input/change so it stays correct as boxes are (un)checked.
         <div className="space-y-2">
           {field.options?.map((o) => (
-            <label key={o} className="flex items-center gap-2.5 text-sm cursor-pointer" style={{ color: `#${theme.labelColor}` }}>
+            <label key={o} className="flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: `#${theme.labelColor}` }}>
               <input
                 type="checkbox"
                 name={`${field.id}[]`}
                 value={o}
                 disabled={hidden}
+                className="mt-0.5 shrink-0"
                 style={checkStyle}
               />
-              {parseInlineLinks(o)}
+              <InlineLinks text={o} />
             </label>
           ))}
         </div>

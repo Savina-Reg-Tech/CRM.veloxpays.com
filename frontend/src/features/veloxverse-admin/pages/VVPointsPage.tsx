@@ -14,6 +14,8 @@ import {
   Database,
   Calculator,
   Gift,
+  Trash2,
+  Unplug,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -28,6 +30,8 @@ import { useToast } from '@/app/providers/ToastProvider'
 import {
   useVVPointsConfig,
   useVVUpdatePointsConfig,
+  useVVCreatePointsService,
+  useVVDeletePointsService,
   useVVPointsSettings,
   useVVUpdatePointsSettings,
   useVVPointsUsers,
@@ -37,10 +41,9 @@ import {
   useVVRecalculateBalance,
   useVVPointsAuditLog,
   useVVPointsDashboard,
-  useVVReferralConfig,
-  useVVUpdateReferralConfig,
 } from '../hooks/useVVPoints'
 import { formatDateTime, ANALYTICS_CURRENCIES } from '../utils'
+import { vvPointsService } from '../vvAdminService'
 import { buildReferralSummary, referralReasonLabel, type ReferralThreadStatus } from '../referralHistory'
 import { formatMoney } from '@/lib/utils'
 import type {
@@ -49,7 +52,7 @@ import type {
   AdminPointsUser,
   PointsLedgerEntry,
   PointsTransactionType,
-  ReferralPointsConfigRow,
+  RedemptionRateSuggestions,
 } from '../types'
 
 // ─────────────────────────── Helpers ───────────────────────────────
@@ -67,6 +70,12 @@ const TXN_TYPE_STYLES: Record<PointsTransactionType, { label: string; cls: strin
   ADMIN_CREDIT: { label: 'Credit',    cls: 'bg-purple-50 text-purple-700' },
   ADMIN_DEBIT:  { label: 'Debit',     cls: 'bg-red-50 text-red-700' },
   REFERRAL:     { label: 'Referral',  cls: 'bg-amber-50 text-amber-700' },
+}
+
+/** Built-in services have a fixed label; an admin-created key like CAR_RENTAL reads "Car Rental". */
+function serviceLabel(key: string | undefined | null): string {
+  if (!key) return ''
+  return SERVICE_LABELS[key] ?? key.toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
 function fmtNum(n: number): string {
@@ -109,6 +118,213 @@ function hasAtMost4Dp(raw: string): boolean {
   return /^\d+(\.\d{1,4})?$/.test(raw.trim())
 }
 
+function NotConnectedBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 ring-1 ring-inset ring-gray-200"
+      title="Rates are set, but no booking flow awards points for this service yet — customers earn nothing until it's connected."
+    >
+      <Unplug className="h-3 w-3" />
+      Not connected
+    </span>
+  )
+}
+
+/**
+ * New earning service. VeloxVerse creates a rule in every currency, scaled from the USD rate by
+ * each currency's redemption rate so they all start at the same % back.
+ */
+function AddServiceModal({
+  open,
+  onClose,
+  existing,
+  redeemRates,
+}: {
+  open: boolean
+  onClose: () => void
+  existing: string[]
+  redeemRates: Record<string, number | null>
+}) {
+  const createMut = useVVCreatePointsService()
+  const { showToast } = useToast()
+  const [name, setName] = useState('')
+  const [usdRate, setUsdRate] = useState('')
+  const [description, setDescription] = useState('')
+  const [active, setActive] = useState(false)
+
+  const key = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  const keyValid = /^[A-Z][A-Z0-9_]{1,39}$/.test(key)
+  const duplicate = existing.includes(key)
+  const rateValid = usdRate.trim() !== '' && hasAtMost4Dp(usdRate) && Number(usdRate) <= 100000
+  const usdRedeem = redeemRates.USD
+  const pct = rateValid && usdRedeem ? (Number(usdRate) / usdRedeem) * 100 : null
+
+  function close() {
+    setName('')
+    setUsdRate('')
+    setDescription('')
+    setActive(false)
+    onClose()
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!keyValid || duplicate || !rateValid) return
+    createMut.mutate(
+      { serviceType: key, usdPointsPerUnit: Number(usdRate), description: description.trim() || null, isActive: active },
+      {
+        onSuccess: () => {
+          showToast({ type: 'success', title: `${serviceLabel(key)} added in all currencies` })
+          close()
+        },
+        onError: (err) =>
+          showToast({
+            type: 'error',
+            title: 'Could not add service',
+            message: (err as { response?: { data?: { message?: string } } })?.response?.data?.message,
+          }),
+      }
+    )
+  }
+
+  return (
+    <Modal open={open} onClose={close} title="Add earning service" description="Creates an earning rule for this service in every currency." size="md">
+      <form onSubmit={submit} className="space-y-4 pt-1">
+        <div>
+          <Input
+            label="Service name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Car Rental"
+            className="text-base sm:text-sm"
+            required
+          />
+          {name.trim() && (
+            <p className={`mt-1 text-xs ${keyValid && !duplicate ? 'text-gray-500' : 'text-red-600'}`}>
+              {duplicate
+                ? `${serviceLabel(key)} already exists.`
+                : keyValid
+                  ? <>Key: <span className="font-mono">{key}</span> — developers use this key to connect the booking flow.</>
+                  : 'Use at least 2 letters or numbers, starting with a letter.'}
+            </p>
+          )}
+        </div>
+        <div>
+          <Input
+            label="Points per USD 1 paid by card"
+            type="number"
+            min={0}
+            max={100000}
+            step="0.0001"
+            value={usdRate}
+            onChange={(e) => setUsdRate(e.target.value)}
+            placeholder="e.g. 10"
+            className="text-base sm:text-sm"
+            required
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            {pct != null ? <>{fmtPercent(Math.round(pct * 10000) / 10000)} back in USD. </> : null}
+            Other currencies are set automatically to the same % back (edit any of them afterwards).
+          </p>
+        </div>
+        {rateValid && usdRedeem && (
+          <div className="rounded-lg bg-gray-50 p-3">
+            <p className="mb-1.5 text-xs font-medium text-gray-600">Starting rates</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+              {ANALYTICS_CURRENCIES.map((cur) => {
+                const r = redeemRates[cur]
+                return (
+                  <div key={cur} className="flex justify-between gap-2">
+                    <span className="text-gray-500">{cur}</span>
+                    <span className={r ? 'font-medium text-gray-800' : 'text-amber-700'}>
+                      {r ? fmtRate(Math.round((Number(usdRate) * r * 10000) / usdRedeem) / 10000) : 'off'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        <Input
+          label="Description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Shown to customers in “how you earn”"
+          className="text-base sm:text-sm"
+        />
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 p-3">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Active now</p>
+            <p className="text-xs text-gray-500">
+              Active services are listed to customers in the app. A new service earns nothing until developers connect
+              its booking flow — keep it off until then.
+            </p>
+          </div>
+          <Switch checked={active} onChange={setActive} className="shrink-0" />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={close}>Cancel</Button>
+          <Button type="submit" loading={createMut.isPending} disabled={!keyValid || duplicate || !rateValid}>Add service</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** Deletes a service's earning rules in every currency (soft delete; points already earned stay). */
+function DeleteServiceModal({
+  serviceType,
+  connected,
+  onClose,
+}: {
+  serviceType: string | null
+  connected: boolean
+  onClose: () => void
+}) {
+  const deleteMut = useVVDeletePointsService()
+  const { showToast } = useToast()
+  const label = serviceLabel(serviceType)
+
+  function confirm() {
+    if (!serviceType) return
+    deleteMut.mutate(serviceType, {
+      onSuccess: () => {
+        showToast({ type: 'success', title: `${label} deleted` })
+        onClose()
+      },
+      onError: (err) =>
+        showToast({
+          type: 'error',
+          title: 'Could not delete service',
+          message: (err as { response?: { data?: { message?: string } } })?.response?.data?.message,
+        }),
+    })
+  }
+
+  return (
+    <Modal open={Boolean(serviceType)} onClose={onClose} title={`Delete ${label}?`} size="md">
+      <div className="space-y-3 pt-1 text-sm text-gray-600">
+        <p>This removes the {label} earning rule in <strong>every currency</strong>. Points customers already earned are kept.</p>
+        {connected ? (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+            {label} bookings currently award points — customers will <strong>stop earning points on {label} immediately</strong>.
+            To pause it instead, switch its rules off.
+          </p>
+        ) : (
+          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            No booking flow awards points for {label} yet, so no customer earning changes.
+          </p>
+        )}
+        <p className="text-xs text-gray-500">You can add it again later with “Add service”. The change is recorded in the Change Log.</p>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="danger" onClick={confirm} loading={deleteMut.isPending}>Delete service</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /**
  * Per service: is `percentBack` the same (±tolerance) in every currency, and set for all of them?
  * A mismatch means some currency earns more or less value back than the others.
@@ -140,12 +356,12 @@ function findInconsistentServices(config: PointsConfigRow[]): Map<string, string
 /**
  * REFERRAL never appears in `config` — its rows are filtered server-side (see
  * `pointsAdminService.listConfig` in veloxverse), since that reward moved to the dedicated
- * Refer & Earn config (the "Referral" tab below). Every row here is a genuine (service,
+ * Refer & Earn config (VV Refer & Earn → Rewards config). Every row here is a genuine (service,
  * currency) earning rule: `pointsPerUnit` is a direct, admin-set points count per 1 unit of
  * that row's `currency` (decimals allowed) — not a monetary value converted via live FX. Points
  * are earned on the card-paid amount only; `percentBack` is computed by VeloxVerse.
  */
-function EarningRulesTab() {
+function EarningRulesTab({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { data: config, isLoading, error } = useVVPointsConfig()
   const { data: settings } = useVVPointsSettings()
   const updateMut = useVVUpdatePointsConfig()
@@ -154,6 +370,8 @@ function EarningRulesTab() {
   const [editRow, setEditRow] = useState<PointsConfigRow | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editDesc, setEditDesc] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   function openEdit(row: PointsConfigRow) {
     setEditRow(row)
@@ -179,7 +397,7 @@ function EarningRulesTab() {
     updateMut.mutate(
       { id: row.id, patch: { isActive: !row.isActive } },
       {
-        onSuccess: () => showToast({ type: 'success', title: `${SERVICE_LABELS[row.serviceType] ?? row.serviceType} (${row.currency}) ${!row.isActive ? 'enabled' : 'disabled'}` }),
+        onSuccess: () => showToast({ type: 'success', title: `${serviceLabel(row.serviceType)} (${row.currency}) ${!row.isActive ? 'enabled' : 'disabled'}` }),
         onError: () => showToast({ type: 'error', title: 'Toggle failed' }),
       }
     )
@@ -222,16 +440,22 @@ function EarningRulesTab() {
             <p className="font-medium">% back is not consistent across currencies</p>
             <ul className="mt-1 list-disc pl-4 text-xs">
               {[...inconsistent].map(([service, msg]) => (
-                <li key={service}><strong>{SERVICE_LABELS[service] ?? service}</strong>: {msg}</li>
+                <li key={service}><strong>{serviceLabel(service)}</strong>: {msg}</li>
               ))}
             </ul>
+            {[...inconsistent.values()].some((m) => m.startsWith('No redemption rate')) && (
+              <Button size="sm" variant="outline" className="mt-3" onClick={onOpenSettings}>
+                Set redemption rates
+              </Button>
+            )}
           </div>
         </div>
       )}
 
       {/* Each currency has its own independent set of rates — no live FX conversion between
           them, an admin tunes each one directly. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-gray-500">Currency:</span>
         {ANALYTICS_CURRENCIES.map((code) => (
           <button
@@ -248,8 +472,14 @@ function EarningRulesTab() {
           </button>
         ))}
       </div>
+        <Button size="sm" className="shrink-0 justify-center" onClick={() => setAdding(true)}>
+          <Plus className="h-4 w-4" />
+          Add service
+        </Button>
+      </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      {/* Desktop */}
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -268,8 +498,12 @@ function EarningRulesTab() {
               return (
                 <tr key={row.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {SERVICE_LABELS[row.serviceType] ?? row.serviceType}
-                    {issue && <span className="ml-2" title={issue}><Badge variant="warning">Inconsistent</Badge></span>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {serviceLabel(row.serviceType)}
+                      {row.earningConnected === false && <NotConnectedBadge />}
+                      {issue && <span title={issue}><Badge variant="warning">Inconsistent</Badge></span>}
+                    </div>
+                    {row.description && <p className="mt-0.5 text-xs font-normal text-gray-500">{row.description}</p>}
                   </td>
                   <td className="px-4 py-3 text-gray-700">{fmtRate(row.pointsPerUnit)}</td>
                   <td className={`px-4 py-3 ${row.percentBack == null ? 'text-amber-700' : 'text-gray-700'}`}>
@@ -278,8 +512,9 @@ function EarningRulesTab() {
                   <td className="px-4 py-3"><Switch checked={row.isActive} onChange={() => toggleActive(row)} /></td>
                   <td className="px-4 py-3 text-gray-500">v{row.version}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(row)}><Pencil className="h-4 w-4" /></Button>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label={`Edit ${serviceLabel(row.serviceType)}`}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => setDeleting(row.serviceType)} aria-label={`Delete ${serviceLabel(row.serviceType)}`}><Trash2 className="h-4 w-4" /></Button>
                   </td>
                 </tr>
               )
@@ -291,7 +526,61 @@ function EarningRulesTab() {
         </table>
       </div>
 
-      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${SERVICE_LABELS[editRow?.serviceType ?? ''] ?? ''} Earning Rule (${editRow?.currency ?? ''})`} size="md">
+      {/* Mobile */}
+      <div className="space-y-2 md:hidden">
+        {rows.length === 0 && <p className="py-8 text-center text-sm text-gray-400">No earning rules configured for {currency} yet</p>}
+        {rows.map((row) => {
+          const issue = inconsistent.get(row.serviceType)
+          return (
+            <div key={row.id} className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium text-gray-900">{serviceLabel(row.serviceType)}</span>
+                    {row.earningConnected === false && <NotConnectedBadge />}
+                    {issue && <Badge variant="warning">Inconsistent</Badge>}
+                  </div>
+                  {row.description && <p className="mt-0.5 text-xs text-gray-500">{row.description}</p>}
+                </div>
+                <Switch checked={row.isActive} onChange={() => toggleActive(row)} className="shrink-0" />
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-md bg-gray-50 p-2 text-xs">
+                <div>
+                  <p className="text-gray-500">Points / 1 {currency}</p>
+                  <p className="font-medium text-gray-900">{fmtRate(row.pointsPerUnit)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">% back</p>
+                  <p className={`font-medium ${row.percentBack == null ? 'text-amber-700' : 'text-gray-900'}`}>
+                    {row.percentBack == null ? 'Redemption off' : fmtPercent(row.percentBack)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-400">v{row.version} · {formatDateTime(row.updatedAt)}</span>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="outline" onClick={() => openEdit(row)}><Pencil className="h-4 w-4" />Edit</Button>
+                  <Button size="sm" variant="outline" className="text-red-600" onClick={() => setDeleting(row.serviceType)} aria-label={`Delete ${serviceLabel(row.serviceType)}`}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <AddServiceModal
+        open={adding}
+        onClose={() => setAdding(false)}
+        existing={[...new Set(allRows.map((r) => r.serviceType))]}
+        redeemRates={settings?.pointsPerUnitRedeem ?? {}}
+      />
+      <DeleteServiceModal
+        serviceType={deleting}
+        connected={allRows.find((r) => r.serviceType === deleting)?.earningConnected !== false}
+        onClose={() => setDeleting(null)}
+      />
+
+      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${serviceLabel(editRow?.serviceType)} Earning Rule (${editRow?.currency ?? ''})`} size="md">
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -331,130 +620,6 @@ function EarningRulesTab() {
   )
 }
 
-// ─────────────────────────── Tab: Referral (Refer & Earn) ─────────
-// CRM is the source of truth for the Refer & Earn reward: one row per supported preferred
-// currency, each a direct admin-set points count (not a monetary value converted via FX) for
-// both the referrer and the referee. VeloxVerse applies the row matching each recipient's own
-// preferred currency at award time — see points-referral.service.ts#awardReferralPoints.
-
-function ReferralConfigTab() {
-  const { data: config, isLoading, error } = useVVReferralConfig()
-  const updateMut = useVVUpdateReferralConfig()
-  const { showToast } = useToast()
-  const [editRow, setEditRow] = useState<ReferralPointsConfigRow | null>(null)
-  const [referrerValue, setReferrerValue] = useState('')
-  const [refereeValue, setRefereeValue] = useState('')
-
-  function openEdit(row: ReferralPointsConfigRow) {
-    setEditRow(row)
-    setReferrerValue(String(row.referrerPoints))
-    setRefereeValue(String(row.refereePoints))
-  }
-
-  function handleSave(e: FormEvent) {
-    e.preventDefault()
-    if (!editRow) return
-    const referrerPoints = parseInt(referrerValue, 10)
-    const refereePoints = parseInt(refereeValue, 10)
-    if (isNaN(referrerPoints) || referrerPoints < 0 || isNaN(refereePoints) || refereePoints < 0) return
-    updateMut.mutate(
-      { id: editRow.id, patch: { referrerPoints, refereePoints } },
-      {
-        onSuccess: () => { showToast({ type: 'success', title: `${editRow.currency} referral reward updated` }); setEditRow(null) },
-        onError: () => showToast({ type: 'error', title: 'Failed to update referral reward' }),
-      }
-    )
-  }
-
-  function toggleActive(row: ReferralPointsConfigRow) {
-    updateMut.mutate(
-      { id: row.id, patch: { isActive: !row.isActive } },
-      {
-        onSuccess: () => showToast({ type: 'success', title: `${row.currency} referral reward ${!row.isActive ? 'enabled' : 'disabled'}` }),
-        onError: () => showToast({ type: 'error', title: 'Toggle failed' }),
-      }
-    )
-  }
-
-  if (isLoading) return <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
-  if (error) return <ErrorBanner error={error} />
-
-  return (
-    <>
-      <Card className="p-4 mb-4">
-        <p className="text-sm text-gray-600">
-          <Gift className="inline h-4 w-4 mr-1 text-indigo-500" />
-          Each currency's reward is a fixed points count set here — not a dollar amount converted at a live rate — so
-          the value can never drift after a referral is redeemed. VeloxVerse prices each side of a referral by that
-          person's own Preferred Currency.
-        </p>
-        <ul className="mt-2 list-disc pl-5 text-xs text-gray-500 space-y-0.5">
-          <li>Rewards are paid when the new customer completes their first <strong>card-paid</strong> booking. If that booking is cancelled or refunded, the rewards are reversed and paid again on their next card-paid booking.</li>
-          <li>Bookings fully covered by a VeloxClub benefit, credit or points don't qualify.</li>
-          <li>Codes are rejected for customers who already have a completed or refunded paid booking, and for referral loops (someone using the code of a person they referred).</li>
-          <li>Deactivating a referred user claws back the referrer's reward (the referee keeps their welcome bonus). See each user's Refer &amp; Earn history under User Points.</li>
-        </ul>
-      </Card>
-
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Currency</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Referrer earns</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Referee earns</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Active</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Version</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">Updated</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {(config ?? []).map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900">{row.currency}</td>
-                <td className="px-4 py-3 text-gray-700">{fmtNum(row.referrerPoints)} pts</td>
-                <td className="px-4 py-3 text-gray-700">{fmtNum(row.refereePoints)} pts</td>
-                <td className="px-4 py-3"><Switch checked={row.isActive} onChange={() => toggleActive(row)} /></td>
-                <td className="px-4 py-3 text-gray-500">v{row.version}</td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
-                <td className="px-4 py-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(row)}><Pencil className="h-4 w-4" /></Button>
-                </td>
-              </tr>
-            ))}
-            {(config ?? []).length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No currencies configured yet</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Modal open={!!editRow} onClose={() => setEditRow(null)} title={`Edit ${editRow?.currency ?? ''} Referral Reward`} size="md">
-        <form onSubmit={handleSave} className="space-y-4 pt-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Referrer points (per successful referral)</label>
-            <Input type="number" min={0} value={referrerValue} onChange={(e) => setReferrerValue(e.target.value)} required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Referee points (sign-up welcome bonus)</label>
-            <Input type="number" min={0} value={refereeValue} onChange={(e) => setRefereeValue(e.target.value)} required />
-          </div>
-          {editRow && (
-            <p className="text-xs text-gray-500">
-              Current: {fmtNum(editRow.referrerPoints)} / {fmtNum(editRow.refereePoints)} pts → New: {referrerValue || '0'} / {refereeValue || '0'} pts
-            </p>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setEditRow(null)}>Cancel</Button>
-            <Button type="submit" loading={updateMut.isPending}>Save</Button>
-          </div>
-        </form>
-      </Modal>
-    </>
-  )
-}
-
 // ─────────────────────────── Tab 2: Global Settings ───────────────
 
 type SettingsNumberKey = 'minRedeemPoints' | 'maxRedeemPerDayCents' | 'pointsExpiryDays'
@@ -471,22 +636,56 @@ const SETTINGS_FIELDS: { label: string; key: SettingsNumberKey; suffix: string; 
  */
 function GlobalSettingsTab() {
   const { data: settings, isLoading, error } = useVVPointsSettings()
+  const { data: earningRules } = useVVPointsConfig()
   const updateMut = useVVUpdatePointsSettings()
   const { showToast } = useToast()
   const [editing, setEditing] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [nums, setNums] = useState<Record<SettingsNumberKey, string>>({ minRedeemPoints: '', maxRedeemPerDayCents: '', pointsExpiryDays: '' })
   const [rates, setRates] = useState<Record<string, string>>({})
+  const [suggestions, setSuggestions] = useState<RedemptionRateSuggestions | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
 
-  function startEdit() {
+  function startEdit(prefill: Record<string, string> = {}) {
     if (!settings) return
     setNums({
       minRedeemPoints: String(settings.minRedeemPoints),
       maxRedeemPerDayCents: String(settings.maxRedeemPerDayCents),
       pointsExpiryDays: String(settings.pointsExpiryDays),
     })
-    setRates(Object.fromEntries(ANALYTICS_CURRENCIES.map((c) => [c, settings.pointsPerUnitRedeem?.[c] != null ? String(settings.pointsPerUnitRedeem[c]) : ''])))
+    setRates(Object.fromEntries(ANALYTICS_CURRENCIES.map((c) => [c, settings.pointsPerUnitRedeem?.[c] != null ? String(settings.pointsPerUnitRedeem[c]) : prefill[c] ?? ''])))
     setEditing(true)
+  }
+
+  /** Pre-fill every currency WITHOUT a rate from today's exchange rate. Existing rates are kept;
+   * nothing is saved until the admin reviews and saves. */
+  async function fillMissingRates() {
+    setSuggesting(true)
+    try {
+      const res = await vvPointsService.suggestRates()
+      setSuggestions(res)
+      const prefill = Object.fromEntries(
+        res.suggestions.filter((s) => s.current == null && s.suggested != null).map((s) => [s.currency, String(s.suggested)])
+      )
+      if (editing) setRates((p) => ({ ...p, ...Object.fromEntries(Object.entries(prefill).filter(([c]) => !p[c]?.trim())) }))
+      else startEdit(prefill)
+      const failed = res.suggestions.filter((s) => s.current == null && s.suggested == null).map((s) => s.currency)
+      showToast({
+        type: failed.length ? 'error' : 'success',
+        title: 'Suggested rates filled in',
+        message: failed.length
+          ? `Couldn't get today's rate for ${failed.join(', ')} — enter those manually. Review, then save.`
+          : 'Review the numbers, then Review Changes → Save.',
+      })
+    } catch (err) {
+      showToast({
+        type: 'error',
+        title: 'Could not suggest rates',
+        message: (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (err instanceof Error ? err.message : undefined),
+      })
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}</div>
@@ -494,6 +693,8 @@ function GlobalSettingsTab() {
   if (!settings) return null
 
   const current = settings.pointsPerUnitRedeem ?? {}
+  const missingRates = ANALYTICS_CURRENCIES.filter((c) => current[c] == null)
+  const suggestionFor = (cur: string) => suggestions?.suggestions.find((s) => s.currency === cur)
   const isPosInt = (v: string) => /^\d+$/.test(v.trim()) && Number(v) >= 1
   const isNonNegInt = (v: string) => /^\d+$/.test(v.trim())
 
@@ -508,6 +709,25 @@ function GlobalSettingsTab() {
   const invalidRate = ANALYTICS_CURRENCIES.some((c) => rates[c]?.trim() && !isPosInt(rates[c]))
   const invalidNum = SETTINGS_FIELDS.some((f) => !isNonNegInt(nums[f.key] ?? ''))
   const canSave = !invalidRate && !invalidNum && (rateChanges.length > 0 || numChanges.length > 0)
+
+  // What each changed currency's earning rules would pay back at its NEW rate, vs USD. Earning
+  // rules are a points count per 1 unit of each currency, so a new rate for a currency whose
+  // earning rules were never scaled (e.g. INR still earning 50 pts per ₹1) can pay out many times
+  // more value than USD — flag those before saving.
+  const usdRedeemRate = rateChanges.find((r) => r.cur === 'USD')?.to ?? current.USD ?? null
+  const percentBackAfter = (pointsPerUnit: number, rate: number) => (pointsPerUnit / rate) * 100
+  const earningMismatches = rateChanges
+    .filter((r) => r.cur !== 'USD' && usdRedeemRate)
+    .flatMap((r) =>
+      (earningRules ?? [])
+        .filter((row) => row.currency === r.cur && row.isActive)
+        .map((row) => {
+          const usdRow = (earningRules ?? []).find((u) => u.serviceType === row.serviceType && u.currency === 'USD')
+          const usd = usdRow ? percentBackAfter(usdRow.pointsPerUnit, usdRedeemRate!) : null
+          return { cur: r.cur, service: row.serviceType, pct: percentBackAfter(row.pointsPerUnit, r.to), usd }
+        })
+        .filter((m) => m.usd != null && m.pct > m.usd * 1.5)
+    )
 
   function handleSave() {
     const patch: PointsSettingsUpdate = {}
@@ -531,7 +751,7 @@ function GlobalSettingsTab() {
             <h3 className="text-lg font-semibold text-gray-900">Global Points Settings</h3>
             <p className="text-sm text-gray-500">Version {settings.version} · Last updated {formatDateTime(settings.updatedAt)}</p>
           </div>
-          {!editing && <Button size="sm" onClick={startEdit}><Pencil className="h-4 w-4 mr-1" /> Edit</Button>}
+          {!editing && <Button size="sm" onClick={() => startEdit()}><Pencil className="h-4 w-4 mr-1" /> Edit</Button>}
         </div>
 
         {editing ? (
@@ -569,6 +789,25 @@ function GlobalSettingsTab() {
         )}
       </Card>
 
+      {missingRates.length > 0 && (
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Points redemption is switched off for {missingRates.join(', ')}</p>
+              <p className="mt-0.5 text-xs text-red-700">
+                These currencies have no redemption rate, so customers paying in them can't use their points at checkout.
+                Fill them from today's exchange rates (each worth about the same as in USD), review, then save — the
+                saved rates stay fixed afterwards.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" className="shrink-0" onClick={fillMissingRates} loading={suggesting} disabled={suggesting || current.USD == null}>
+            Fill missing rates
+          </Button>
+        </div>
+      )}
+
       <Card className="p-4 mt-4">
         <p className="text-sm font-medium text-gray-900 mb-1">Redemption rate by currency</p>
         <p className="text-xs text-gray-500 mb-3">
@@ -603,7 +842,14 @@ function GlobalSettingsTab() {
                     ) : draft.trim() === '' && pts != null ? (
                       <p className="mt-1 text-xs text-amber-700">Blank keeps {fmtNum(pts)} — rates can’t be cleared here</p>
                     ) : draft.trim() !== '' ? (
-                      <p className="mt-1 text-xs text-gray-400">{fmtNum(Number(draft))} pts = {formatMoney(1, cur)}</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {fmtNum(Number(draft))} pts = {formatMoney(1, cur)}
+                        {pts == null && suggestionFor(cur)?.suggested === Number(draft) && suggestionFor(cur)?.fxRate != null && (
+                          <span className="block text-indigo-600">
+                            Suggested · 1 USD = {suggestionFor(cur)!.fxRate!.toLocaleString(undefined, { maximumFractionDigits: 4 })} {cur}
+                          </span>
+                        )}
+                      </p>
                     ) : null}
                   </>
                 ) : (
@@ -658,8 +904,32 @@ function GlobalSettingsTab() {
               </ul>
             </div>
           )}
+          {earningMismatches.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+              <p className="font-medium">Earning rules would over-reward these currencies</p>
+              <p className="mt-0.5">
+                Their earning rules were never scaled to their currency, so at the new rate customers would earn far more
+                value back than USD customers:
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {earningMismatches.slice(0, 8).map((m) => (
+                  <li key={`${m.cur}-${m.service}`}>
+                    {m.cur} {serviceLabel(m.service)}: {fmtPercent(m.pct)} back (USD: {fmtPercent(m.usd)})
+                  </li>
+                ))}
+                {earningMismatches.length > 8 && <li>…and {earningMismatches.length - 8} more</li>}
+              </ul>
+              <p className="mt-1">
+                Fix them in Earning Rules (“Match USD” in each rule's edit dialog) <strong>before or right after</strong> saving — otherwise these
+                customers can redeem far more than they paid for.
+              </p>
+            </div>
+          )}
           {rateChanges.length > 0 && (
-            <p className="text-xs text-amber-700">Earning rates for these currencies are not changed automatically — re-check their % back afterwards.</p>
+            <p className="text-xs text-amber-700">
+              Earning rates for these currencies are not changed automatically. After saving, check Earning Rules — any
+              currency whose % back differs from USD can be fixed with “Match USD” in its edit dialog.
+            </p>
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setConfirmOpen(false)}>Back</Button>
@@ -1163,7 +1433,12 @@ export default function VVPointsPage() {
           <Star className="h-6 w-6 text-amber-500" /> Points System
         </h1>
         <p className="text-sm text-gray-500">
-          Configure earning rates, redemption settings, manage user points, and view analytics.
+          Configure earning rates, redemption settings, manage user points, and view analytics. Referral rewards are
+          managed in{' '}
+          <Link to="/dashboard/veloxverse/refer-earn?tab=config" className="font-medium text-indigo-600 hover:text-indigo-700">
+            Refer &amp; Earn
+          </Link>
+          .
         </p>
       </div>
 
@@ -1171,7 +1446,6 @@ export default function VVPointsPage() {
       <Tabs defaultValue="rules" value={tab} onChange={setTab}>
         <TabsList>
           <TabsTrigger value="rules">Earning Rules</TabsTrigger>
-          <TabsTrigger value="referral">Referral</TabsTrigger>
           <TabsTrigger value="settings">Global Settings</TabsTrigger>
           <TabsTrigger value="users">User Points</TabsTrigger>
           <TabsTrigger value="log">Change Log</TabsTrigger>
@@ -1181,8 +1455,7 @@ export default function VVPointsPage() {
 
       {/* Content */}
       <div className="pt-2">
-        {tab === 'rules' && <EarningRulesTab />}
-        {tab === 'referral' && <ReferralConfigTab />}
+        {tab === 'rules' && <EarningRulesTab onOpenSettings={() => setTab('settings')} />}
         {tab === 'settings' && <GlobalSettingsTab />}
         {tab === 'users' && <UserPointsTab />}
         {tab === 'log' && <ChangeLogTab />}

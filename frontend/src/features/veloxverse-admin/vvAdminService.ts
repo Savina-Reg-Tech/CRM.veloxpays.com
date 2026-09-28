@@ -5,13 +5,15 @@ import type {
   AdminOrderRow, AdminOrderDetail, VVPagination,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
   AdminTransferBooking, TransferCancelReason, TransferCancelResult,
-  PromoCode, PromoCodeStats, CreatePromoCodeInput,
+  PromoCode, PromoCodeStats, CreatePromoCodeInput, PromoUsagesPage, PromoUsageFilters,
   PricingRule, PricingAuditEntry,
   VVAdminUser, VVAdminUsersPage, VVAdminUserDetail, VVUserRole,
   VVSupportTicket, VVSupportStatistics, VVAdminTicketFilters, VVAdminSearchResult,
   VVAdminSettings, VVEsimApiTestResult, VVApiTestResult,
   PointsConfigRow, PointsSettings, PointsSettingsUpdate, AdminPointsUsersPage, AdminUserPoints,
-  ReferralPointsConfigRow,
+  ReferralPointsConfigRow, RedemptionRateSuggestions, CreatePointsServiceInput,
+  ReferralOverview, ReferralsPage, ReferralListFilters, ReferralDetail, ReferralCodesPage, ReferralCodeFilters,
+  ReferralCodePatch, AdminReferralCode,
   PointsAuditPage, PointsDashboard,
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
   ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType,
@@ -150,10 +152,25 @@ export const vvPromoService = {
     const { data } = await api.patch<VVResponse<{ promoCode: PromoCode }>>(`${VV}/admin/promo-codes/${id}`, patch)
     return data.data.promoCode
   },
+  async get(id: string) {
+    const { data } = await api.get<VVResponse<{ promoCode: PromoCode }>>(`${VV}/admin/promo-codes/${id}`)
+    return data.data.promoCode
+  },
   async getStats(id: string) {
     const { data } = await api.get<VVResponse<PromoCodeStats>>(`${VV}/admin/promo-codes/${id}/stats`)
     return data.data
   },
+  async getUsages(id: string, params: PromoUsageFilters = {}) {
+    const { data } = await api.get<VVResponse<PromoUsagesPage>>(`${VV}/admin/promo-codes/${id}/usages`, {
+      params: cleanParams(params),
+    })
+    return data.data
+  },
+}
+
+/** Drops empty filter values so they aren't sent as `?search=`. */
+function cleanParams<T extends object>(params: T): Partial<T> {
+  return Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')) as Partial<T>
 }
 
 // ── Pricing Rules ───────────────────────────────────────────────────
@@ -259,10 +276,27 @@ export const vvPointsService = {
     const { data } = await api.put<VVResponse<{ config: PointsConfigRow }>>(`${VV}/admin/points/config/${id}`, patch)
     return data.data.config
   },
+  /** New earning service — VeloxVerse creates a rule in every currency. */
+  async createService(input: CreatePointsServiceInput) {
+    const { data } = await api.post<VVResponse<{ config: PointsConfigRow[] }>>(`${VV}/admin/points/config/services`, input)
+    return data.data.config
+  },
+  /** Delete a service's earning rules in every currency (points already earned are kept). */
+  async deleteService(serviceType: string) {
+    const { data } = await api.delete<VVResponse<{ serviceType: string; deleted: number }>>(
+      `${VV}/admin/points/config/services/${encodeURIComponent(serviceType)}`
+    )
+    return data.data
+  },
   // Global settings
   async getSettings() {
     const { data } = await api.get<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`)
     return data.data.settings
+  },
+  /** Suggested fixed redemption rates from today's exchange rates — read-only, nothing is saved. */
+  async suggestRates() {
+    const { data } = await api.get<VVResponse<RedemptionRateSuggestions>>(`${VV}/admin/points/settings/suggested-rates`)
+    return data.data
   },
   async updateSettings(patch: PointsSettingsUpdate) {
     const { data } = await api.put<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`, patch)
@@ -311,6 +345,30 @@ export const vvPointsService = {
 }
 
 // ── Refer & Earn config (per-currency points, CRM is the source of truth) ──────────
+// ── Refer & Earn (admin report) ──────────────────────────────────────
+export const vvReferralService = {
+  async overview(days = 30) {
+    const { data } = await api.get<VVResponse<ReferralOverview>>(`${VV}/admin/referrals/overview`, { params: { days } })
+    return data.data
+  },
+  async list(params: ReferralListFilters = {}) {
+    const { data } = await api.get<VVResponse<ReferralsPage>>(`${VV}/admin/referrals`, { params: cleanParams(params) })
+    return data.data
+  },
+  async get(id: string) {
+    const { data } = await api.get<VVResponse<ReferralDetail>>(`${VV}/admin/referrals/${id}`)
+    return data.data
+  },
+  async listCodes(params: ReferralCodeFilters = {}) {
+    const { data } = await api.get<VVResponse<ReferralCodesPage>>(`${VV}/admin/referrals/codes`, { params: cleanParams(params) })
+    return data.data
+  },
+  async updateCode(id: string, patch: ReferralCodePatch) {
+    const { data } = await api.patch<VVResponse<{ code: AdminReferralCode }>>(`${VV}/admin/referrals/codes/${id}`, patch)
+    return data.data.code
+  },
+}
+
 export const vvReferralConfigService = {
   async getConfig() {
     const { data } = await api.get<VVResponse<{ config: ReferralPointsConfigRow[] }>>(

@@ -344,40 +344,120 @@ export interface TransferCancelResult extends AdminTransferBooking {
 // ── Promo Codes ─────────────────────────────────────────────────────
 export type PromoDiscountType = 'FIXED' | 'PERCENTAGE'
 
+/** Per-currency overrides of a promo's money fields, in cents OF THAT CURRENCY. A missing value
+ * means the backend converts the USD base amount at the live FX rate. */
+export interface PromoCurrencyAmount {
+  minPurchaseCents?: number | null
+  /** FIXED codes — the discount itself. */
+  discountCents?: number | null
+  /** PERCENTAGE codes — the cap on the discount. */
+  maxDiscountCents?: number | null
+}
+
 export interface PromoCode {
   id: string
   code: string
-  description?: string
+  description?: string | null
   discountType: PromoDiscountType
+  /** FIXED: USD cents. PERCENTAGE: basis points (20% = 2000). */
   discountValue: number
+  /** USD cents — the base for any currency without its own override. */
   minPurchaseCents?: number
-  maxDiscountCents?: number
+  maxDiscountCents?: number | null
   applicableServices: string[]
-  maxUses?: number
-  maxUsesPerUser?: number
-  usageCount: number
+  currencyAmounts?: Record<string, PromoCurrencyAmount>
+  maxUses?: number | null
+  maxUsesPerUser?: number | null
+  /** What the VeloxVerse backend returns (`promo_codes.current_uses`). */
+  currentUses?: number
+  /** @deprecated legacy name — the backend returns `currentUses`. */
+  usageCount?: number
   isActive: boolean
-  expiresAt?: string
+  startsAt?: string | null
+  expiresAt?: string | null
   createdAt: string
+  updatedAt?: string
 }
 
+/** Services a promo usage can belong to. WALLET = the old "redeem to wallet credit" flow (USD). */
+export type PromoUsageService = 'LOUNGE' | 'BENEFIT' | 'ESIM' | 'TRANSFER' | 'CLUB' | 'FLIGHT' | 'WALLET'
+export type PromoUsageStatus = 'USED' | 'REFUNDED' | 'PROCESSING' | 'FAILED'
+
+/** Per-currency usage totals — every amount is cents OF `currency`; never summed across currencies. */
+export interface PromoCurrencyStats {
+  currency: string
+  uses: number
+  discountCents: number
+  /** Gross order value before the promo. */
+  orderValueCents: number
+  /** What customers actually paid (card + credit). */
+  chargedCents: number
+}
+
+/** `GET /admin/promo-codes/:id/stats`. Only completed orders + wallet redemptions count as uses. */
 export interface PromoCodeStats {
-  usageCount: number
-  uniqueUsers: number
-  totalDiscountCents: number
+  code: string
+  totals: { uses: number; uniqueUsers: number; refunded: number }
+  /** Sorted by uses, most-used first. */
+  byCurrency: PromoCurrencyStats[]
+  byService: Array<{ service: PromoUsageService; uses: number }>
+  /** Approximate FX conversion of all discounts to USD — display only, labelled "≈". */
+  approxUsd: { discountCents: number; skippedCurrencies: string[] } | null
+  firstUsedAt: string | null
+  lastUsedAt: string | null
+}
+
+export interface PromoUsageRow {
+  /** Payment id (or usage id for wallet redemptions). */
+  id: string
+  usedAt: string
+  customer: { id: string; name: string | null; email: string }
+  service: PromoUsageService
+  serviceLabel: string
+  description: string
+  invoiceNumber: string | null
+  paymentId: string | null
+  /** The currency the customer paid in — every amount on the row is in it. */
+  currency: string
+  orderValueCents: number
+  discountCents: number
+  chargedCents: number
+  creditAppliedCents: number
+  pointsAppliedCents: number
+  status: PromoUsageStatus
+  refund: { amountCents: number; currency: string; refundedAt: string } | null
+}
+
+export interface PromoUsagesPage {
+  code: string
+  usages: PromoUsageRow[]
+  pagination: VVPagination
+}
+
+export interface PromoUsageFilters {
+  page?: number
+  limit?: number
+  currency?: string
+  service?: PromoUsageService
+  status?: 'used' | 'refunded' | 'all'
+  from?: string
+  to?: string
+  search?: string
 }
 
 export interface CreatePromoCodeInput {
   code: string
-  description?: string
+  description?: string | null
   discountType: PromoDiscountType
   discountValue: number
   minPurchaseCents?: number
-  maxDiscountCents?: number
+  maxDiscountCents?: number | null
   applicableServices: string[]
-  maxUses?: number
-  maxUsesPerUser?: number
-  expiresAt?: string
+  currencyAmounts?: Record<string, PromoCurrencyAmount>
+  maxUses?: number | null
+  maxUsesPerUser?: number | null
+  isActive?: boolean
+  expiresAt?: string | null
 }
 
 // ── Pricing Rules ───────────────────────────────────────────────────
@@ -514,13 +594,16 @@ export type PointsServiceType = 'LOUNGE' | 'ESIM' | 'FLIGHT' | 'HOTEL' | 'TRANSF
  */
 export interface PointsConfigRow {
   id: string
-  serviceType: PointsServiceType
+  /** A built-in `PointsServiceType`, or a service key an admin created (e.g. `CAR_RENTAL`). */
+  serviceType: string
   currency: string
   /** May be fractional (up to 4 dp), e.g. 0.1 pts per ₹1. */
   pointsPerUnit: number
   /** Computed by VeloxVerse: pointsPerUnit ÷ pointsPerUnitRedeem[currency] × 100, before the club
    * multiplier. null when the currency has no redemption rate (redemption off). */
   percentBack: number | null
+  /** False = rates are set but no booking flow awards points for this service yet. */
+  earningConnected?: boolean
   isActive: boolean
   description: string | null
   version: number
@@ -534,6 +617,16 @@ export interface PointsConfigRow {
  * preferred currency; `referrerPoints`/`refereePoints` are direct, admin-set point counts (not a
  * monetary amount converted via a live FX rate), so the reward's value can never drift day to day.
  */
+export interface CreatePointsServiceInput {
+  /** UPPER_SNAKE_CASE key, e.g. `CAR_RENTAL`. */
+  serviceType: string
+  /** Points per USD 1; other currencies are scaled to the same % back by VeloxVerse. */
+  usdPointsPerUnit: number
+  description?: string | null
+  /** Active rows are shown to customers in "how you earn". */
+  isActive?: boolean
+}
+
 export interface ReferralPointsConfigRow {
   id: string
   currency: string
@@ -543,6 +636,21 @@ export interface ReferralPointsConfigRow {
   version: number
   updatedBy?: string | null
   updatedAt: string
+}
+
+/** `GET /admin/points/settings/suggested-rates` — a one-off suggestion (USD rate ÷ today's FX
+ * rate), never saved until an admin reviews and saves it. */
+export interface RedemptionRateSuggestions {
+  usdRate: number
+  suggestions: Array<{
+    currency: string
+    current: number | null
+    /** null when today's exchange rate couldn't be fetched for this currency. */
+    suggested: number | null
+    /** Units of `currency` per 1 USD. */
+    fxRate: number | null
+    fxRateFetchedAt: string | null
+  }>
 }
 
 export interface PointsSettings {
@@ -848,6 +956,10 @@ export interface AdminBillingLineItem {
    * instead of a bare (possibly zero) amount — see billing.service.ts#paymentLineItem. */
   clubDiscountCents?: number
   clubRedeemed?: boolean
+  /** Promo code applied at checkout (e.g. WELCOME20) and the discount it gave, in this line's
+   * `currency` cents — 0/undefined when no promo was used. See billing.service.ts#paymentLineItem. */
+  promoDiscountCents?: number
+  promoCode?: string | null
 }
 
 export interface AdminBillingTotals {
@@ -886,4 +998,171 @@ export interface VVEsimApiTestResult {
 export interface VVApiTestResult {
   ok: boolean
   message: string
+}
+
+// ── Refer & Earn (admin report) ─────────────────────────────────────
+// Rewards are POINTS. Each side of a referral is priced in its OWN currency (an INR referrer and
+// an AUD referee each get their own currency's configured points) — never combine sides into one
+// money figure. `value` is those points at the fixed redemption rate of that same currency, or
+// null when redemption is switched off for it.
+
+export type ReferralSide = 'REFERRER' | 'REFEREE'
+export type ReferralUsageStatus = 'PENDING' | 'COMPLETED' | 'EXPIRED' | 'REVOKED'
+/** `PENDING` again after a reward was reversed shows as `REVERSED`. */
+export type ReferralDisplayStatus = 'PENDING' | 'REWARDED' | 'REVERSED' | 'REVOKED' | 'EXPIRED'
+
+export interface PointsValue {
+  cents: number
+  currency: string
+}
+
+export interface ReferralPerson {
+  id: string
+  name: string | null
+  email: string
+  isActive: boolean
+}
+
+export interface ReferralParty extends ReferralPerson {
+  currency: string
+  pointsInForce: number
+  value: PointsValue | null
+}
+
+export interface ReferralRow {
+  id: string
+  createdAt: string
+  completedAt: string | null
+  lastActivityAt: string
+  code: string | null
+  status: ReferralUsageStatus
+  displayStatus: ReferralDisplayStatus
+  reversalCount: number
+  referrer: ReferralParty
+  referee: ReferralParty
+}
+
+export interface ReferralsPage {
+  referrals: ReferralRow[]
+  pagination: VVPagination
+}
+
+export interface ReferralListFilters {
+  page?: number
+  limit?: number
+  status?: 'pending' | 'rewarded' | 'reversed' | 'revoked' | 'expired'
+  currency?: string
+  search?: string
+  from?: string
+  to?: string
+}
+
+export interface ReferralCurrencyStats {
+  currency: string
+  referrerPointsAwarded: number
+  refereePointsAwarded: number
+  pointsReversed: number
+  pointsInForce: number
+  /** Award events (each side of each reward counts once). */
+  rewards: number
+  value: PointsValue | null
+}
+
+export interface ReferralOverview {
+  days: number
+  since: string
+  totals: {
+    referrals: number
+    pending: number
+    rewarded: number
+    reversed: number
+    revoked: number
+    expired: number
+    uniqueReferrers: number
+    reversals: number
+    /** 0–1 — rewarded ÷ referrals. */
+    conversionRate: number
+    codes: { total: number; active: number }
+  }
+  byCurrency: ReferralCurrencyStats[]
+  topReferrers: Array<{
+    referrer: ReferralPerson
+    currency: string
+    referrals: number
+    rewarded: number
+    pending: number
+    pointsInForce: number
+    value: PointsValue | null
+  }>
+  trend: Array<{ date: string; referrals: number; rewarded: number; reversed: number }>
+  /** Points needed to redeem 1 unit, per currency (only currencies with redemption on). */
+  redemptionRates: Record<string, number>
+}
+
+export interface ReferralTimelineEvent {
+  id: string
+  type: 'CODE_APPLIED' | 'AWARD' | 'REVERSAL'
+  at: string
+  side: ReferralSide
+  points: number
+  currency: string
+  value: PointsValue | null
+  reason: string | null
+  bookingRef: string | null
+}
+
+export interface ReferralDetail {
+  referral: ReferralRow
+  code: {
+    id: string
+    code: string
+    isActive: boolean
+    maxUses: number | null
+    currentUses: number
+    expiresAt: string | null
+  } | null
+  timeline: ReferralTimelineEvent[]
+  bookings: Array<{
+    reference: string
+    paymentId: string | null
+    invoiceNumber: string | null
+    description: string | null
+    status: string | null
+    /** In the currency the referee actually paid. */
+    amount: PointsValue | null
+    createdAt: string | null
+  }>
+}
+
+export interface AdminReferralCode {
+  id: string
+  code: string
+  owner: ReferralPerson & { currency: string }
+  isActive: boolean
+  expired: boolean
+  maxUses: number | null
+  currentUses: number
+  expiresAt: string | null
+  createdAt: string
+  referrals: number
+  rewarded: number
+  pending: number
+}
+
+export interface ReferralCodesPage {
+  codes: AdminReferralCode[]
+  pagination: VVPagination
+}
+
+export interface ReferralCodeFilters {
+  page?: number
+  limit?: number
+  status?: 'active' | 'inactive' | 'expired'
+  search?: string
+}
+
+export interface ReferralCodePatch {
+  isActive?: boolean
+  maxUses?: number | null
+  expiresAt?: string | null
 }

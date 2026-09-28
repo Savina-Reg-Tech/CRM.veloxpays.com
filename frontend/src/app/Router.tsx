@@ -30,6 +30,9 @@ import VVEsimDetailPage from '@/features/veloxverse-admin/pages/VVEsimDetailPage
 import VVLoungePage from '@/features/veloxverse-admin/pages/VVLoungePage'
 import VVTransfersPage from '@/features/veloxverse-admin/pages/VVTransfersPage'
 import VVPromoCodesPage from '@/features/veloxverse-admin/pages/VVPromoCodesPage'
+import VVPromoCodeDetailPage from '@/features/veloxverse-admin/pages/VVPromoCodeDetailPage'
+import VVReferEarnPage from '@/features/veloxverse-admin/pages/VVReferEarnPage'
+import VVReferralDetailPage from '@/features/veloxverse-admin/pages/VVReferralDetailPage'
 import VVPricingPage from '@/features/veloxverse-admin/pages/VVPricingPage'
 import VVUsersListPage from '@/features/veloxverse-admin/pages/VVUsersListPage'
 import VVUserDetailPage from '@/features/veloxverse-admin/pages/VVUserDetailPage'
@@ -88,12 +91,15 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/lounge',                 element: <VVLoungePage /> },
               { path: '/dashboard/veloxverse/transfers',              element: <VVTransfersPage /> },
               { path: '/dashboard/veloxverse/promo-codes',            element: <VVPromoCodesPage /> },
+              { path: '/dashboard/veloxverse/promo-codes/:id',        element: <VVPromoCodeDetailPage /> },
               { path: '/dashboard/veloxverse/pricing',                element: <VVPricingPage /> },
               { path: '/dashboard/veloxverse/users',                  element: <VVUsersListPage /> },
               { path: '/dashboard/veloxverse/users/:id',              element: <VVUserDetailPage /> },
               { path: '/dashboard/veloxverse/support',                element: <VVSupportListPage /> },
               { path: '/dashboard/veloxverse/support/:ticketId',      element: <VVSupportDetailPage /> },
               { path: '/dashboard/veloxverse/points',                 element: <VVPointsPage /> },
+              { path: '/dashboard/veloxverse/refer-earn',             element: <VVReferEarnPage /> },
+              { path: '/dashboard/veloxverse/refer-earn/:id',         element: <VVReferralDetailPage /> },
               { path: '/dashboard/veloxverse/club',                  element: <VVClubPage /> },
             ],
           },

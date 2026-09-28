@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { vvPointsService, vvReferralConfigService } from '../vvAdminService'
+import type { CreatePointsServiceInput } from '../types'
 
 // ── Earning Rules ──────────────────────────────────────────────────
 
@@ -15,6 +16,22 @@ export function useVVUpdatePointsConfig() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: { pointsPerUnit?: number; isActive?: boolean; description?: string } }) =>
       vvPointsService.updateConfig(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points'] }),
+  })
+}
+
+export function useVVCreatePointsService() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreatePointsServiceInput) => vvPointsService.createService(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points'] }),
+  })
+}
+
+export function useVVDeletePointsService() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (serviceType: string) => vvPointsService.deleteService(serviceType),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-points'] }),
   })
 }

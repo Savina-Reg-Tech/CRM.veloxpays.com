@@ -22,7 +22,7 @@ export default function Pagination({ page, pageSize, total, onPageChange }: Prop
   const to = Math.min(safePage * safePageSize, total)
 
   return (
-    <div className="flex items-center justify-between gap-3 px-1 py-2 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-2 text-sm">
       <p className="text-gray-500">
         {total === 0 ? (
           'No records'

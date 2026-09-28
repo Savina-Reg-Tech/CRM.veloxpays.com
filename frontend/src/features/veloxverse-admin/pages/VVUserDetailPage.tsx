@@ -321,6 +321,11 @@ export default function VVUserDetailPage() {
                             <div className="min-w-0">
                               <p className="truncate text-gray-900">{li.description}</p>
                               <p className="text-xs text-gray-500">{formatDateTime(li.date)}</p>
+                              {li.promoDiscountCents ? (
+                                <p className="text-xs text-emerald-600">
+                                  Promo code {li.promoCode ?? ''} · −{formatMoney(li.promoDiscountCents / 100, li.currency)}
+                                </p>
+                              ) : null}
                             </div>
                             <span
                               className={`shrink-0 font-medium ${li.direction === 'credit' ? 'text-red-600' : 'text-gray-700'}`}

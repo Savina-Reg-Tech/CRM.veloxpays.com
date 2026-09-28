@@ -40,3 +40,13 @@ export function parseInlineLinks(text: string): ReactNode[] {
   }
   return nodes.length > 0 ? nodes : [text]
 }
+
+/**
+ * An option's text with its inline links, as ONE inline run. Option labels are flex rows
+ * (checkbox + text); passing `parseInlineLinks()`'s node array straight in made every text
+ * chunk and link its own flex item, so "…I accept VeloxVerse's [Terms] and [Privacy Policy]"
+ * split into side-by-side columns. Wrapping them in a single span keeps it one wrapping sentence.
+ */
+export function InlineLinks({ text, className }: { text: string; className?: string }) {
+  return <span className={`min-w-0 flex-1 break-words leading-snug ${className ?? ''}`.trim()}>{parseInlineLinks(text)}</span>
+}
