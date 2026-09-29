@@ -292,8 +292,8 @@ export default function VVTransfersPage() {
         title: 'Booking cancelled',
         message:
           result.refundedCents > 0
-            ? `${who}'s transfer was cancelled and ${formatMoney(result.refundedCents / 100, result.currency)} refunded.`
-            : `${who}'s transfer was cancelled. No refund was issued (non-refundable).`,
+            ? `${who}'s Pick & Drop booking was cancelled and ${formatMoney(result.refundedCents / 100, result.currency)} refunded.`
+            : `${who}'s Pick & Drop booking was cancelled. No refund was issued (non-refundable).`,
       })
       setDetailBooking(null)
       closeCancelModal()
@@ -324,7 +324,7 @@ export default function VVTransfersPage() {
             <h1 className="text-2xl font-bold text-gray-900">VeloxAssist</h1>
             <p className="text-sm text-gray-500">
               {activeTab === 'pickdrop'
-                ? 'Pick & Drop transfer bookings (ViaTovia).'
+                ? 'Pick & Drop bookings (ViaTovia).'
                 : 'Meet & Greet airport greeter requests.'}
             </p>
           </div>
@@ -403,7 +403,7 @@ export default function VVTransfersPage() {
 
           {isError ? (
             <Card className="flex flex-col items-center gap-3 py-10 text-center">
-              <p className="text-sm text-gray-500">Could not load transfer bookings.</p>
+              <p className="text-sm text-gray-500">Could not load Pick & Drop bookings.</p>
               <Button variant="outline" size="sm" onClick={() => refetch()}>
                 Try again
               </Button>
@@ -416,7 +416,7 @@ export default function VVTransfersPage() {
             </div>
           ) : !bookings || bookings.length === 0 ? (
             <Card className="py-10 text-center text-sm text-gray-500">
-              {status ? 'No transfer bookings match this status.' : 'No transfer bookings yet.'}
+              {status ? 'No Pick & Drop bookings match this status.' : 'No Pick & Drop bookings yet.'}
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -681,7 +681,7 @@ export default function VVTransfersPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            This cancels the transfer for{' '}
+            This cancels the Pick & Drop booking for{' '}
             <span className="font-medium text-gray-900">{cancelBooking?.customer?.name ?? 'this customer'}</span> with
             ViaTovia. Refundable bookings are refunded automatically (minus any refund-protection fee); non-refundable
             bookings are not refunded. This can&apos;t be undone.

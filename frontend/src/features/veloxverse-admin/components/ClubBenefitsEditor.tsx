@@ -127,7 +127,7 @@ export default function ClubBenefitsEditor({ tier, open, onClose, onSuccess }: C
         </div>
 
         <div className="py-2">
-          <p className="mb-1 text-xs font-semibold uppercase text-gray-400">eSIM & Transfers</p>
+          <p className="mb-1 text-xs font-semibold uppercase text-gray-400">eSIM / Pick & Drop</p>
           <Row
             label="Free eSIM data (GB per membership year)"
             help="Members can redeem any fixed-data eSIM package(s) until this many GB are used. A package must fit in the GB left; unlimited plans aren't covered."

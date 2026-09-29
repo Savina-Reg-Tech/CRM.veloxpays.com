@@ -20,7 +20,7 @@ import { Card } from '@/components/ui/Card'
 import { formatMoney } from '@/lib/utils'
 import { LineChart, BarChart } from '../components/Charts'
 import {
-  ACTIVITY_TYPE_BADGE_CLASS,
+  ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
   formatActivityAmount,
   timeAgo,
@@ -302,7 +302,7 @@ export default function VVAnalyticsPage() {
           <StatCard
             icon={<ArrowUpRight className="h-5 w-5 text-rose-500" />}
             tint="bg-rose-50"
-            label="Transfer revenue"
+            label="Pick & Drop revenue"
             value={formatMoney(overview.data.transferRevenue, currency)}
             sub={`${overview.data.transferBookings} bookings`}
           />
@@ -523,7 +523,7 @@ export default function VVAnalyticsPage() {
                     {/* Details */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{o.type}</Badge>
+                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
                         <p className="truncate text-sm text-gray-900">{o.description}</p>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">

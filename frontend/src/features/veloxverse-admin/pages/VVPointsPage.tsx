@@ -59,7 +59,7 @@ import type {
 
 const SERVICE_LABELS: Record<string, string> = {
   LOUNGE: 'Lounge', ESIM: 'eSIM', FLIGHT: 'Flights', HOTEL: 'Hotels',
-  TRANSFER: 'Transfers', INSURANCE: 'Insurance', MONEY_TRANSFER: 'Money Transfer',
+  TRANSFER: 'Pick & Drop', INSURANCE: 'Insurance', MONEY_TRANSFER: 'Money Transfer',
   TUITION: 'Tuition', UTILITY: 'Utility', REFERRAL: 'Referral',
 }
 

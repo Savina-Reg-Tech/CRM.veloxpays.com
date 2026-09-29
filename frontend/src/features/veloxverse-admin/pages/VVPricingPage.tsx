@@ -75,7 +75,7 @@ const SERVICE_LABELS: Record<VVServiceType, string> = {
   DINING: 'VeloxLounge — Dining',
   FAST_TRACK: 'VeloxLounge — Fast Track',
   FITNESS: 'VeloxLounge — Fitness',
-  TRANSFER: 'VeloxAssist — Transfers',
+  TRANSFER: 'VeloxAssist — Pick & Drop',
   FLIGHT: 'VeloxTravel — Flights',
   HOTEL: 'VeloxTravel — Hotels',
   CAR_RENTAL: 'VeloxTravel — Car Rental',

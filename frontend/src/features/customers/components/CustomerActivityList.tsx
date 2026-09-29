@@ -13,6 +13,14 @@ const KIND_ICON: Record<CustomerActivityItem['kind'], ComponentType<{ className?
   CLUB: Crown,
 }
 
+const KIND_LABEL: Record<CustomerActivityItem['kind'], string> = {
+  ESIM: 'eSIM',
+  TRANSFER: 'Pick & Drop',
+  SUPPORT: 'Support',
+  FORM: 'Form',
+  CLUB: 'Club',
+}
+
 function ActivityRow({ item }: { item: CustomerActivityItem }) {
   const Icon = KIND_ICON[item.kind]
   return (
@@ -29,7 +37,7 @@ function ActivityRow({ item }: { item: CustomerActivityItem }) {
           )}
         </div>
         {item.subtitle && <p className="text-xs text-gray-500">{item.subtitle}</p>}
-        <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">{item.kind}</p>
+        <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">{KIND_LABEL[item.kind]}</p>
       </div>
       {item.amountUsd != null && (
         <span className="shrink-0 text-sm font-medium text-gray-900">

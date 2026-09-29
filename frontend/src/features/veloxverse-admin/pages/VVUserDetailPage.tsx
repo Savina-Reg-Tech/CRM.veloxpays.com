@@ -409,7 +409,7 @@ export default function VVUserDetailPage() {
                 <TabsContent value="assist">
                   {profile.transfers.length === 0 ? (
                     <p className="py-8 text-center text-sm text-gray-500">
-                      No transfer bookings.
+                      No Pick & Drop bookings.
                     </p>
                   ) : (
                     <ul className="space-y-2">

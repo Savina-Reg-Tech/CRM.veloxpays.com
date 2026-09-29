@@ -47,6 +47,15 @@ export const ACTIVITY_TYPE_BADGE_CLASS: Record<ActivityType, string> = {
   REFUND: 'bg-red-50 text-red-700 ring-red-200',
 }
 
+/** Display labels for recent-activity types. */
+export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
+  ESIM: 'ESIM',
+  LOUNGE: 'LOUNGE',
+  BENEFIT: 'BENEFIT',
+  TRANSFER: 'PICK & DROP',
+  REFUND: 'REFUND',
+}
+
 /** Resolve credit/debit from API `direction`, with fallback for older payloads. */
 export function activityDirection(item: {
   direction?: ActivityDirection

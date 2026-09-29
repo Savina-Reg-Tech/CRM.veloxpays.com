@@ -22,7 +22,7 @@ import {
   useVVCustomerSpending,
 } from '@/features/veloxverse-admin/hooks/useVVAnalytics'
 import {
-  ACTIVITY_TYPE_BADGE_CLASS,
+  ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
   formatActivityAmount,
   formatUsd,
@@ -317,7 +317,7 @@ export default function SuperAdminDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{o.type}</Badge>
+                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
                         <p className="truncate text-sm text-gray-900">{o.description}</p>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
