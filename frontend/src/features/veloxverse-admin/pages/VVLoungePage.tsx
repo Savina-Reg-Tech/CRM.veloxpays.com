@@ -1,17 +1,21 @@
-import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState, type ElementType, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
-  Eye,
   Sofa,
-  DollarSign,
   BadgeCheck,
   CalendarClock,
   XCircle,
-  X,
   Dumbbell,
   UtensilsCrossed,
   Zap,
+  Search,
+  Ticket,
+  CalendarDays,
+  Users,
+  Hash,
+  QrCode,
+  ChevronRight,
 } from 'lucide-react'
 import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
@@ -20,15 +24,30 @@ import { Card } from '@/components/ui/Card'
 import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
+import { useDebounce } from '@/hooks/useDebounce'
 import {
   useVVLoungeVisits,
   useVVLoungeMemberships,
   useVVLoungeStats,
-  useVVLoungeVisitDetail,
 } from '../hooks/useVVLounge'
-import { formatCents, formatDate, formatDateTime, statusBadgeVariant } from '../utils'
-import { formatMoney } from '@/lib/utils'
-import type { LoungeVisit, LoungeVisitStatus, AdminLoungeMembership } from '../types'
+import { formatDate, getInitials, statusBadgeVariant } from '../utils'
+import {
+  formatCentsIn,
+  formatVisitDate,
+  isWalkIn,
+  partyLabel,
+  paymentStatusVariant,
+  serviceLabel,
+  visitStatusLabel,
+  visitStatusVariant,
+} from '../loungeUtils'
+import type {
+  LoungeVisit,
+  LoungeVisitStatus,
+  AdminLoungeMembership,
+  LoungeBookingTypeFilter,
+  LoungeResourceType,
+} from '../types'
 
 const PAGE_SIZE = 20
 
@@ -38,7 +57,16 @@ const STATUS_OPTIONS: ('' | LoungeVisitStatus)[] = [
   'completed',
   'cancelled',
   'no_show',
+  'pending_confirmation',
 ]
+
+const STATUS_OPTION_LABEL: Record<LoungeVisitStatus, string> = {
+  confirmed: 'Confirmed / Valid',
+  completed: 'Completed / Used',
+  cancelled: 'Cancelled',
+  no_show: 'No show / Expired',
+  pending_confirmation: 'Pending confirmation',
+}
 
 const selectClass =
   'h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100'
@@ -67,274 +95,272 @@ function StatCard({
   )
 }
 
-function VisitDetailModal({ visitId, onClose }: { visitId: string; onClose: () => void }) {
-  const { data: visit, isLoading } = useVVLoungeVisitDetail(visitId)
+/* ─────────── Booking cards ─────────── */
 
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    )
+function serviceIcon(v: LoungeVisit) {
+  switch (v.resourceType) {
+    case 'DINING':
+      return { Icon: UtensilsCrossed, tint: 'bg-orange-50 text-orange-600' }
+    case 'FAST_TRACK':
+      return { Icon: Zap, tint: 'bg-sky-50 text-sky-600' }
+    case 'FITNESS':
+      return { Icon: Dumbbell, tint: 'bg-emerald-50 text-emerald-600' }
+    default:
+      return isWalkIn(v)
+        ? { Icon: Ticket, tint: 'bg-violet-50 text-violet-600' }
+        : { Icon: Sofa, tint: 'bg-indigo-50 text-indigo-600' }
   }
+}
 
-  if (!visit) return null
-
-  const b = visit.breakdown
-  const profitCents = b.marginCents + b.surgeCents
-
+function CardField({ icon: Icon, label, children }: { icon: ElementType; label: string; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">{visit.loungeName ?? 'Unknown'}</h3>
-            <p className="text-xs text-gray-500">{visit.orderId ?? visit.id} · {visit.airportCode}</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-5 px-5 py-4">
-          {/* Status + Customer */}
-          <div className="flex items-center justify-between">
-            <Badge variant={statusBadgeVariant(visit.status)}>{visit.status}</Badge>
-            {visit.customer && (
-              <div className="text-right text-sm">
-                <p className="font-medium text-gray-900">{visit.customer.name}</p>
-                <p className="text-xs text-gray-500">{visit.customer.email}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Key info */}
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <p className="text-xs text-gray-500">Visit date</p>
-              <p className="font-medium text-gray-900">{formatDate(visit.visitDate)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Guests</p>
-              <p className="font-medium text-gray-900">{visit.guestCount}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Booked</p>
-              <p className="font-medium text-gray-900">{visit.bookedAt ? formatDateTime(visit.bookedAt) : formatDate(visit.createdAt)}</p>
-            </div>
-          </div>
-
-          {/* Price breakdown */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Price breakdown</h4>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Base cost</span>
-                <span className="text-gray-900">{formatMoney(b.baseCents / 100, b.currency)}</span>
-              </div>
-              {profitCents > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Margin + surge</span>
-                  <span className="text-emerald-600">+{formatMoney(profitCents / 100, b.currency)}</span>
-                </div>
-              )}
-              {b.promoDiscountCents > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Promo discount</span>
-                  <span className="text-red-500">-{formatMoney(b.promoDiscountCents / 100, b.currency)}</span>
-                </div>
-              )}
-              {visit.isRefundable && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Refund protection fee</span>
-                  <span className="text-gray-900">{formatMoney(b.refundFeeCents / 100, b.currency)}</span>
-                </div>
-              )}
-              <div className="flex justify-between border-t border-gray-300 pt-1.5">
-                <span className="font-semibold text-gray-900">Total charged</span>
-                <span className="font-bold text-gray-900">{formatMoney(b.totalCents / 100, b.currency)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Currency conversion — #397 (CRM dual-amount generalization), same block already on
-              the VeloxVerse Invoice Details view (#396). Only shown when this booking (Lounge,
-              Dining, Fast Track or Fitness) was priced in a currency other than what was charged. */}
-          {visit.nativePrice && (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Currency conversion</h4>
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Original Price ({visit.nativePrice.nativeCurrency})</span>
-                  <span className="text-gray-900">
-                    {formatMoney(visit.nativePrice.nativeAmountCents / 100, visit.nativePrice.nativeCurrency)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">
-                    FX Rate ({visit.nativePrice.nativeCurrency} → {visit.nativePrice.paymentCurrency})
-                  </span>
-                  <span className="text-gray-900">
-                    {visit.nativePrice.fxRate.toFixed(4)} (via {visit.nativePrice.fxProvider})
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Customer Price ({visit.nativePrice.paymentCurrency})</span>
-                  <span className="text-gray-900">
-                    {formatMoney(visit.nativePrice.convertedAmountCents / 100, visit.nativePrice.paymentCurrency)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Profit + Refund info */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-xs text-emerald-600">Profit (margin + surge)</p>
-              <p className="text-lg font-bold text-emerald-700">{formatMoney(profitCents / 100, b.currency)}</p>
-            </div>
-            <div className={`rounded-lg border p-3 ${visit.isRefundable ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
-              <p className={`text-xs ${visit.isRefundable ? 'text-amber-600' : 'text-gray-500'}`}>
-                {visit.isRefundable ? 'Refundable amount' : 'Non-refundable'}
-              </p>
-              <p className={`text-lg font-bold ${visit.isRefundable ? 'text-amber-700' : 'text-gray-400'}`}>
-                {visit.isRefundable ? formatMoney(visit.refundableCents / 100, b.currency) : '—'}
-              </p>
-            </div>
-          </div>
-
-          {/* Cancellation info */}
-          {visit.cancelledAt && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
-              <p className="font-medium text-red-700">Cancelled</p>
-              <p className="text-xs text-red-600">
-                {formatDateTime(visit.cancelledAt)}
-                {visit.isRefundable && ` · ${formatMoney(visit.refundableCents / 100, b.currency)} refunded`}
-              </p>
-            </div>
-          )}
-
-          {visit.surgeApplied && (
-            <p className="text-xs text-amber-600">Surge pricing was applied to this booking.</p>
-          )}
-        </div>
+    <div className="flex min-w-0 items-start gap-2">
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
+        <div className="truncate text-sm text-gray-900">{children}</div>
       </div>
     </div>
   )
 }
 
-/* ─────────── Visits table (shared between tabs) ─────────── */
+function BookingCard({ v }: { v: LoungeVisit }) {
+  const { Icon, tint } = serviceIcon(v)
+  const name = v.customer?.name || v.contactName
+  const email = v.customer?.email || v.contactEmail
+  const epass = v.walkinPass?.ePassId ?? v.epassCode
+  const dp = v.dragonpassOrderIds ?? []
+  const pay = v.paymentStatus
+  const chargedDiffers = pay && (pay.amountCents !== v.totalCost || pay.currency !== v.currency)
 
-function VisitsTable({ bookingType, resourceType }: { bookingType: 'lounge' | 'benefit' | 'all'; resourceType?: string }) {
-  const [page, setPage] = useState(1)
-  const [airport, setAirport] = useState('')
-  const [status, setStatus] = useState<'' | LoungeVisitStatus>('')
-  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null)
+  return (
+    <Link
+      to={`/dashboard/veloxverse/lounge-bookings/${v.id}`}
+      className="group flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm transition hover:border-indigo-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+    >
+      {/* Header: service + status */}
+      <div className="flex items-start justify-between gap-3 px-4 pt-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tint}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-gray-900" title={v.loungeName ?? undefined}>
+              {v.loungeName ?? 'Unknown venue'}
+            </p>
+            <p className="truncate text-xs text-gray-500">
+              {serviceLabel(v)}
+              {v.airportCode && <> · <span className="font-medium text-gray-700">{v.airportCode}</span></>}
+            </p>
+          </div>
+        </div>
+        <Badge variant={visitStatusVariant(v)}>{visitStatusLabel(v)}</Badge>
+      </div>
 
-  const { data, isLoading } = useVVLoungeVisits({
+      {/* Customer */}
+      <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-gray-600 ring-1 ring-gray-200">
+          {getInitials(name || email)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-gray-900">{name || 'Unknown customer'}</p>
+          {email && <p className="truncate text-xs text-gray-500" title={email}>{email}</p>}
+        </div>
+        {v.customer?.isGuest && (
+          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700 ring-1 ring-amber-200">
+            Guest
+          </span>
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4">
+        <CardField icon={CalendarDays} label="Visit">
+          {formatVisitDate(v.visitDate)}
+          <span className="block truncate text-xs text-gray-500">
+            {isWalkIn(v) ? 'Walk-in pass' : v.visitTime ? `${v.visitTime} local time` : '—'}
+          </span>
+        </CardField>
+        <CardField icon={Users} label="Party">
+          <span className="whitespace-normal text-sm leading-snug">{partyLabel(v)}</span>
+        </CardField>
+        <CardField icon={Hash} label="Order no.">
+          <span className="font-mono text-xs" title={v.orderId ?? v.id}>{v.orderId ?? v.id.slice(0, 8)}</span>
+        </CardField>
+        <CardField icon={QrCode} label={epass ? 'ePass ID' : 'DragonPass order'}>
+          {epass || dp.length ? (
+            <span className="font-mono text-xs" title={[epass, ...dp].filter(Boolean).join(', ')}>
+              {epass ?? dp[0]}
+              {!epass && dp.length > 1 ? ` +${dp.length - 1}` : ''}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </CardField>
+      </div>
+
+      {/* Footer: amount + payment */}
+      <div className="mt-auto flex items-end justify-between gap-3 border-t border-gray-100 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-lg font-bold leading-tight text-gray-900">{formatCentsIn(v.totalCost, v.currency)}</p>
+          <p className="truncate text-xs text-gray-500">
+            {chargedDiffers ? `${formatCentsIn(pay!.amountCents, pay!.currency)} charged to card` : `Booked ${formatVisitDate(v.createdAt)}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {pay ? (
+            <Badge variant={paymentStatusVariant(pay.status)}>{pay.status}</Badge>
+          ) : (
+            <span className="text-xs text-gray-400">Wallet</span>
+          )}
+          <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function BookingCardGrid({
+  visits,
+  loading,
+  emptyMessage,
+}: {
+  visits: LoungeVisit[]
+  loading: boolean
+  emptyMessage: string
+}) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[300px] w-full rounded-xl" />
+        ))}
+      </div>
+    )
+  }
+  if (!visits.length) {
+    return (
+      <Card>
+        <div className="flex flex-col items-center gap-2 py-8 text-center">
+          <Search className="h-6 w-6 text-gray-300" />
+          <p className="text-sm text-gray-500">{emptyMessage}</p>
+        </div>
+      </Card>
+    )
+  }
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+      {visits.map((v) => (
+        <BookingCard key={v.id} v={v} />
+      ))}
+    </div>
+  )
+}
+
+/* ─────────── Bookings list (shared between tabs) ─────────── */
+
+type VisitsTab = 'lounge' | 'fitness' | 'dining' | 'fasttrack' | 'all'
+
+const TAB_QUERY: Record<VisitsTab, { bookingType: LoungeBookingTypeFilter; resourceType?: LoungeResourceType }> = {
+  lounge: { bookingType: 'lounge' },
+  fitness: { bookingType: 'benefit', resourceType: 'FITNESS' },
+  dining: { bookingType: 'benefit', resourceType: 'DINING' },
+  fasttrack: { bookingType: 'benefit', resourceType: 'FAST_TRACK' },
+  all: { bookingType: 'all' },
+}
+
+function VisitsList({ tab }: { tab: VisitsTab }) {
+  // Filters live in the URL so "Back" from a booking detail page restores the same search.
+  const [params, setParams] = useSearchParams()
+  const page = Number(params.get('page')) || 1
+  const airport = params.get('airport') ?? ''
+  const status = (params.get('status') ?? '') as '' | LoungeVisitStatus
+  const [search, setSearch] = useState(params.get('q') ?? '')
+  const debouncedSearch = useDebounce(search.trim(), 350)
+
+  const setParam = useCallback(
+    (key: string, value: string) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (value) next.set(key, value)
+          else next.delete(key)
+          if (key !== 'page') next.delete('page')
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setParams],
+  )
+
+  useEffect(() => {
+    if (debouncedSearch !== (params.get('q') ?? '')) setParam('q', debouncedSearch)
+  }, [debouncedSearch, params, setParam])
+
+  const { data, isLoading, isFetching, isError, error } = useVVLoungeVisits({
     page,
     limit: PAGE_SIZE,
     airport: airport || undefined,
     status: status || undefined,
-    bookingType,
-    resourceType,
+    search: debouncedSearch || undefined,
+    ...TAB_QUERY[tab],
   })
-
-  const nameHeader = bookingType === 'lounge' ? 'Lounge' : 'Venue'
-
-  const columns = [
-    {
-      key: 'lounge',
-      header: nameHeader,
-      render: (v: LoungeVisit) => <span className="font-medium text-gray-900">{v.loungeName}</span>,
-    },
-    { key: 'airport', header: 'Airport', render: (v: LoungeVisit) => v.airportCode },
-    { key: 'date', header: 'Date', render: (v: LoungeVisit) => formatDate(v.visitDate) },
-    { key: 'guests', header: 'Guests', render: (v: LoungeVisit) => v.guestCount },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (v: LoungeVisit) => <Badge variant={statusBadgeVariant(v.status)}>{v.status}</Badge>,
-    },
-    {
-      key: 'cost',
-      header: 'Cost',
-      render: (v: LoungeVisit) => {
-        const s = v.status?.toUpperCase()
-        const color =
-          s === 'CANCELLED' || s === 'NO_SHOW'
-            ? 'text-red-500'
-            : s === 'CONFIRMED'
-            ? 'text-amber-600'
-            : s === 'COMPLETED'
-            ? 'text-emerald-600'
-            : 'text-gray-700'
-        return <span className={`font-medium ${color}`}>{formatMoney(v.totalCost / 100, v.currency)}</span>
-      },
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: (v: LoungeVisit) => (
-        <button
-          onClick={() => setSelectedVisitId(v.id)}
-          className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
-        >
-          <Eye className="h-3.5 w-3.5" />
-          View
-        </button>
-      ),
-    },
-  ]
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="max-w-[220px]">
-          <Input
-            placeholder="Airport code (e.g. LHR)"
-            value={airport}
-            onChange={(e) => {
-              setPage(1)
-              setAirport(e.target.value.toUpperCase())
-            }}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            placeholder="Email, name, order no., ePass ID"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`${selectClass} w-full pl-9`}
           />
         </div>
-        <select
-          value={status}
-          onChange={(e) => {
-            setPage(1)
-            setStatus(e.target.value as '' | LoungeVisitStatus)
-          }}
-          className={selectClass}
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s || 'all'} value={s}>
-              {s ? s : 'All statuses'}
-            </option>
-          ))}
-        </select>
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:items-center">
+          <div className="sm:w-[180px]">
+            <Input
+              placeholder="Airport (e.g. LGW)"
+              value={airport}
+              maxLength={3}
+              onChange={(e) => setParam('airport', e.target.value.toUpperCase().trim())}
+            />
+          </div>
+          <select
+            value={status}
+            onChange={(e) => setParam('status', e.target.value)}
+            className={`${selectClass} w-full sm:w-auto`}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s || 'all'} value={s}>
+                {s ? STATUS_OPTION_LABEL[s] : 'All statuses'}
+              </option>
+            ))}
+          </select>
+        </div>
+        {data && (
+          <span className="text-xs text-gray-500">
+            {data.total.toLocaleString()} booking{data.total === 1 ? '' : 's'}
+          </span>
+        )}
+        {isFetching && !isLoading && <span className="text-xs text-gray-400">Updating…</span>}
       </div>
 
-      <Card padding="none">
-        <Table
-          columns={columns}
-          data={data?.items ?? []}
-          keyField="id"
+      {isError ? (
+        <Card>
+          <p className="text-sm text-red-600">
+            Failed to load bookings{error instanceof Error ? `: ${error.message}` : '.'}
+          </p>
+        </Card>
+      ) : (
+        <BookingCardGrid
+          visits={data?.items ?? []}
           loading={isLoading}
-          emptyMessage="No bookings found."
+          emptyMessage={debouncedSearch ? `No bookings match “${debouncedSearch}”.` : 'No bookings found.'}
         />
-      </Card>
-
-      {selectedVisitId && (
-        <VisitDetailModal visitId={selectedVisitId} onClose={() => setSelectedVisitId(null)} />
       )}
 
       {data && data.total > PAGE_SIZE && (
@@ -342,7 +368,7 @@ function VisitsTable({ bookingType, resourceType }: { bookingType: 'lounge' | 'b
           page={page}
           pageSize={PAGE_SIZE}
           total={data.total}
-          onPageChange={setPage}
+          onPageChange={(p) => setParam('page', p > 1 ? String(p) : '')}
         />
       )}
     </div>
@@ -401,8 +427,16 @@ function MembershipsTab() {
   )
 }
 
+const TABS = ['lounge', 'dining', 'fasttrack', 'fitness', 'all', 'memberships'] as const
+type PageTab = (typeof TABS)[number]
+
 export default function VVLoungePage() {
   const { data: stats, isLoading } = useVVLoungeStats()
+  const [params, setParams] = useSearchParams()
+  const tabParam = params.get('tab') as PageTab | null
+  const activeTab: PageTab = tabParam && TABS.includes(tabParam) ? tabParam : 'lounge'
+  // Switching service drops the previous tab's filters.
+  const changeTab = (tab: string) => setParams(tab === 'lounge' ? {} : { tab }, { replace: true })
 
   return (
     <div className="max-w-full space-y-6">
@@ -420,23 +454,18 @@ export default function VVLoungePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Lounge & Benefits Management</h1>
-            <p className="text-sm text-gray-500">Visits, memberships and revenue across VeloxLounge services.</p>
+            <p className="text-sm text-gray-500">Bookings, customers and ePasses across Lounge, Dining, Fast Track and Fitness.</p>
           </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* No revenue card: bookings are charged in many currencies, so a single total would be misleading. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
+          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
         ) : (
           <>
-            <StatCard
-              label="Total revenue"
-              value={formatCents(stats?.totalRevenueCents ?? 0)}
-              icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
-              tint="bg-emerald-50"
-            />
             <StatCard
               label="Active memberships"
               value={stats?.activeMemberships ?? 0}
@@ -459,15 +488,11 @@ export default function VVLoungePage() {
         )}
       </div>
 
-      <Tabs defaultValue="lounge">
-        <TabsList>
+      <Tabs defaultValue="lounge" value={activeTab} onChange={changeTab}>
+        <TabsList className="overflow-x-auto">
           <TabsTrigger value="lounge" className="gap-1.5">
             <Sofa className="h-3.5 w-3.5" />
             Lounge
-          </TabsTrigger>
-          <TabsTrigger value="fitness" className="gap-1.5">
-            <Dumbbell className="h-3.5 w-3.5" />
-            Fitness
           </TabsTrigger>
           <TabsTrigger value="dining" className="gap-1.5">
             <UtensilsCrossed className="h-3.5 w-3.5" />
@@ -477,27 +502,22 @@ export default function VVLoungePage() {
             <Zap className="h-3.5 w-3.5" />
             Fast Track
           </TabsTrigger>
+          <TabsTrigger value="fitness" className="gap-1.5">
+            <Dumbbell className="h-3.5 w-3.5" />
+            Fitness
+          </TabsTrigger>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="memberships">Memberships</TabsTrigger>
         </TabsList>
-        <TabsContent value="lounge">
-          <VisitsTable bookingType="lounge" />
-        </TabsContent>
-        <TabsContent value="fitness">
-          <VisitsTable bookingType="benefit" resourceType="FITNESS" />
-        </TabsContent>
-        <TabsContent value="dining">
-          <VisitsTable bookingType="benefit" resourceType="DINING" />
-        </TabsContent>
-        <TabsContent value="fasttrack">
-          <VisitsTable bookingType="benefit" resourceType="FAST_TRACK" />
-        </TabsContent>
-        <TabsContent value="all">
-          <VisitsTable bookingType="all" />
-        </TabsContent>
         <TabsContent value="memberships">
           <MembershipsTab />
         </TabsContent>
+        {activeTab !== 'memberships' && (
+          <div className="pt-4">
+            {/* Keyed so switching tabs resets the local search input along with the URL filters. */}
+            <VisitsList key={activeTab} tab={activeTab} />
+          </div>
+        )}
       </Tabs>
     </div>
   )

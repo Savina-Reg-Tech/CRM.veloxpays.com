@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
-import { vvLoungeService } from '../vvAdminService'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { vvLoungeService, type LoungeVisitsParams } from '../vvAdminService'
 
-export function useVVLoungeVisits(params: { page?: number; limit?: number; airport?: string; status?: string; bookingType?: string; resourceType?: string } = {}) {
+export function useVVLoungeVisits(params: LoungeVisitsParams = {}) {
   return useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['vv-lounge', 'visits', params],
     queryFn: () => vvLoungeService.getVisits(params),
   })
@@ -22,7 +23,7 @@ export function useVVLoungeStats() {
   })
 }
 
-export function useVVLoungeVisitDetail(visitId: string | null) {
+export function useVVLoungeVisitDetail(visitId: string | null | undefined) {
   return useQuery({
     queryKey: ['vv-lounge', 'visit-detail', visitId],
     queryFn: () => vvLoungeService.getVisitDetail(visitId!),

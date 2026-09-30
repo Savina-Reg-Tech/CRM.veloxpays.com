@@ -203,21 +203,98 @@ export interface AdminOrderDetail {
 }
 
 // ── Lounge ───────────────────────────────────────────────────────────
-export type LoungeVisitStatus = 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+export type LoungeVisitStatus = 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'pending_confirmation'
 
+/** `lounge` = LNG- orders, `benefit` = BNF- orders (Dining / Fast Track / Fitness). */
+export type LoungeBookingTypeFilter = 'lounge' | 'benefit' | 'all'
+export type LoungeResourceType = 'FAST_TRACK' | 'DINING' | 'FITNESS'
+
+/** VeloxVerse account behind a lounge/benefit booking (admin visits endpoints). */
+export interface LoungeCustomer {
+  id: string
+  name: string | null
+  email: string | null
+  role: string | null
+  isGuest: boolean
+  isVerified: boolean
+  isActive: boolean
+  preferredCurrency: string | null
+  registeredAt: string | null
+}
+
+export interface LoungeVoucher {
+  code?: string | null
+  voucherCode?: string | null
+  /** e.g. QR / BARCODE / CODE — decides how the voucher is rendered. */
+  voucherType?: string | null
+  type?: string | null
+  status?: string | number | null
+  passengerName?: string | null
+  name?: string | null
+  url?: string | null
+  [key: string]: unknown
+}
+
+export interface LoungeWalkinPass {
+  ePassId: string | null
+  /** Visits on the pass (one per person). */
+  usages: number | null
+  /** UTC ISO — display in the lounge's local time using `timeZone`. */
+  validFrom: string | null
+  validUntil: string | null
+  timeZone: string | null
+  scope: { resourceIds?: string[]; iata?: string[] } | null
+  /** Set when the pass expired unused. */
+  expiredAt: string | null
+  /** 2 = used, 3 = reversed by lounge staff. */
+  scans: { status: 2 | 3 | number; usageDate: string }[] | null
+}
+
+/**
+ * One row of `GET /lounge/admin/visits` — everything the customer's "My Bookings" has plus
+ * `customer`, `paymentStatus` and `dragonpassOrderIds`.
+ */
 export interface LoungeVisit {
   id: string
-  orderId?: string
-  loungeName: string
-  airportCode: string
-  visitDate: string
-  guestCount: number
+  orderId?: string | null
+  loungeName: string | null
+  loungeId?: string | null
+  airportCode: string | null
+  visitDate: string | null
+  visitTime?: string | null
   status: LoungeVisitStatus
+  /** Cents, in `currency`. */
   totalCost: number
   /** Real charged currency for `totalCost` — falls back to 'USD' for bookings from before this
    * was tracked. Never assume USD from the absence of a `$` sign upstream. */
   currency: string
+  /** null = lounge. */
+  resourceType?: LoungeResourceType | string | null
+  bookingType?: 'WALK_IN' | 'PREBOOK' | null
+  guestCount: number
+  adults?: number | null
+  children?: number | null
+  infants?: number | null
+  infantsFree?: boolean | null
+  contactName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  contactCallingCode?: string | null
+  flightNumber?: string | null
+  isRefundable?: boolean
+  cancellable?: boolean | null
+  cancellationHoursBefore?: number | null
+  cancellationPolicy?: string | null
+  epassCode?: string | null
+  qrCode?: string | null
+  vouchers?: LoungeVoucher[] | null
+  /** Lounge IANA zone — visit & cancellation times are lounge-local. */
+  timeZone?: string | null
+  walkinPass?: LoungeWalkinPass | null
   createdAt: string
+  customer?: LoungeCustomer | null
+  paymentStatus?: { status: string; amountCents: number; currency: string } | null
+  dragonpassOrderIds?: string[]
 }
 
 export interface AdminLoungeMembership {
@@ -245,23 +322,83 @@ export interface Paginated<T> {
   totalPages: number
 }
 
-export interface LoungeVisitDetail {
+export interface LoungePayment {
   id: string
-  orderId?: string
-  loungeName: string
-  airportCode: string
-  visitDate: string
-  guestCount: number
-  status: LoungeVisitStatus
-  totalCost: number
+  status: string
+  provider: string | null
+  /** Mint purchase reference. */
+  providerReference: string | null
+  invoiceNumber: string | null
   currency: string
+  /** Charged to the card. */
+  amountCents: number
+  creditAppliedCents: number | null
+  pointsAppliedCents: number | null
+  pointsRedeemed: number | null
+  clubDiscountCents: number | null
+  promoDiscountCents: number | null
+  promoCode: string | null
+  card: {
+    brand: string | null
+    /** Masked, e.g. 424242******4242 */
+    number: string | null
+    holderName: string | null
+    country: string | null
+    funding: string | null
+  } | null
+  chargeAttemptedAt: string | null
+  chargeResponse: { code: string | number | null; message: string | null } | null
+  refund: {
+    amount: number | null
+    currency: string | null
+    status: string | null
+    reference: string | null
+    at: string | null
+  } | null
   createdAt: string
-  customer: { name: string; email: string } | null
-  pricePerVisitCents: number | null
-  pricePerGuestCents: number | null
-  isRefundable: boolean
-  surgeApplied: boolean
-  refundableCents: number
+  updatedAt: string
+}
+
+export interface LoungeDragonpass {
+  orderIds: string[]
+  reference: string | null
+  epassId: string | null
+  epassIds: string[] | null
+  epassCode: string | null
+  epassIssued: boolean | null
+  epassLocal: boolean | null
+  /** true = time-slot prebooking, false = walk-in / ePass only. */
+  prebooked: boolean
+  lastStatus: string | number | null
+  lastStatusChangedDates: unknown
+  lastWalkinStatus: string | number | null
+  location: unknown
+  vouchers: LoungeVoucher[] | null
+  fitnessVouchers: unknown
+}
+
+export interface LoungeVisitDetail extends LoungeVisit {
+  customer: LoungeCustomer | null
+  /** null for old wallet bookings — then see `walletTransactionId`. */
+  payment: LoungePayment | null
+  walletTransactionId: string | null
+  paymentMethod: string | null
+  dragonpass: LoungeDragonpass | null
+  walkinPass: LoungeWalkinPass | null
+  timeZone: string | null
+  club: { applied: boolean; benefitKey: string | null; claimId: string | null } | null
+  dining: {
+    cuisineType: string | null
+    offerType: string | null
+    offerLabel: string | null
+    setMealItems: unknown
+    couponValue: number | string | null
+    couponValueCents: number | null
+    couponCurrency: string | null
+    discount: number | string | null
+  } | null
+  emails: { confirmationSentAt: string | null; pendingConfirmationEmail: unknown } | null
+  /** INTERNAL — never show to customers. */
   breakdown: {
     baseCents: number
     marginCents: number
@@ -274,9 +411,16 @@ export interface LoungeVisitDetail {
   /** #397 — see AdminNativePrice's docblock. Covers Lounge, Dining, Fast Track and Fitness since
    * they all share this same visit detail endpoint. */
   nativePrice?: AdminNativePrice | null
+  pricePerVisitCents: number | null
+  pricePerGuestCents: number | null
+  refundableCents: number
+  surgeApplied: boolean
   cancelledAt: string | null
   cancelledBy: string | null
   bookedAt: string | null
+  passengers: { name: string; type: string }[] | null
+  /** Full stored booking record for support (DragonPass tokens removed). */
+  metadata: Record<string, unknown> | null
 }
 
 // ── Transfers (VeloxAssist Pick & Drop) ───────────────────────────────

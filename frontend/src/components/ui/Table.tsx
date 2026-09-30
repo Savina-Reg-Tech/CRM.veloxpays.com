@@ -15,6 +15,8 @@ interface TableProps<T> {
   emptyMessage?: string
   className?: string
   loading?: boolean
+  /** Makes rows clickable (pointer cursor + keyboard Enter). */
+  onRowClick?: (row: T) => void
 }
 
 export function Table<T>({
@@ -24,6 +26,7 @@ export function Table<T>({
   emptyMessage = 'No records found.',
   className,
   loading = false,
+  onRowClick,
 }: TableProps<T>) {
   return (
     <div className={cn('overflow-x-auto rounded-xl border border-gray-200', className)}>
@@ -66,7 +69,10 @@ export function Table<T>({
             data.map((row) => (
               <tr
                 key={String(row[keyField])}
-                className="hover:bg-gray-50 transition-colors"
+                className={cn('hover:bg-gray-50 transition-colors', onRowClick && 'cursor-pointer')}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter') onRowClick(row) } : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
               >
                 {columns.map((col) => (
                   <td

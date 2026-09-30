@@ -28,6 +28,7 @@ import VVAnalyticsPage from '@/features/veloxverse-admin/pages/VVAnalyticsPage'
 import VVEsimListPage from '@/features/veloxverse-admin/pages/VVEsimListPage'
 import VVEsimDetailPage from '@/features/veloxverse-admin/pages/VVEsimDetailPage'
 import VVLoungePage from '@/features/veloxverse-admin/pages/VVLoungePage'
+import VVLoungeBookingDetailPage from '@/features/veloxverse-admin/pages/VVLoungeBookingDetailPage'
 import VVTransfersPage from '@/features/veloxverse-admin/pages/VVTransfersPage'
 import VVPromoCodesPage from '@/features/veloxverse-admin/pages/VVPromoCodesPage'
 import VVPromoCodeDetailPage from '@/features/veloxverse-admin/pages/VVPromoCodeDetailPage'
@@ -89,6 +90,7 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/esim-orders',            element: <VVEsimListPage /> },
               { path: '/dashboard/veloxverse/esim-orders/:orderNo',   element: <VVEsimDetailPage /> },
               { path: '/dashboard/veloxverse/lounge',                 element: <VVLoungePage /> },
+              { path: '/dashboard/veloxverse/lounge-bookings/:visitId', element: <VVLoungeBookingDetailPage /> },
               { path: '/dashboard/veloxverse/transfers',              element: <VVTransfersPage /> },
               { path: '/dashboard/veloxverse/promo-codes',            element: <VVPromoCodesPage /> },
               { path: '/dashboard/veloxverse/promo-codes/:id',        element: <VVPromoCodeDetailPage /> },

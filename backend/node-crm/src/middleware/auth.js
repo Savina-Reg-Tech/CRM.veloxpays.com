@@ -28,7 +28,7 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Not authenticated" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
 
     const user = await User.findById(decoded.id);
     if (!user || !user.is_active) {

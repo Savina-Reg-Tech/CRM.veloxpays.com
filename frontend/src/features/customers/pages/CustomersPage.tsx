@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -30,7 +30,9 @@ export default function CustomersPage() {
 
   const [vvAccountFilter, setVvAccountFilter] = useState<VvAccountFilter>('all')
   const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
+  // `?search=` pre-fills the box (e.g. "Find in CRM customers" from a VeloxLounge booking).
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
   const debouncedSearch = useDebounce(search, 300)
 
   useEffect(() => { setPage(1) }, [debouncedSearch, vvAccountFilter])

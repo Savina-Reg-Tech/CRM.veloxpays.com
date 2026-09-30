@@ -6,7 +6,9 @@ import jwt from "jsonwebtoken";
  * @returns {string} JWT token
  */
 const generateToken = (payload) => {
+  // HS256 pinned explicitly: VeloxVerse's CRM bridge only accepts HS256-signed CRM JWTs.
   return jwt.sign(payload, process.env.JWT_SECRET, {
+    algorithm: "HS256",
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 };

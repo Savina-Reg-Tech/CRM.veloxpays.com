@@ -4,6 +4,7 @@ import type {
   RecentActivity, OrderStats, CustomerSpendingResult,
   AdminOrderRow, AdminOrderDetail, VVPagination,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
+  LoungeBookingTypeFilter, LoungeResourceType,
   AdminTransferBooking, TransferCancelReason, TransferCancelResult,
   PromoCode, PromoCodeStats, CreatePromoCodeInput, PromoUsagesPage, PromoUsageFilters,
   PricingRule, PricingAuditEntry,
@@ -101,8 +102,22 @@ export const vvEsimService = {
 }
 
 // ── Lounge ───────────────────────────────────────────────────────────
+// CRM tokens are only accepted on /lounge/admin/* — never call the customer /lounge/* routes
+// (visits, benefits, resources) from the CRM; they return 401 for a CRM token.
+export interface LoungeVisitsParams {
+  page?: number
+  /** ≤ 100 */
+  limit?: number
+  airport?: string
+  status?: string
+  bookingType?: LoungeBookingTypeFilter
+  resourceType?: LoungeResourceType
+  /** Order no., DragonPass reference / order id, ePass ID, contact email, or account email / name. */
+  search?: string
+}
+
 export const vvLoungeService = {
-  async getVisits(params: { page?: number; limit?: number; airport?: string; status?: string; bookingType?: string; resourceType?: string } = {}) {
+  async getVisits(params: LoungeVisitsParams = {}) {
     const { data } = await api.get<VVResponse<{ visits: LoungeVisit[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>>(`${VV}/lounge/admin/visits`, { params })
     // Map backend shape { visits, pagination } → Paginated<LoungeVisit> { items, total, page, totalPages }
     const d = data.data
