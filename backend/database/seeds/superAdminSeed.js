@@ -16,6 +16,7 @@ const pool = new Pool({
   database: process.env.DB_NAME     || "crm_db",
   user:     process.env.DB_USER     || "postgres",
   password: process.env.DB_PASSWORD || "",
+  ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
 });
 
 const SUPER_ADMIN = {
