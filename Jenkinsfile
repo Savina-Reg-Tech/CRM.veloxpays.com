@@ -7,13 +7,13 @@ pipeline {
 
     environment {
         AWS_REGION             = 'ap-southeast-2'
-        AWS_ACCESS_KEY_ID      = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY  = credentials('aws-secret-access-key')
+        AWS_ACCESS_KEY_ID      = credentials('velox-aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY  = credentials('velox-aws-secret-access-key')
         DB_HOST          = 'ls-2dd41a1d0820b89a3ea559736accf25baf844b65.c9iim4oycvbv.ap-southeast-2.rds.amazonaws.com'
         DB_USER          = 'veloxverseDB'
         DB_NAME          = 'crm-veloxverseDB'
-        DB_PASSWORD      = credentials('db-password')
-        JWT_SECRET       = credentials('jwt-secret')
+        DB_PASSWORD      = credentials('velox-db-password')
+        JWT_SECRET       = credentials('velox-jwt-secret')
         // Must match the Amplify app's real domain once it's live.
         FRONTEND_URL     = 'https://velox-frontend.0w5cqv649rpjg.ap-southeast-2.cs.amazonlightsail.com'
     }
