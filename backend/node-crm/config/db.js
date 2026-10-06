@@ -9,6 +9,7 @@ const pool = new Pool({
   database: process.env.DB_NAME     || "crm_db",
   user:     process.env.DB_USER     || "postgres",
   password: process.env.DB_PASSWORD || "",
+  ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
   // Keep up to 10 idle connections in the pool
   max: 10,
   idleTimeoutMillis: 30000,
@@ -17,7 +18,7 @@ const pool = new Pool({
 
 // Test connection on startup
 pool.on("connect", () => {
-  console.log("✅ PostgreSQL connected");
+  console.log(`🔐 PostgreSQL SSL: ${process.env.DB_SSL === "false" ? "OFF" : "ON"}`);
 });
 
 pool.on("error", (err) => {
