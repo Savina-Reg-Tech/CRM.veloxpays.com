@@ -23,6 +23,7 @@ import {
   ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
   formatActivityAmount,
+  formatNativeSpend,
   timeAgo,
   getInitials,
   statusBadgeVariant,
@@ -429,7 +430,12 @@ export default function VVAnalyticsPage() {
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.esimSpend, currency)}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.loungeSpend, currency)}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-500">{formatMoney(c.benefitSpend, currency)}</td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatMoney(c.totalSpend, currency)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">
+                        {formatMoney(c.totalSpend, currency)}
+                        {c.nativeSpend && !(c.nativeSpend.length === 1 && c.nativeSpend[0].currency === spending.data?.currency) && (
+                          <span className="block text-[11px] font-normal text-gray-500">Paid {formatNativeSpend(c.nativeSpend)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                           <div

@@ -25,7 +25,7 @@ import {
   ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
   formatActivityAmount,
-  formatUsd,
+  formatNativeSpend,
   timeAgo,
   getInitials as vvGetInitials,
 } from '@/features/veloxverse-admin/utils'
@@ -36,7 +36,7 @@ import Avatar from '@/components/ui/Avatar'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import CreateEmployeeModal from '@/features/employees/components/CreateEmployeeModal'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatMoney } from '@/lib/utils'
 import type { Employee } from '@/types'
 
 /* ───────── Stat Card ───────── */
@@ -386,7 +386,14 @@ export default function SuperAdminDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-gray-900">{formatUsd(c.totalSpend)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums">
+                        {/* Shown only in the currencies the customer actually paid in — no converted
+                            total. (Older VeloxVerse builds without nativeSpend fall back to the
+                            converted figure, labelled with its real currency.) */}
+                        <span className="font-semibold text-gray-900">
+                          {formatNativeSpend(c.nativeSpend) ?? formatMoney(c.totalSpend, vvSpending.data?.currency)}
+                        </span>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
                           <div

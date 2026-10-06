@@ -8,6 +8,7 @@ import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useVVUsers } from '../hooks/useVVUsers'
+import VVUserAvatar from '../components/VVUserAvatar'
 import { formatDate } from '../utils'
 import type { VVAdminUser, VVUserRole } from '../types'
 
@@ -34,8 +35,9 @@ export default function VVUsersListPage() {
       render: (row: VVAdminUser) => (
         <Link
           to={`/dashboard/veloxverse/users/${row.id}`}
-          className="font-medium text-gray-900 hover:text-indigo-600"
+          className="flex items-center gap-2.5 font-medium text-gray-900 hover:text-indigo-600"
         >
+          <VVUserAvatar user={row} size="sm" />
           {row.fullName || row.email}
         </Link>
       ),

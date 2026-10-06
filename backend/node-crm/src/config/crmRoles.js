@@ -10,6 +10,9 @@ export const ALLOWED_ROLES = Object.freeze([
   "employee",
   "agent",
   "affiliate",
+  // Customer-support staff: read-only, masked access to the VeloxVerse audit log only
+  // (VeloxVerse maps the CRM role claim "support" → SUPPORT and masks PII itself).
+  "support",
 ]);
 
 /**
@@ -17,8 +20,8 @@ export const ALLOWED_ROLES = Object.freeze([
  * Maps creator role → roles they may create.
  */
 export const ROLE_CREATION_MATRIX = Object.freeze({
-  super_admin: ["super_admin", "admin", "employee", "agent", "affiliate"],
-  admin: ["employee", "agent", "affiliate"],
+  super_admin: ["super_admin", "admin", "employee", "agent", "affiliate", "support"],
+  admin: ["employee", "agent", "affiliate", "support"],
   employee: ["agent", "affiliate"],
 });
 

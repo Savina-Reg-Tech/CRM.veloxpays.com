@@ -72,6 +72,7 @@ export const ROLES_REQUIRING_ONBOARDING_APPROVAL = Object.freeze([
   "employee",
   "agent",
   "affiliate",
+  "support",
 ]);
 
 /**
@@ -106,7 +107,7 @@ export function canSubmitApprovalRequest(actorRole, kind) {
  * | Subject role   | Approvers (default)        |
  * |----------------|----------------------------|
  * | admin, super_admin | super_admin only      |
- * | employee       | super_admin, admin         |
+ * | employee, support | super_admin, admin      |
  * | agent, affiliate | super_admin, admin (+ optional employee → agent) |
  *
  * @param {string | undefined} actorRole
@@ -120,7 +121,7 @@ export function canApproveOrRejectUserOnboarding(actorRole, subjectUserRole) {
     return actorRole === "super_admin";
   }
 
-  if (subjectUserRole === "employee") {
+  if (subjectUserRole === "employee" || subjectUserRole === "support") {
     return actorRole === "super_admin" || actorRole === "admin";
   }
 

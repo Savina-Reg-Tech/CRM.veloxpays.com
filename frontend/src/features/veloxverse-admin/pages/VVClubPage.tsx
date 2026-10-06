@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Crown,
   Search,
@@ -39,7 +39,8 @@ import {
 } from '../hooks/useVVClub'
 import ClubBenefitsEditor from '../components/ClubBenefitsEditor'
 import Switch from '@/components/ui/Switch'
-import { formatCents, formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatCentsIn } from '../loungeUtils'
 import { formatMoney } from '@/lib/utils'
 import type {
   ClubTierRow,
@@ -238,7 +239,7 @@ function TiersTab() {
                   {!isExplorer && (
                     <>
                       <div className="flex items-center gap-1">
-                        <span className="text-sm text-gray-500">$</span>
+                        <span className="text-xs font-medium text-gray-500">USD</span>
                         <Input
                           value={draft}
                           onChange={(e) => setPriceDraft((p) => ({ ...p, [t.id]: e.target.value }))}
@@ -597,8 +598,8 @@ function PromosTab() {
                     <td className="px-4 py-3">
                       {p.discountType === 'PERCENTAGE'
                         ? `${(p.discountValue / 100).toFixed(0)}%`
-                        : formatCents(p.discountValue)}
-                      {p.maxDiscountCents ? ` (max ${formatCents(p.maxDiscountCents)})` : ''}
+                        : formatCentsIn(p.discountValue, 'USD')}
+                      {p.maxDiscountCents ? ` (max ${formatCentsIn(p.maxDiscountCents, 'USD')})` : ''}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -659,16 +660,29 @@ function AnalyticsTab() {
   if (isLoading) return <div className="grid grid-cols-1 gap-4 md:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
   if (!data) return null
 
+  // One line per currency members actually paid in — never a cross-currency sum. Falls back to the
+  // legacy single figure (labelled USD) only when VeloxVerse doesn't send the breakdown yet.
+  const byCurrency = (key: 'mrrCents' | 'totalRevenueCents' | 'avgLifetimeValueCents', legacyCents: number): ReactNode => {
+    const rows = data.revenueByCurrency
+    if (!rows) return formatCentsIn(legacyCents, 'USD')
+    if (rows.length === 0) return formatCentsIn(0, 'USD')
+    return (
+      <span className="flex flex-col">
+        {rows.map((r) => <span key={r.currency}>{formatCentsIn(r[key], r.currency)}</span>)}
+      </span>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Active Members" value={data.activeMembers} icon={<Users className="h-5 w-5 text-blue-500" />} />
-        <StatCard label="MRR" value={`$${data.mrr.toFixed(2)}`} icon={<TrendingUp className="h-5 w-5 text-green-500" />} />
-        <StatCard label="Total Revenue" value={formatCents(data.totalRevenueCents)} icon={<Award className="h-5 w-5 text-amber-500" />} />
+        <StatCard label="MRR" value={byCurrency('mrrCents', data.mrrCents)} icon={<TrendingUp className="h-5 w-5 text-green-500" />} />
+        <StatCard label="Total Revenue" value={byCurrency('totalRevenueCents', data.totalRevenueCents)} icon={<Award className="h-5 w-5 text-amber-500" />} />
         <StatCard label="Churn Rate" value={`${(data.churnRate * 100).toFixed(1)}%`} icon={<RefreshCw className="h-5 w-5 text-red-500" />} />
         <StatCard label="Renewal Success" value={`${(data.renewalSuccessRate * 100).toFixed(1)}%`} icon={<TrendingUp className="h-5 w-5 text-emerald-500" />} />
-        <StatCard label="Avg Lifetime Value" value={formatCents(data.avgLifetimeValueCents)} icon={<Award className="h-5 w-5 text-violet-500" />} />
+        <StatCard label="Avg Lifetime Value" value={byCurrency('avgLifetimeValueCents', data.avgLifetimeValueCents)} icon={<Award className="h-5 w-5 text-violet-500" />} />
         <StatCard label="Total Memberships" value={data.totalMemberships} icon={<Users className="h-5 w-5 text-gray-500" />} />
         <StatCard label="Upgrades" value={data.upgrades} icon={<TrendingUp className="h-5 w-5 text-blue-500" />} />
       </div>
@@ -684,7 +698,12 @@ function AnalyticsTab() {
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLORS[t.slug] ?? 'bg-gray-100'}`}>{t.name}</span>
                   <span className="text-sm font-medium">{t.count} members</span>
                 </div>
-                <span className="text-sm font-medium text-green-600">{formatCents(t.revenueCents)} revenue</span>
+                <span className="text-right text-sm font-medium text-green-600">
+                  {t.revenueByCurrency
+                    ? t.revenueByCurrency.map((r) => formatCentsIn(r.cents, r.currency)).join(' + ') || formatCentsIn(0, 'USD')
+                    : formatCentsIn(t.revenueCents, 'USD')}{' '}
+                  revenue
+                </span>
               </div>
             ))}
             {data.byTier.length === 0 && <p className="text-sm text-gray-400">No active memberships yet</p>}
@@ -736,7 +755,7 @@ function AnalyticsTab() {
   )
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
+function StatCard({ label, value, icon }: { label: string; value: ReactNode; icon: React.ReactNode }) {
   return (
     <Card>
       <div className="flex items-center gap-3 p-4">

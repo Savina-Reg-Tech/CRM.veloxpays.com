@@ -29,6 +29,8 @@ import {
 import { useVVUserDetail } from '../hooks/useVVUsers'
 import { formatDateTime, statusBadgeVariant } from '../utils'
 import { formatMoney } from '@/lib/utils'
+import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
+import { EventDrawer } from '../components/audit/EventDrawer'
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return '—'
@@ -522,6 +524,12 @@ export default function VVEsimDetailPage() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardHeader title="Audit trail" description="Every step of this order from the customer journey audit log." />
+        <BookingAuditTrail referenceType="esim_order" referenceId={order.orderNo} />
+      </Card>
+      <EventDrawer />
 
       <Modal
         open={showSuspendModal}

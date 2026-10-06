@@ -13,6 +13,8 @@ import {
 } from '../hooks/useVVSupport'
 import { formatDateTime, statusBadgeVariant } from '../utils'
 import type { VVSupportMessage, VVSupportPriority, VVSupportStatus } from '../types'
+import { ReferenceEvents } from '../components/audit/BookingAuditTrail'
+import { EventDrawer } from '../components/audit/EventDrawer'
 
 const STATUSES: VVSupportStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
 
@@ -258,8 +260,15 @@ export default function VVSupportDetailPage() {
               </div>
             </div>
           </Card>
+
+          {/* VeloxVerse records ticket events under the case id (falling back to the ticket id). */}
+          <Card padding="sm">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">Audit trail</h2>
+            <ReferenceEvents referenceId={ticket.caseId ?? ticket.id} />
+          </Card>
         </div>
       )}
+      <EventDrawer />
     </div>
   )
 }

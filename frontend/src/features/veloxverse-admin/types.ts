@@ -91,6 +91,9 @@ export interface CustomerSpending {
   benefitSpend: number
   travelSpend: number
   transferSpend: number
+  /** What the customer actually paid in each currency, unconverted (the *Spend fields above are
+   * FX-converted into CustomerSpendingResult.currency for ranking). Absent on older VeloxVerse builds. */
+  nativeSpend?: { currency: string; amount: number }[]
   orderCount: number
 }
 
@@ -656,6 +659,11 @@ export interface VVAdminUser {
   isVerified: boolean
   createdAt: string
   guestExpiresAt?: string | null
+  /** The customer's own profile picture: 'CUSTOM' = uploaded photo at `avatarUrl` (already a
+   * browser-fetchable URL), 'PRESET' = illustration `avatarId`. Absent on older VeloxVerse builds. */
+  avatarType?: 'PRESET' | 'CUSTOM'
+  avatarId?: string | null
+  avatarUrl?: string | null
 }
 
 export interface VVAdminUsersPage {
@@ -665,7 +673,6 @@ export interface VVAdminUsersPage {
 
 export interface VVAdminUserDetail {
   user: VVAdminUser
-  wallet: { balance: number; balanceCents: number; currency: string; lastUpdated: string }
   /** Matches `presentOrder()` in veloxverse's order.service.ts — `priceUsd` (major units,
    * "Usd" is legacy naming) paired with the order's real `currency`, NOT a `sellingPrice`
    * field (that name doesn't exist on the actual API response). */
@@ -1038,9 +1045,21 @@ export interface ClubPromoRow {
   createdAt: string
 }
 
+export interface ClubRevenueByCurrency {
+  currency: string
+  totalRevenueCents: number
+  annualRunRateCents: number
+  mrrCents: number
+  avgLifetimeValueCents: number
+}
+
 export interface ClubAnalytics {
   activeMembers: number
-  byTier: Array<{ slug: string; name: string; count: number; revenueCents: number }>
+  /** `revenueCents` sums every currency together (legacy) — display `revenueByCurrency` instead. */
+  byTier: Array<{ slug: string; name: string; count: number; revenueCents: number; revenueByCurrency?: { currency: string; cents: number }[] }>
+  /** Per-currency revenue/MRR/LTV. The flat *Cents fields below mix currencies (legacy) and are
+   * only a fallback for VeloxVerse builds that predate this field. */
+  revenueByCurrency?: ClubRevenueByCurrency[]
   mrrCents: number
   mrr: number
   annualRunRateCents: number
@@ -1108,10 +1127,16 @@ export interface AdminBillingLineItem {
 
 export interface AdminBillingTotals {
   orderCount: number
+  /** spent/topUps/refunds/net below are converted into `currency` (the customer's resolved
+   * billing currency, e.g. INR) — NOT USD, despite the legacy "Usd" field suffixes. */
   spentUsd: number
   topUpsUsd: number
   refundsUsd: number
   netUsd: number
+  currency?: string
+  /** Native currencies that couldn't be converted (no FX rate) and are therefore left OUT of the
+   * totals above — surface these rather than presenting the totals as complete. */
+  skippedCurrencies?: string[]
 }
 
 export interface AdminBillingActivity {
@@ -1310,3 +1335,6 @@ export interface ReferralCodePatch {
   maxUses?: number | null
   expiresAt?: string | null
 }
+
+// ── Audit logs ─────────────────────────────────────────────────────────
+export * from './auditTypes'

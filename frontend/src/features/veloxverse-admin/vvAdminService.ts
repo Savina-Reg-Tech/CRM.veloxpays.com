@@ -19,6 +19,9 @@ import type {
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
   ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType,
   AdminBillingActivity,
+  AuditMeta, AuditEventPage, AuditEventDetail, AuditTrace, AuditJourney, AuditTimelinePage, AuditBookingTrail,
+  AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
+  AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult,
 } from './types'
 
 // Standard VeloxVerse API envelope
@@ -503,5 +506,145 @@ export const vvSettingsService = {
   async testMintApi() {
     const { data } = await api.post<VVResponse<VVApiTestResult>>(`${VV}/admin/settings/test-mint-api`)
     return data.data
+  },
+}
+
+// ── Customer journey audit log (/admin/audit) ───────────────────────
+// See auditTypes.ts. List filters go comma-joined (VeloxVerse accepts `a,b,c`); cursor paging,
+// newest first. VeloxVerse records every one of these reads as `admin_access`, so callers debounce
+// inputs and keep staleTime ≥ 30s rather than re-firing requests.
+
+const AUDIT = `${VV}/admin/audit`
+
+/** Turn audit filters into query params: arrays → "a,b,c", empties dropped. */
+function auditParams(params: object): Record<string, string | number> {
+  const out: Record<string, string | number> = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === '') continue
+    if (Array.isArray(v)) {
+      if (v.length) out[k] = v.join(',')
+    } else {
+      out[k] = v as string | number
+    }
+  }
+  return out
+}
+
+export const vvAuditService = {
+  async meta() {
+    const { data } = await api.get<VVResponse<AuditMeta>>(`${AUDIT}/meta`)
+    return data.data
+  },
+  async events(filters: AuditEventFilters, page: { limit?: number; cursor?: string } = {}) {
+    const { data } = await api.get<VVResponse<AuditEventPage>>(`${AUDIT}/events`, { params: auditParams({ ...filters, ...page }) })
+    return data.data
+  },
+  async event(id: string) {
+    const { data } = await api.get<VVResponse<AuditEventDetail>>(`${AUDIT}/events/${encodeURIComponent(id)}`)
+    return data.data
+  },
+  async trace(requestId: string) {
+    const { data } = await api.get<VVResponse<AuditTrace>>(`${AUDIT}/trace/${encodeURIComponent(requestId)}`)
+    return data.data
+  },
+  async journey(journeyId: string) {
+    const { data } = await api.get<VVResponse<AuditJourney>>(`${AUDIT}/journeys/${encodeURIComponent(journeyId)}`)
+    return data.data
+  },
+  async timeline(kind: 'user' | 'guest', id: string, filters: AuditTimelineFilters, page: { limit?: number; cursor?: string } = {}) {
+    const path = kind === 'user' ? 'users' : 'guests'
+    const { data } = await api.get<VVResponse<AuditTimelinePage>>(`${AUDIT}/${path}/${encodeURIComponent(id)}/timeline`, {
+      params: auditParams({ ...filters, ...page }),
+    })
+    return data.data
+  },
+  async bookingTrail(referenceType: string, referenceId: string) {
+    const { data } = await api.get<VVResponse<AuditBookingTrail>>(
+      `${AUDIT}/bookings/${encodeURIComponent(referenceType)}/${encodeURIComponent(referenceId)}`
+    )
+    return data.data
+  },
+  async stuck(params: { rules?: string[]; limit?: number } = {}) {
+    const { data } = await api.get<VVResponse<{ items: AuditStuckItem[] }>>(`${AUDIT}/stuck`, { params: auditParams(params) })
+    return data.data.items
+  },
+  async errorsSummary(params: { from?: string; to?: string; service?: string[] } = {}) {
+    const { data } = await api.get<VVResponse<AuditErrorsSummary>>(`${AUDIT}/errors/summary`, { params: auditParams(params) })
+    return data.data
+  },
+  async funnel(params: { service?: string; from?: string; to?: string } = {}) {
+    const { data } = await api.get<VVResponse<AuditFunnel>>(`${AUDIT}/funnels`, { params: auditParams(params) })
+    return data.data
+  },
+  async dailySummaries(params: { from?: string; to?: string; service?: string } = {}) {
+    const { data } = await api.get<VVResponse<{ summaries: AuditDailySummary[] }>>(`${AUDIT}/daily-summaries`, { params: auditParams(params) })
+    return data.data.summaries
+  },
+  async alerts(params: { status?: 'open' | 'resolved' | 'all'; type?: string; from?: string; to?: string; limit?: number } = {}) {
+    const { data } = await api.get<VVResponse<AuditAlertsPage>>(`${AUDIT}/alerts`, { params: auditParams(params) })
+    return data.data
+  },
+
+  // Admin only (VeloxVerse 403 → CRM proxy 502 for anyone else).
+  async getSettings() {
+    const { data } = await api.get<VVResponse<{ settings: AuditSettings }>>(`${AUDIT}/settings`)
+    return data.data.settings
+  },
+  async updateSettings(body: AuditSettingsUpdate) {
+    const { data } = await api.put<VVResponse<{ settings: AuditSettings }>>(`${AUDIT}/settings`, body)
+    return data.data.settings
+  },
+  async recipients() {
+    const { data } = await api.get<VVResponse<{ recipients: AlertRecipient[] }>>(`${AUDIT}/alert-recipients`)
+    return data.data.recipients
+  },
+  async createRecipient(body: AlertRecipientInput) {
+    const { data } = await api.post<VVResponse<{ recipient: AlertRecipient }>>(`${AUDIT}/alert-recipients`, body)
+    return data.data.recipient
+  },
+  async updateRecipient(id: string, body: AlertRecipientInput) {
+    const { data } = await api.put<VVResponse<{ recipient: AlertRecipient }>>(`${AUDIT}/alert-recipients/${encodeURIComponent(id)}`, body)
+    return data.data.recipient
+  },
+  async deleteRecipient(id: string) {
+    const { data } = await api.delete<VVResponse<{ deleted: boolean }>>(`${AUDIT}/alert-recipients/${encodeURIComponent(id)}`)
+    return data.data
+  },
+  async testRecipient(id: string) {
+    const { data } = await api.post<VVResponse<{ sent: boolean; email: string }>>(`${AUDIT}/alert-recipients/${encodeURIComponent(id)}/test`)
+    return data.data
+  },
+  /** Streams VeloxVerse's own CSV (admin-only, formula-safe, max 10,000 rows) through the CRM
+   * proxy and saves it. */
+  async exportCsv(filters: AuditEventFilters): Promise<AuditExportResult> {
+    let res
+    try {
+      res = await api.get<Blob>(`${AUDIT}/export.csv`, { params: auditParams(filters), responseType: 'blob' })
+    } catch (err) {
+      // With responseType 'blob' the JSON error body arrives as a Blob — decode it so callers can
+      // read `message` / `requestId` exactly like every other audit call.
+      const r = (err as { response?: { data?: unknown } }).response
+      if (r?.data instanceof Blob) {
+        try {
+          r.data = JSON.parse(await r.data.text())
+        } catch {
+          /* leave as-is */
+        }
+      }
+      throw err
+    }
+    const disposition = String(res.headers['content-disposition'] ?? '')
+    const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? `audit-log-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.csv`
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    return {
+      filename,
+      rows: Number(res.headers['x-export-rows'] ?? 0),
+      truncated: String(res.headers['x-export-truncated']) === 'true',
+    }
   },
 }

@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { VVAdminUser } from '@/features/veloxverse-admin/types'
 
 // ── Auth ─────────────────────────────────────────────────────────
-export type UserRole = 'super_admin' | 'admin' | 'employee' | 'agent' | 'affiliate'
+export type UserRole = 'super_admin' | 'admin' | 'employee' | 'agent' | 'affiliate' | 'support'
 
 export type AccountStatus = 'pending' | 'active' | 'suspended' | 'expired'
 

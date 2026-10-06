@@ -13,6 +13,7 @@ import {
   Car,
   Tag,
   DollarSign,
+  ScrollText,
   Headphones,
   Star,
   Crown,
@@ -36,6 +37,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV Promo Codes', path: '/dashboard/veloxverse/promo-codes',  icon: Tag },
     { label: 'VV Pricing',     path: '/dashboard/veloxverse/pricing',      icon: DollarSign },
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },
+    { label: 'VV Audit Logs',  path: '/dashboard/veloxverse/audit-logs',   icon: ScrollText },
     { label: 'VV Support',     path: '/dashboard/veloxverse/support',      icon: Headphones },
     { label: 'VV Points',      path: '/dashboard/veloxverse/points',       icon: Star },
     { label: 'VV Refer & Earn', path: '/dashboard/veloxverse/refer-earn', icon: Gift },
@@ -57,6 +59,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV Promo Codes', path: '/dashboard/veloxverse/promo-codes',  icon: Tag },
     { label: 'VV Pricing',     path: '/dashboard/veloxverse/pricing',      icon: DollarSign },
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },
+    { label: 'VV Audit Logs',  path: '/dashboard/veloxverse/audit-logs',   icon: ScrollText },
     { label: 'VV Support',     path: '/dashboard/veloxverse/support',      icon: Headphones },
     { label: 'VV Points',      path: '/dashboard/veloxverse/points',       icon: Star },
     { label: 'VV Refer & Earn', path: '/dashboard/veloxverse/refer-earn', icon: Gift },
@@ -78,5 +81,11 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'Verification', path: '/dashboard/verification', icon: ShieldCheck },
     { label: 'Customers', path: '/dashboard/customers', icon: ContactRound },
     { label: 'My Profile', path: '/dashboard/me', icon: UserCircle },
+  ],
+  // Customer support: read-only, masked VeloxVerse audit log only (its own tabs cover
+  // Stuck customers / Errors / Trends / Alerts — NavLink prefix-matching would otherwise
+  // highlight two entries at once).
+  support: [
+    { label: 'VV Audit Logs', path: '/dashboard/veloxverse/audit-logs', icon: ScrollText },
   ],
 }

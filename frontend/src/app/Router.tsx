@@ -41,6 +41,17 @@ import VVSupportListPage from '@/features/veloxverse-admin/pages/VVSupportListPa
 import VVSupportDetailPage from '@/features/veloxverse-admin/pages/VVSupportDetailPage'
 import VVPointsPage from '@/features/veloxverse-admin/pages/VVPointsPage'
 import VVClubPage from '@/features/veloxverse-admin/pages/VVClubPage'
+import VVAuditLogPage from '@/features/veloxverse-admin/pages/VVAuditLogPage'
+import VVAuditTracePage from '@/features/veloxverse-admin/pages/VVAuditTracePage'
+import VVAuditJourneyPage from '@/features/veloxverse-admin/pages/VVAuditJourneyPage'
+import VVAuditGuestPage from '@/features/veloxverse-admin/pages/VVAuditGuestPage'
+import VVAuditBookingPage from '@/features/veloxverse-admin/pages/VVAuditBookingPage'
+import VVAuditStuckPage from '@/features/veloxverse-admin/pages/VVAuditStuckPage'
+import VVAuditErrorsPage from '@/features/veloxverse-admin/pages/VVAuditErrorsPage'
+import VVAuditTrendsPage from '@/features/veloxverse-admin/pages/VVAuditTrendsPage'
+import VVAuditAlertsPage from '@/features/veloxverse-admin/pages/VVAuditAlertsPage'
+import VVAuditSettingsPage from '@/features/veloxverse-admin/pages/VVAuditSettingsPage'
+import VVAuditCustomerPage from '@/features/veloxverse-admin/pages/VVAuditCustomerPage'
 
 const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
@@ -103,6 +114,27 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/refer-earn',             element: <VVReferEarnPage /> },
               { path: '/dashboard/veloxverse/refer-earn/:id',         element: <VVReferralDetailPage /> },
               { path: '/dashboard/veloxverse/club',                  element: <VVClubPage /> },
+              // Audit-log settings & alert recipients stay admin-only (support gets 403 anyway).
+              { path: '/dashboard/veloxverse/audit-logs/settings',                              element: <VVAuditSettingsPage /> },
+            ],
+          },
+
+          // VeloxVerse customer-journey audit log — read-only screens. Support staff get these
+          // (and nothing else on VeloxVerse); VeloxVerse masks customer PII for them, and the
+          // CRM backend only lets the support role through for GET /admin/audit reads.
+          {
+            element: <RoleGuard allowedRoles={['super_admin', 'admin', 'support']} />,
+            children: [
+              { path: '/dashboard/veloxverse/audit-logs',                                       element: <VVAuditLogPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/trace/:requestId',                      element: <VVAuditTracePage /> },
+              { path: '/dashboard/veloxverse/audit-logs/journeys/:journeyId',                   element: <VVAuditJourneyPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/customers/:userId',                     element: <VVAuditCustomerPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/guests/:anonId',                        element: <VVAuditGuestPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/bookings/:referenceType/:referenceId',  element: <VVAuditBookingPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/stuck',                                 element: <VVAuditStuckPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/errors',                                element: <VVAuditErrorsPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/trends',                                element: <VVAuditTrendsPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/alerts',                                element: <VVAuditAlertsPage /> },
             ],
           },
 

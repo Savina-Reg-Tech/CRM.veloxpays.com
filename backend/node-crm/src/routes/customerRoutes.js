@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../middleware/auth.js";
+import { authenticate, authorizeRoles } from "../middleware/auth.js";
 import {
   handleCreateCustomer,
   handleDeleteCustomer,
@@ -13,6 +13,8 @@ import {
 const router = Router();
 
 router.use(authenticate);
+// Support staff only use the VeloxVerse audit log — no access to CRM customer records.
+router.use(authorizeRoles("super_admin", "admin", "employee", "agent", "affiliate"));
 
 router.get("/meta/sources", handleListCustomerSources);
 router.get("/meta/statuses", handleListCustomerStatuses);

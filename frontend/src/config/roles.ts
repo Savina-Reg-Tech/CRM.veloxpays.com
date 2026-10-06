@@ -21,6 +21,7 @@ export const ALL_ROLES: readonly UserRole[] = [
   'employee',
   'agent',
   'affiliate',
+  'support',
 ] as const
 
 /**
@@ -33,6 +34,8 @@ export const ROLE_HOMES: Record<UserRole, string> = {
   employee: '/dashboard/me',
   agent: '/dashboard/me',
   affiliate: '/dashboard/me',
+  // Read-only, masked VeloxVerse audit log — the only screens support staff use.
+  support: '/dashboard/veloxverse/audit-logs',
 }
 
 /**
@@ -42,11 +45,12 @@ export const ROLE_HOMES: Record<UserRole, string> = {
  * which holds the authoritative copy of these rules.
  */
 export const ROLE_CREATION_RIGHTS: Record<UserRole, UserRole[]> = {
-  super_admin: ['super_admin', 'admin', 'employee', 'agent', 'affiliate'],
-  admin: ['employee', 'agent', 'affiliate'],
+  super_admin: ['super_admin', 'admin', 'employee', 'agent', 'affiliate', 'support'],
+  admin: ['employee', 'agent', 'affiliate', 'support'],
   employee: ['agent', 'affiliate'],
   agent: [],
   affiliate: [],
+  support: [],
 }
 
 /** Super Admin / Admin see org-wide approval queues (matches backend approvalRbac). */

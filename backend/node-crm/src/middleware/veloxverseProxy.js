@@ -53,6 +53,9 @@ export default async function veloxverseProxy(req, res) {
   // Use req.originalUrl to get the path after the mount point, but req.url
   // is already stripped by Express when mounted at /api/vv-admin.
   const targetUrl = `${VV_BASE}${req.url}`;
+  // File downloads (e.g. the audit log's /admin/audit/export.csv) are passed through as raw bytes
+  // with their download headers; everything else is JSON.
+  const isFile = req.path.endsWith(".csv");
 
   try {
     const response = await axios({
@@ -66,6 +69,7 @@ export default async function veloxverseProxy(req, res) {
       data: ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? req.body : undefined,
       // Don't let axios parse the response — we stream it as-is
       validateStatus: () => true,
+      ...(isFile ? { responseType: "arraybuffer" } : {}),
       // Timeout: 30s for long analytics queries
       timeout: 30000,
     });
@@ -74,9 +78,26 @@ export default async function veloxverseProxy(req, res) {
     // frontend treats any 401 as "CRM session expired" and redirects to /login.
     // By this point CRM authenticate already passed, so upstream auth errors are
     // integration/config issues, not a reason to log the user out of the CRM.
+    if (isFile && response.status < 400) {
+      for (const h of ["content-type", "content-disposition", "x-export-rows", "x-export-truncated", "x-request-id"]) {
+        if (response.headers[h] !== undefined) res.set(h, response.headers[h]);
+      }
+      return res.status(response.status).send(Buffer.from(response.data));
+    }
+    // A failed file request comes back as JSON bytes — decode so the frontend gets the usual body.
+    if (isFile) {
+      try {
+        response.data = JSON.parse(Buffer.from(response.data).toString("utf8"));
+      } catch {
+        response.data = { success: false, message: "VeloxVerse export failed." };
+      }
+    }
+
     if (response.status === 401 || response.status === 403) {
       return res.status(502).json({
         success: false,
+        // Keep VeloxVerse's request id so the CRM can show "Ref: …" for support to trace.
+        requestId: response.data?.requestId,
         message:
           response.data?.message ||
           "VeloxVerse rejected the CRM session. Ensure VeloxVerse has CRM_BRIDGE_ENABLED=true and CRM_JWT_SECRET matches this CRM's JWT_SECRET, then restart the VeloxVerse backend.",

@@ -13,6 +13,7 @@ import veloxEsimRoutes from "./routes/veloxEsimRoutes.js";
 import formRoutes from "./routes/formRoutes.js";
 import publicFormRoutes from "./routes/publicFormRoutes.js";
 import veloxverseProxy from "./middleware/veloxverseProxy.js";
+import { AUDIT_SUPPORT_ROLE, auditSupportGuard } from "./middleware/auditSupportGuard.js";
 import { authenticate, authorizeRoles } from "./middleware/auth.js";
 
 const app = express();
@@ -48,6 +49,9 @@ const corsOptions = {
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
+  // The VeloxVerse audit-log CSV export reports its filename/row count in headers; a
+  // cross-origin frontend can only read them if they're exposed.
+  exposedHeaders: ["Content-Disposition", "X-Export-Rows", "X-Export-Truncated", "X-Request-Id"],
 };
 
 app.use(cors(corsOptions));
@@ -78,6 +82,23 @@ app.use("/api/verification", verificationRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/velox-esim", veloxEsimRoutes);
 app.use("/api/forms", formRoutes);
+
+// ── VeloxVerse customer-journey audit log — support access (Phase 2) ─
+// Support staff may READ the audit log (VeloxVerse masks customer PII for them) and
+// nothing else on VeloxVerse. Mounted before the general proxy so this narrower rule
+// decides for /admin/audit; admins pass straight through to the same proxy.
+app.use(
+  "/api/vv-admin/admin/audit",
+  authenticate,
+  authorizeRoles("super_admin", "admin", AUDIT_SUPPORT_ROLE),
+  auditSupportGuard,
+  (req, _res, next) => {
+    // veloxverseProxy builds the upstream URL from req.url; restore the mount path.
+    req.url = `/admin/audit${req.url}`;
+    next();
+  },
+  veloxverseProxy
+);
 
 // ── VeloxVerse Admin Proxy ─────────────────────────────────────────
 // Proxies admin API calls to the VeloxVerse backend. Only super_admin

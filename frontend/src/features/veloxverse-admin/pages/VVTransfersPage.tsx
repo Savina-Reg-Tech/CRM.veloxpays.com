@@ -21,6 +21,7 @@ import {
   Copy,
   Navigation,
 } from 'lucide-react'
+import { History as HistoryIcon } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Skeleton from '@/components/ui/Skeleton'
@@ -32,6 +33,8 @@ import { formatDateTime, statusBadgeVariant } from '../utils'
 import { formatMoney } from '@/lib/utils'
 import type { AdminTransferBooking, TransferBookingStatus } from '../types'
 import MeetGreetSection from '../components/MeetGreetSection'
+import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
+import { EventDrawer } from '../components/audit/EventDrawer'
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   STRIPE: 'Card (Stripe)',
@@ -652,9 +655,14 @@ export default function VVTransfersPage() {
                 </p>
               )}
             </SectionCard>
+
+            <SectionCard icon={<HistoryIcon className="h-3.5 w-3.5" />} title="Audit trail">
+              <BookingAuditTrail referenceType="transfer_booking" referenceId={detailBooking.orderNo} />
+            </SectionCard>
           </div>
         )}
       </Modal>
+      <EventDrawer />
 
       {/* ── Cancel modal ── */}
       <Modal

@@ -593,6 +593,10 @@ export default function PublicFormPage() {
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(0)
   const formDataRef = useRef<Record<string, unknown>>({})
+  // Steps the visitor actually came through, in order — so Back returns to
+  // the step they really left, not the array-previous one (which may be a
+  // step a goto_step/skip_step rule routed them past).
+  const stepHistoryRef = useRef<number[]>([])
   // Guards against a double POST — e.g. legacy forms migrated to have a
   // reserved on-submit step that still carries an old "submit"-action
   // button saved before that step type was CTA-link-only. A ref (not
@@ -819,7 +823,11 @@ export default function PublicFormPage() {
     if (nav?.kind === 'goto') {
       const targetStepId = navigableSteps[nav.stepIndex]?.id
       const targetIndex = steps.findIndex((s) => s.id === targetStepId)
-      if (targetIndex !== -1) { setCurrentStep(targetIndex); return }
+      if (targetIndex !== -1) {
+        stepHistoryRef.current.push(currentStep)
+        setCurrentStep(targetIndex)
+        return
+      }
     }
     // A "Continue"/"Next"-labeled custom button is allowed on the final
     // field step (so an admin can rename the completing button to whatever
@@ -835,11 +843,13 @@ export default function PublicFormPage() {
       handleSubmit(e)
       return
     }
+    stepHistoryRef.current.push(currentStep)
     setCurrentStep((s) => Math.min(s + 1, Math.max(totalSteps - 1, 0)))
   }, [totalSteps, steps, currentStep, form, handleSubmit, isFinalStep])
 
   const handleBack = useCallback(() => {
-    setCurrentStep((s) => Math.max(0, s - 1))
+    const previous = stepHistoryRef.current.pop()
+    setCurrentStep((s) => previous ?? Math.max(0, s - 1))
     setSubmitError('')
   }, [])
 

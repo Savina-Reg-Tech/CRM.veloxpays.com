@@ -262,6 +262,75 @@ function findStepNavCycle(rules, steps) {
   return findCycleInGraph(adjacency);
 }
 
+// ── Step navigation at runtime (mirrors PublicFormPage.tsx
+// resolveStepNavigation) ─────────────────────────────────────────────
+/** Where a visitor goes when leaving `fromStepId`: `{ kind: "goto",
+ * stepIndex }` (index into `navigableSteps`), `{ kind: "submit" }`, or null
+ * for "no rule matched — fall back to the next step in order". First
+ * enabled matching rule anchored to that step wins. */
+function resolveStepNavigation(rules, fromStepId, currentIndex, navigableSteps, values) {
+  const stepIndexById = new Map(navigableSteps.map((s, i) => [s.id, i]));
+  const candidates = (rules ?? []).filter(
+    (r) => r.enabled && r.fromStepId === fromStepId && (r.actions ?? []).some((a) => NAVIGATION_ACTION_TYPES.includes(a.type)),
+  );
+  for (const rule of candidates) {
+    if (!evaluateGroup(rule.group, values)) continue;
+    const navAction = rule.actions.find((a) => NAVIGATION_ACTION_TYPES.includes(a.type));
+    switch (navAction.type) {
+      case "end_form":
+        return { kind: "submit" };
+      case "goto_step": {
+        const idx = stepIndexById.get(navAction.stepId);
+        if (idx !== undefined) return { kind: "goto", stepIndex: idx };
+        break; // dangling reference — try the next candidate rule
+      }
+      case "skip_step": {
+        const skippedIdx = stepIndexById.get(navAction.stepId);
+        if (skippedIdx !== undefined) {
+          return skippedIdx + 1 < navigableSteps.length ? { kind: "goto", stepIndex: skippedIdx + 1 } : { kind: "submit" };
+        }
+        break;
+      }
+      case "previous_step":
+        return currentIndex > 0 ? { kind: "goto", stepIndex: currentIndex - 1 } : null;
+      case "next_step":
+        return currentIndex + 1 < navigableSteps.length ? { kind: "goto", stepIndex: currentIndex + 1 } : { kind: "submit" };
+    }
+  }
+  return null;
+}
+
+/**
+ * Replays a visitor's path through a multi-step form from the first step to
+ * submission using the final submitted values, and returns the ids of the
+ * steps actually landed on. Steps that goto_step/skip_step/end_form routed
+ * the visitor past are excluded — their required fields were never shown,
+ * so they must not be enforced (the "can't submit because a skipped step's
+ * mandatory field is empty" bug). Returns null for single-step forms
+ * (meaning "every field is on the path").
+ *
+ * The path is deterministic for a given set of values, so landing on a step
+ * a second time means the rules loop forever from here — the walk stops
+ * there rather than spinning; everything visited so far is still returned.
+ */
+function getVisitedStepIds(rules, steps, values) {
+  const navigableSteps = (steps ?? []).filter((s) => !s.isOnSubmit);
+  if (navigableSteps.length === 0) return null;
+
+  const visited = new Set();
+  let index = 0;
+  while (index >= 0 && index < navigableSteps.length) {
+    const step = navigableSteps[index];
+    if (visited.has(step.id)) break;
+    visited.add(step.id);
+
+    const nav = resolveStepNavigation(rules, step.id, index, navigableSteps, values);
+    if (nav?.kind === "submit") break;
+    index = nav?.kind === "goto" ? nav.stepIndex : index + 1;
+  }
+  return visited;
+}
+
 // ── Runtime evaluation (mirrors utils/rules.ts evaluateRules) ────────
 function isEmptyValue(raw) {
   if (raw === undefined || raw === null) return true;
@@ -518,4 +587,5 @@ export {
   resolveNotificationRecipients, validateNotificationRules,
   resolveMatchingWebhooks, validateWebhookRules,
   buildStepNavEdges, findStepNavCycle,
+  resolveStepNavigation, getVisitedStepIds,
 };

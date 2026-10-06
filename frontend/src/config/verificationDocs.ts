@@ -58,6 +58,7 @@ export const ROLE_REQUIRED_DOCUMENTS: Record<UserRole, RoleDocSpec> = {
   },
   admin: { required: [], optional: [] },
   super_admin: { required: [], optional: [] },
+  support: { required: [], optional: [] },
 }
 
 export const ROLES_REQUIRING_VERIFICATION: UserRole[] = ['employee', 'agent', 'affiliate']

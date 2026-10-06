@@ -15,11 +15,6 @@ export function statusBadgeVariant(status: string): BadgeVariant {
   return 'neutral'
 }
 
-/** Format a dollar float (e.g. analytics revenue, eSIM cost) as $X.XX */
-export function formatUsd(value: number): string {
-  return `$${(value ?? 0).toFixed(2)}`
-}
-
 /** Mint-confirmed currencies VeloxVerse can charge/convert — mirrors backend
  * `SUPPORTED_PREFERRED_CURRENCIES` (veloxverse/backend/src/constants/index.ts). Used to drive the
  * Analytics page's currency selector; the backend re-validates and falls back to USD for anything
@@ -71,9 +66,11 @@ export function formatActivityAmount(amountUsd: number, direction: ActivityDirec
   return `${sign}${formatMoney(amountUsd, currency)}`
 }
 
-/** Format integer cents (e.g. lounge cost, transfer amount) as $X.XX */
-export function formatCents(cents: number): string {
-  return `$${((cents ?? 0) / 100).toFixed(2)}`
+/** "INR 12,000.00 + BDT 3,500.00" — a customer's spend in the currencies they actually paid in,
+ * never summed across currencies. */
+export function formatNativeSpend(native: { currency: string; amount: number }[] | undefined): string | null {
+  if (!native?.length) return null
+  return native.map((n) => formatMoney(n.amount, n.currency)).join(' + ')
 }
 
 /** Format an ISO date string to a readable local date/time. */

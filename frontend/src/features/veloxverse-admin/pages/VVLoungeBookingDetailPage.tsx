@@ -18,6 +18,7 @@ import {
   Ticket,
   User,
 } from 'lucide-react'
+import { History as HistoryIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Skeleton from '@/components/ui/Skeleton'
@@ -36,6 +37,8 @@ import {
   visitStatusVariant,
 } from '../loungeUtils'
 import type { LoungeVisitDetail, LoungeVoucher } from '../types'
+import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
+import { EventDrawer } from '../components/audit/EventDrawer'
 
 /* ─────────── small building blocks ─────────── */
 
@@ -817,7 +820,18 @@ export default function VVLoungeBookingDetailPage() {
         <EmailsSection v={visit} />
       </div>
 
+      {/* Customer journey audit log: by payment id when there is one — that pulls in the whole
+          checkout → payment → supplier journey — else by the visit itself. */}
+      <Section icon={HistoryIcon} title="Audit trail">
+        {visit.payment?.id ? (
+          <BookingAuditTrail referenceType="payment" referenceId={visit.payment.id} />
+        ) : (
+          <BookingAuditTrail referenceType="lounge_visit" referenceId={visit.id} />
+        )}
+      </Section>
+
       <RawRecordSection v={visit} />
+      <EventDrawer />
     </div>
   )
 }

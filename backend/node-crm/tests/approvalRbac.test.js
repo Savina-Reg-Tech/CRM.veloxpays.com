@@ -208,6 +208,7 @@ describe("approvalRbac — auto onboarding on user create", () => {
       "employee",
       "agent",
       "affiliate",
+      "support",
     ]);
   });
 });

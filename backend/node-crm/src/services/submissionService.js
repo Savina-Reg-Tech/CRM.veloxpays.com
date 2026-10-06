@@ -4,7 +4,7 @@ import Lead from "../models/Lead.js";
 import WebhookDelivery from "../models/WebhookDelivery.js";
 import { calculateSpamScore, validateEmail } from "./spamService.js";
 import { sendSubmissionNotification, sendAutoResponder } from "./emailService.js";
-import { evaluateRules, resolveNotificationRecipients, resolveMatchingWebhooks } from "./ruleEngine.js";
+import { evaluateRules, getVisitedStepIds, resolveNotificationRecipients, resolveMatchingWebhooks } from "./ruleEngine.js";
 import { sendWebhook } from "./webhookService.js";
 
 /**
@@ -168,8 +168,31 @@ async function processFormSubmission({ formId, data: rawSubmittedData, formLoade
     else data[action.fieldId] = action.value;
   }
 
+  // ── Step routing: only steps the visitor actually landed on count ──
+  // goto_step/skip_step/end_form rules can route a visitor past whole
+  // steps; their required fields were never shown, so they must not block
+  // submission. Any leftover answers from a skipped step (filled in, then
+  // the visitor went Back and changed the routing answer) are dropped too,
+  // so the stored submission matches the path actually taken.
+  const visitedStepIds = getVisitedStepIds(
+    form.form_json?.rules,
+    form.form_json?.steps,
+    buildValuesByFieldId(reachableFields, data),
+  );
+  let fieldsToValidate = reachableFields;
+  if (visitedStepIds) {
+    const visitedFieldIds = new Set();
+    for (const step of form.form_json.steps) {
+      if (visitedStepIds.has(step.id)) for (const fid of step.fieldIds ?? []) visitedFieldIds.add(fid);
+    }
+    fieldsToValidate = reachableFields.filter((f) => visitedFieldIds.has(f.id));
+    for (const field of reachableFields) {
+      if (!visitedFieldIds.has(field.id)) delete data[field.id];
+    }
+  }
+
   // ── Validate required fields ──────────────────────────────────
-  validateSubmission(reachableFields, data, ruleResult);
+  validateSubmission(fieldsToValidate, data, ruleResult);
 
   // ── Calculate time taken ─────────────────────────────────────
   let timeTakenSeconds = null;
