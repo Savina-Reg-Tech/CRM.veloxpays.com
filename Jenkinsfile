@@ -16,6 +16,11 @@ pipeline {
         JWT_SECRET       = credentials('velox-jwt-secret')
         // Must match the Amplify app's real domain once it's live.
         FRONTEND_URL     = 'https://velox-frontend.0w5cqv649rpjg.ap-southeast-2.cs.amazonlightsail.com'
+        // lightsailctl (called by `aws lightsail push-container-image`) needs a
+        // real Docker-compatible daemon socket. Point it at the jenkins user's
+        // own rootless Podman socket (confirmed live at this path) rather than
+        // the system/root one, which jenkins has no permission to touch.
+        DOCKER_HOST      = 'unix:///run/user/981/podman/podman.sock'
     }
 
     stages {
