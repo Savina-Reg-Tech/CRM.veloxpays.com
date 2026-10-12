@@ -1,8 +1,8 @@
 import api from '@/lib/axios'
 import type {
   AnalyticsOverview, RevenueSeries, GrowthSeries, PopularPackagesResult,
-  RecentActivity, OrderStats, CustomerSpendingResult,
-  AdminOrderRow, AdminOrderDetail, VVPagination,
+  RecentActivity, OrderStats, CustomerSpendingResult, CardCharges, CardChargePeriod,
+  AdminOrderRow, AdminOrderDetail, VVPagination, EsimCancelResult,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
   LoungeBookingTypeFilter, LoungeResourceType,
   AdminTransferBooking, TransferCancelReason, TransferCancelResult,
@@ -23,6 +23,21 @@ import type {
   AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
   AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult,
 } from './types'
+import { limitOrZero } from './pointsLimits'
+
+/** An older VeloxVerse doesn't send the per-order limits — a missing one means "no limit" (0). */
+function normalizePointsSettings(settings: PointsSettings): PointsSettings {
+  return {
+    ...settings,
+    maxRedeemPointsPerOrder: limitOrZero(settings.maxRedeemPointsPerOrder),
+    maxRedeemPercentPerOrder: limitOrZero(settings.maxRedeemPercentPerOrder),
+  }
+}
+
+/** An older VeloxVerse doesn't send the block fields — a missing `isBlocked` means not blocked. */
+export function normalizeVVUser<T extends VVAdminUser>(user: T): T {
+  return { ...user, isBlocked: user?.isBlocked === true, blockedAt: user?.blockedAt ?? null }
+}
 
 // Standard VeloxVerse API envelope
 interface VVResponse<T> { success: boolean; message: string; data: T }
@@ -65,6 +80,13 @@ export const vvAnalyticsService = {
     )
     return data.data
   },
+  /** Real AUD collected through Mint. 'all' sends no `period` (all time). */
+  async getCardCharges(period: CardChargePeriod = 'all') {
+    const { data } = await api.get<VVResponse<{ cardCharges: CardCharges }>>(`${VV}/admin/analytics/card-charges`, {
+      params: { period: period === 'all' ? undefined : period },
+    })
+    return data.data.cardCharges
+  },
 }
 
 // ── eSIM Orders ─────────────────────────────────────────────────────
@@ -91,7 +113,7 @@ export const vvEsimService = {
     return data.data.order
   },
   async cancelEsim(orderNo: string) {
-    const { data } = await api.post<VVResponse<{ orderNo: string; status: string; refunded: boolean; refundAmount: number }>>(`${VV}/admin/esims/orders/${encodeURIComponent(orderNo)}/cancel`)
+    const { data } = await api.post<VVResponse<EsimCancelResult>>(`${VV}/admin/esims/orders/${encodeURIComponent(orderNo)}/cancel`)
     return data.data
   },
   async suspendEsim(orderNo: string) {
@@ -150,9 +172,25 @@ export const vvTransferService = {
     const { data } = await api.get<VVResponse<{ reasons: TransferCancelReason[] }>>(`${VV}/admin/assist/transfer/cancel-reasons`)
     return data.data.reasons
   },
-  async cancelBooking(orderNo: string, cancellationId: number) {
-    const { data } = await api.post<VVResponse<TransferCancelResult>>(`${VV}/admin/assist/transfer/bookings/${encodeURIComponent(orderNo)}/cancel`, { cancellationId })
+  /** `confirmNoRideAtSupplier` is only ever sent from the dedicated "No ride at ViaTovia"
+   * action — it states that staff checked the ViaTovia panel. Never from the plain Cancel. */
+  async cancelBooking(orderNo: string, cancellationId: number, opts: { confirmNoRideAtSupplier?: boolean } = {}) {
+    const { data } = await api.post<VVResponse<TransferCancelResult>>(
+      `${VV}/admin/assist/transfer/bookings/${encodeURIComponent(orderNo)}/cancel`,
+      { cancellationId, ...(opts.confirmNoRideAtSupplier === true ? { confirmNoRideAtSupplier: true } : {}) }
+    )
     return data.data
+  },
+  /** Attach the reservation number found in the ViaTovia panel to a ride that was paid but
+   * never confirmed. Returns the updated booking (which may already have been cancelled and
+   * refunded by the status sync, if ViaTovia had declined it). */
+  async linkReservation(orderNo: string, reservationNo: string) {
+    const { data } = await api.post<VVResponse<TransferCancelResult | { booking: TransferCancelResult }>>(
+      `${VV}/admin/assist/transfer/bookings/${encodeURIComponent(orderNo)}/link-reservation`,
+      { reservationNo }
+    )
+    const d = data.data
+    return 'booking' in d && d.booking ? d.booking : (d as TransferCancelResult)
   },
 }
 
@@ -239,19 +277,21 @@ export const vvPricingService = {
 export const vvUsersService = {
   async list(page = 1, search?: string, limit = 20) {
     const { data } = await api.get<VVResponse<VVAdminUsersPage>>(`${VV}/admin/users`, { params: { page, limit, ...(search ? { search } : {}) } })
-    return data.data
+    return { ...data.data, users: (data.data.users ?? []).map(normalizeVVUser) }
   },
   async get(id: string) {
     const { data } = await api.get<VVResponse<VVAdminUserDetail>>(`${VV}/admin/users/${id}`)
-    return data.data
+    return { ...data.data, user: normalizeVVUser(data.data.user) }
   },
+  /** `isActive: false` BLOCKS the account (VeloxVerse records it as an admin block that nothing
+   * the customer does can undo); `true` unblocks. Returns the updated user. */
   async setStatus(id: string, isActive: boolean) {
     const { data } = await api.patch<VVResponse<{ user: VVAdminUser }>>(`${VV}/admin/users/${id}/status`, { isActive })
-    return data.data.user
+    return normalizeVVUser(data.data.user)
   },
   async setRole(id: string, role: VVUserRole) {
     const { data } = await api.patch<VVResponse<{ user: VVAdminUser }>>(`${VV}/admin/users/${id}/role`, { role })
-    return data.data.user
+    return normalizeVVUser(data.data.user)
   },
 }
 
@@ -309,7 +349,7 @@ export const vvPointsService = {
   // Global settings
   async getSettings() {
     const { data } = await api.get<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`)
-    return data.data.settings
+    return normalizePointsSettings(data.data.settings)
   },
   /** Suggested fixed redemption rates from today's exchange rates — read-only, nothing is saved. */
   async suggestRates() {
@@ -318,7 +358,7 @@ export const vvPointsService = {
   },
   async updateSettings(patch: PointsSettingsUpdate) {
     const { data } = await api.put<VVResponse<{ settings: PointsSettings }>>(`${VV}/admin/points/settings`, patch)
-    return data.data.settings
+    return normalizePointsSettings(data.data.settings)
   },
   // User points
   async listUsers(page = 1, search?: string, limit = 20) {

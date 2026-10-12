@@ -12,7 +12,9 @@ import Lead from "../models/Lead.js";
 import Form from "../models/Form.js";
 import WebhookDelivery from "../models/WebhookDelivery.js";
 import { sendSuccess, sendError } from "../utils/response.js";
-import { storage } from "../storage/index.js";
+import { storage, contentDisposition } from "../storage/index.js";
+
+const FORM_UPLOAD_KEY_PREFIX = "form-submissions/";
 
 /** Shape written by publicFormController's file-upload handling — see FORM_UPLOAD_* in
  * middleware/upload.js. Distinguishes an actual uploaded-file answer from a plain string/array
@@ -24,14 +26,20 @@ function isFileDescriptor(v) {
 /** Stream (local disk) or redirect (S3 signed URL) a stored form-upload file — mirrors
  * verificationController.handleDownloadDocument's local-vs-S3 branch. */
 async function sendStoredFile(res, descriptor) {
-  const signedUrl = await storage.getSignedUrl(descriptor.storagePath);
+  // Form uploads only ever live under form-submissions/ — never serve anything else through
+  // this route, whatever a stored descriptor says.
+  if (!descriptor.storagePath.startsWith(FORM_UPLOAD_KEY_PREFIX)) {
+    return sendError(res, "File not found", 404);
+  }
+  const signedUrl = await storage.getSignedUrl(descriptor.storagePath, {
+    fileName: descriptor.originalName,
+    contentType: descriptor.mimeType,
+  });
   if (signedUrl) return res.redirect(signedUrl);
   const buffer = await storage.read(descriptor.storagePath);
   res.setHeader("Content-Type", descriptor.mimeType || "application/octet-stream");
-  res.setHeader(
-    "Content-Disposition",
-    `inline; filename="${(descriptor.originalName || "file").replace(/"/g, "")}"`
-  );
+  res.setHeader("Content-Disposition", contentDisposition(descriptor.originalName));
+  res.setHeader("X-Content-Type-Options", "nosniff");
   return res.send(buffer);
 }
 
@@ -136,10 +144,12 @@ export const handleListFormSubmissions = async (req, res) => {
 
 export const handleDownloadSubmissionFile = async (req, res) => {
   try {
-    const formId = parseInt(req.params.formId, 10);
+    // The route is /:id/submissions/:submissionId/files/:fieldId. (This used to read a
+    // `formId` param that doesn't exist, so every download from the Submissions page was a 404.)
+    const formId = parseInt(req.params.id, 10);
     const submissionId = parseInt(req.params.submissionId, 10);
     const submission = await FormSubmission.findById(submissionId);
-    if (!submission || submission.form_id !== formId) {
+    if (!submission || Number(submission.form_id) !== formId) {
       return sendError(res, "File not found", 404);
     }
     const descriptor = submission.submission_data?.[req.params.fieldId];

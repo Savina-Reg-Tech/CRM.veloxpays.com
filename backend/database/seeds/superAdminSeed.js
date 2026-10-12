@@ -1,7 +1,11 @@
 /**
+ * Creates the super-admin account.
  *
- *   node database/seeds/superAdminSeed.js
+ *   SUPER_ADMIN_PASSWORD='…' node database/seeds/superAdminSeed.js
  *
+ * The password is never stored in the repo: it comes from SUPER_ADMIN_PASSWORD and is never
+ * printed. If the account already exists nothing is changed, unless
+ * SUPER_ADMIN_RESET_PASSWORD=true is set — a deliberate, explicit password reset.
  */
 
 import "dotenv/config";
@@ -18,24 +22,54 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || "",
 });
 
+// Must stay the protected account — see PROTECTED_SUPER_ADMIN_EMAIL in node-crm/src/config/crmRoles.js.
 const SUPER_ADMIN = {
-  name:     "Super Admin",
-  email:    "admin@crm.com",
-  // Meets app password policy (length + upper/lower/digit/special)
-  password: "VeloxAdmin@2026!",
-  role:     "super_admin",
+  name:  "Super Admin",
+  email: "admin@crm.com",
+  role:  "super_admin",
+};
+
+/** Same rules as node-crm/src/utils/passwordPolicy.js (kept inline: this script runs from two layouts). */
+const passwordProblem = (password) => {
+  if (typeof password !== "string" || password === "") {
+    return "SUPER_ADMIN_PASSWORD is not set.";
+  }
+  if (password !== password.trim()) return "SUPER_ADMIN_PASSWORD must not start or end with spaces.";
+  if (password.length < 10 || password.length > 128) return "SUPER_ADMIN_PASSWORD must be 10–128 characters.";
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    return "SUPER_ADMIN_PASSWORD must include uppercase, lowercase, a number and a special character.";
+  }
+  return null;
 };
 
 const seed = async () => {
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const resetExisting = String(process.env.SUPER_ADMIN_RESET_PASSWORD || "").toLowerCase() === "true";
+  const emailNorm = SUPER_ADMIN.email.trim().toLowerCase();
+
   const client = await pool.connect();
   try {
-    const emailNorm = SUPER_ADMIN.email.trim().toLowerCase();
-    const hashedPassword = await bcrypt.hash(SUPER_ADMIN.password, 10);
-
     const { rows } = await client.query(
       "SELECT id FROM users WHERE LOWER(TRIM(email)) = $1 LIMIT 1",
       [emailNorm]
     );
+
+    if (rows.length > 0 && !resetExisting) {
+      console.log(`✅ Super Admin (${emailNorm}) already exists — left unchanged.`);
+      console.log("   To reset its password on purpose, re-run with SUPER_ADMIN_RESET_PASSWORD=true.\n");
+      return;
+    }
+
+    const problem = passwordProblem(password);
+    if (problem) {
+      console.error(`❌ ${problem}`);
+      console.error("   Choose a strong password and pass it in the environment, e.g.");
+      console.error("     SUPER_ADMIN_PASSWORD='…' docker compose run --rm seed\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     if (rows.length > 0) {
       await client.query(
@@ -46,18 +80,9 @@ const seed = async () => {
                 role = $4,
                 is_active = true
           WHERE id = $5`,
-        [
-          SUPER_ADMIN.name,
-          emailNorm,
-          hashedPassword,
-          SUPER_ADMIN.role,
-          rows[0].id,
-        ]
+        [SUPER_ADMIN.name, emailNorm, hashedPassword, SUPER_ADMIN.role, rows[0].id]
       );
-      console.log("🔐 Super Admin already existed — password reset and account synced.");
-      console.log(`   Email   : ${emailNorm}`);
-      console.log(`   Password: ${SUPER_ADMIN.password}`);
-      console.log("   ⚠️  Change the password after first login!\n");
+      console.log(`🔐 Super Admin (${emailNorm}) password reset to SUPER_ADMIN_PASSWORD.\n`);
       return;
     }
 
@@ -67,13 +92,10 @@ const seed = async () => {
       [SUPER_ADMIN.name, emailNorm, hashedPassword, SUPER_ADMIN.role]
     );
 
-    console.log("🎉 Super Admin seeded successfully!");
-    console.log(`   Email   : ${emailNorm}`);
-    console.log(`   Password: ${SUPER_ADMIN.password}`);
-    console.log("   ⚠️  Change the password after first login!\n");
+    console.log(`🎉 Super Admin created: ${emailNorm} (password = SUPER_ADMIN_PASSWORD).\n`);
   } catch (err) {
     console.error("❌ Seed failed:", err.message);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     client.release();
     await pool.end();

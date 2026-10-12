@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card'
 import Spinner from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 import { useVVAuditFunnel, useVVAuditMeta, useVVAuditSummaries } from '../hooks/useVVAudit'
-import { SEVERITIES, SEVERITY_COLOUR, humanize, serviceLabel, sortedCounts, splitHttpStatus, supplierLabel, utcDay } from '../audit'
+import { SEVERITIES, SEVERITY_COLOUR, humanize, serviceLabel, sortedCounts, splitHttpStatus, supplierLabel, utcDay, stepLabel } from '../audit'
 import type { AuditDailySummary } from '../auditTypes'
 import { AuditEmpty, AuditErrorState, AuditPageShell, selectClass } from '../components/audit/AuditUI'
 import { BarList, CATEGORICAL, Funnel, LineChart, StackedBars } from '../components/audit/AuditCharts'
@@ -178,7 +178,7 @@ export default function VVAuditTrendsPage() {
                 <AuditErrorState error={funnel.error} onRetry={() => void funnel.refetch()} />
               ) : (
                 <Funnel
-                  steps={funnel.data.steps.map((s) => ({ step: s.step, label: humanize(s.step), journeys: s.journeys, events: s.events, conversion: s.conversionFromCheckout }))}
+                  steps={funnel.data.steps.map((s) => ({ step: s.step, label: stepLabel(s.step), journeys: s.journeys, events: s.events, conversion: s.conversionFromCheckout }))}
                 />
               )}
             </ChartCard>

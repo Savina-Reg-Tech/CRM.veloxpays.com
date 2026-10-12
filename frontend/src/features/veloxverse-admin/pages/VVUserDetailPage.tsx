@@ -7,9 +7,11 @@ import {
   BadgeCheck,
   Banknote,
   Car,
+  CreditCard,
   Crown,
   FileText,
   Gem,
+  Landmark,
   LifeBuoy,
   Mail,
   Receipt,
@@ -20,19 +22,35 @@ import {
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import Switch from '@/components/ui/Switch'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Spinner from '@/components/ui/Spinner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { useToast } from '@/app/providers/ToastProvider'
-import { formatMoney } from '@/lib/utils'
+import { CARD_CHARGE_TOOLTIP, formatMoney } from '@/lib/utils'
+import { useVeloxEsimCustomer } from '@/features/velox-esim/hooks/useVeloxEsim'
 import { useVeloxVerseCustomerProfile } from '@/features/customers/hooks/useVeloxVerseCustomerProfile'
 import { CustomerActivityList } from '@/features/customers/components/CustomerActivityList'
-import { useVVUserDetail, useVVSetUserStatus } from '../hooks/useVVUsers'
+import { useVVUserDetail, useVVSetUserRole, useVVSetUserStatus } from '../hooks/useVVUsers'
+import { useAuthStore } from '@/store/authStore'
+import {
+  VV_ASSIGNABLE_ROLES,
+  blockConfirmation,
+  deactivateConfirmation,
+  isVVStaffRole,
+  vvAccountStatus,
+  vvBlockAction,
+  roleChangeConfirmation,
+  vvRoleBadgeVariant,
+  vvRoleLabel,
+  formatBlockedDate,
+  vvUserControls,
+} from '../userAccess'
+import type { VVUserRole } from '../types'
 import { useVVCustomerLoungeVisits } from '../hooks/useVVLounge'
 import VVUserAvatar from '../components/VVUserAvatar'
-import { formatDate } from '../utils'
+import { apiErrorMessage, cardChargeForPayment, formatDate, ownCardCharge } from '../utils'
+import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
 import type { AdminBillingLineItem } from '../types'
 import {
   ClubMembershipCard,
@@ -172,6 +190,13 @@ export default function VVUserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading } = useVVUserDetail(id)
   const setStatus = useVVSetUserStatus()
+  const setRole = useVVSetUserRole()
+  const crmUser = useAuthStore((s) => s.user)
+  // Which account controls to show. For a clean screen only — VeloxVerse enforces the real rules
+  // (see userAccess.ts) and its refusal message is shown next to the control.
+  const controls = vvUserControls({ crmRole: crmUser?.role, crmEmail: crmUser?.email, target: data?.user ?? {} })
+  const [pendingRole, setPendingRole] = useState<VVUserRole | null>(null)
+  const [accountError, setAccountError] = useState('')
   const { showToast } = useToast()
   const [confirmBlock, setConfirmBlock] = useState(false)
   const [searchParams] = useSearchParams()
@@ -188,6 +213,7 @@ export default function VVUserDetailPage() {
   // Customers' "View more" on a VeloxVerse row).
   const profile = useVeloxVerseCustomerProfile(data?.user.id ?? null, data?.user.email)
   const loungeQuery = useVVCustomerLoungeVisits(data?.user.id, data?.user.email)
+  const cardChargeByOrderNo = useCardChargeByOrderNo()
 
   const billingItems = useMemo(() => profile.billing?.items ?? [], [profile.billing])
   const billingTotals = profile.billing?.totals
@@ -227,23 +253,52 @@ export default function VVUserDetailPage() {
     bookingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  // Blocking goes through a confirm step: VeloxVerse claws back the referrer's reward when a
-  // referred account is blocked. Re-activating applies straight away.
-  const handleToggle = (isActive: boolean) => {
-    if (isActive) void handleStatus(true)
+  // Blocking goes through a confirm step: the account is signed out everywhere and VeloxVerse
+  // claws back the referrer's reward when a referred account is blocked. Unblocking applies
+  // straight away.
+  const accountStatus = vvAccountStatus(data?.user ?? {})
+  const blockAction = vvBlockAction(data?.user ?? {})
+  const handleBlockButton = () => {
+    setAccountError('')
+    if (blockAction === 'unblock') void handleStatus(true)
     else setConfirmBlock(true)
   }
 
   const handleStatus = async (isActive: boolean) => {
     if (!data) return
+    setAccountError('')
     try {
       await setStatus.mutateAsync({ id: data.user.id, isActive })
       setConfirmBlock(false)
-      showToast({ type: 'success', title: 'Status updated', message: `Account ${isActive ? 'activated' : 'deactivated'}.` })
+      showToast({
+        type: 'success',
+        title: isActive ? 'Account unblocked' : 'Account blocked',
+        message: isActive
+          ? `${displayName} can log in to VeloxVerse again.`
+          : `${displayName} has been signed out of VeloxVerse and can't log in until unblocked.`,
+      })
     } catch (e) {
-      showToast({ type: 'error', title: 'Error', message: e instanceof Error ? e.message : 'Failed to update status.' })
+      // VeloxVerse's own words ("Only a super admin can…", "This is the last active super
+      // admin…"), shown next to the control. Nothing changed, so the screen stays as it was.
+      setConfirmBlock(false)
+      setAccountError(apiErrorMessage(e, 'Failed to update status.'))
     }
   }
+
+  const handleRole = async () => {
+    if (!data || !pendingRole) return
+    setAccountError('')
+    try {
+      await setRole.mutateAsync({ id: data.user.id, role: pendingRole })
+      showToast({ type: 'success', title: 'Role updated', message: `${displayName} is now ${vvRoleLabel(pendingRole)}. They have been signed out of VeloxVerse.` })
+    } catch (e) {
+      setAccountError(apiErrorMessage(e, 'Failed to change the role.'))
+    } finally {
+      setPendingRole(null)
+    }
+  }
+
+  const displayName = data?.user.fullName || data?.user.email || 'this user'
 
   // Never a converted cross-currency total: a customer who paid in several currencies gets one
   // line per currency. The server's converted totals are used only when there's a single currency.
@@ -261,6 +316,13 @@ export default function VVUserDetailPage() {
   }
 
   const pointsBalance = profile.points?.balance
+
+  // Real card money in AUD, summed by VeloxVerse exactly as charged / refunded through Mint
+  // (the CRM customers API). Shown as sent — never a conversion of the spend tiles above.
+  const cardTotals = useVeloxEsimCustomer(data?.user.id ?? null)
+  const cardCurrency = cardTotals.data?.cardChargeCurrency ?? 'AUD'
+  const cardMoney = (v: number | null | undefined): ReactNode =>
+    cardTotals.isLoading ? '…' : typeof v === 'number' ? formatMoney(v, cardCurrency) : '—'
 
   return (
     <div className="max-w-full space-y-6">
@@ -291,9 +353,7 @@ export default function VVUserDetailPage() {
                 <div className="min-w-0 pt-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="truncate text-xl font-bold text-gray-900">{data.user.fullName || 'Guest User'}</h1>
-                    <Badge variant={data.user.role === 'GUEST' ? 'warning' : 'neutral'}>
-                      {data.user.role === 'GUEST' ? 'Guest' : 'Registered'}
-                    </Badge>
+                    <Badge variant={vvRoleBadgeVariant(data.user.role)}>{vvRoleLabel(data.user.role)}</Badge>
                     {data.user.isVerified && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                         <BadgeCheck className="h-3.5 w-3.5" /> Verified
@@ -317,11 +377,50 @@ export default function VVUserDetailPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className={`text-xs font-medium ${data.user.isActive ? 'text-emerald-600' : 'text-gray-500'}`}>
-                  {data.user.isActive ? 'Active' : 'Inactive'}
-                </span>
-                <Switch checked={data.user.isActive} disabled={setStatus.isPending} onChange={handleToggle} />
+              <div className="flex flex-col items-start gap-2 self-start sm:items-end sm:self-auto">
+                <div className="flex items-center gap-2">
+                  <span title={accountStatus.tooltip}>
+                    <Badge variant={accountStatus.variant}>{accountStatus.label}</Badge>
+                  </span>
+                  {accountStatus.status === 'blocked' && formatBlockedDate(data.user.blockedAt) && (
+                    <span className="text-xs text-gray-500">since {formatBlockedDate(data.user.blockedAt)}</span>
+                  )}
+                  {controls.canToggleStatus && (
+                    <Button
+                      size="sm"
+                      variant={blockAction === 'unblock' ? 'outline' : 'danger'}
+                      onClick={handleBlockButton}
+                      loading={setStatus.isPending}
+                    >
+                      {blockAction === 'unblock' ? 'Unblock' : 'Block'}
+                    </Button>
+                  )}
+                </div>
+                {controls.canChangeRole && (
+                  <label className="flex items-center gap-2 text-xs text-gray-500">
+                    Role
+                    <select
+                      aria-label="Change role"
+                      value={data.user.role}
+                      disabled={setRole.isPending}
+                      onChange={(e) => {
+                        setAccountError('')
+                        if (e.target.value !== data.user.role) setPendingRole(e.target.value as VVUserRole)
+                      }}
+                      className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    >
+                      {[...new Set<VVUserRole>([data.user.role, ...VV_ASSIGNABLE_ROLES])].map((r) => (
+                        <option key={r} value={r}>{vvRoleLabel(r)}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {controls.isSelf && <p className="text-[11px] text-gray-400">This is your own account — role and status can&apos;t be changed here.</p>}
+                {accountError && (
+                  <p role="alert" className="max-w-xs rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700 sm:text-right">
+                    {accountError}
+                  </p>
+                )}
               </div>
             </div>
           </Card>
@@ -350,6 +449,35 @@ export default function VVUserDetailPage() {
               value={profile.isPointsLoading ? '…' : profile.isPointsError ? '—' : (pointsBalance?.balance ?? 0).toLocaleString()}
               sub={pointsBalance ? `${pointsBalance.lifetimeEarned.toLocaleString()} earned lifetime` : undefined}
             />
+          </div>
+
+          {/* ── Card money: what Mint actually collected, always AUD ── */}
+          <div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" title={CARD_CHARGE_TOOLTIP}>
+              <MoneyTile
+                icon={CreditCard}
+                tint="bg-indigo-50 text-indigo-600"
+                label={`Card charged (${cardCurrency})`}
+                value={cardMoney(cardTotals.data?.totalCardCharged)}
+              />
+              <MoneyTile
+                icon={Undo2}
+                tint="bg-red-50 text-red-600"
+                label={`Card refunded (${cardCurrency})`}
+                value={cardMoney(cardTotals.data?.totalCardRefunded)}
+              />
+              <MoneyTile
+                icon={Landmark}
+                tint="bg-emerald-50 text-emerald-600"
+                label={`Net collected (${cardCurrency})`}
+                value={cardMoney(cardTotals.data?.netCardCharged)}
+                valueClass="text-emerald-700"
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-400">
+              Actual card money collected through Mint, in {cardCurrency}. Spend above is in the customer&rsquo;s own
+              currency; credit, points and VeloxClub benefits never reach the card.
+            </p>
           </div>
 
           {/* What was actually paid, per currency — never summed across currencies. */}
@@ -450,7 +578,12 @@ export default function VVUserDetailPage() {
                           <StatusChips statuses={data.orders.map((o) => o.status)} value={statusFilter} onChange={setStatusFilter} />
                           <CardList>
                             {filterByStatus(data.orders, statusFilter, (o) => o.status).map((o) => (
-                              <EsimOrderCard key={o.orderNo} order={o} payment={paymentByOrderNo.get(o.orderNo)} />
+                              <EsimOrderCard
+                                key={o.orderNo}
+                                order={o}
+                                payment={paymentByOrderNo.get(o.orderNo)}
+                                cardCharge={cardChargeByOrderNo(o.orderNo)}
+                              />
                             ))}
                           </CardList>
                         </>
@@ -494,7 +627,7 @@ export default function VVUserDetailPage() {
                           <StatusChips statuses={loungeVisits.map((v) => v.status)} value={statusFilter} onChange={setStatusFilter} />
                           <CardList>
                             {filterByStatus(loungeVisits, statusFilter, (v) => v.status).map((v) => (
-                              <LoungeVisitCard key={v.id} v={v} />
+                              <LoungeVisitCard key={v.id} v={v} cardCharge={cardChargeByOrderNo(v.orderId ?? v.id)} />
                             ))}
                           </CardList>
                         </>
@@ -509,7 +642,11 @@ export default function VVUserDetailPage() {
                           <StatusChips statuses={profile.transfers.map((t) => t.status)} value={statusFilter} onChange={setStatusFilter} />
                           <CardList>
                             {filterByStatus(profile.transfers, statusFilter, (t) => t.status).map((t) => (
-                              <TransferCard key={t.orderNo} t={t} />
+                              <TransferCard
+                                key={t.orderNo}
+                                t={t}
+                                cardCharge={cardChargeByOrderNo(t.orderNo, ownCardCharge(t))}
+                              />
                             ))}
                           </CardList>
                         </>
@@ -522,7 +659,15 @@ export default function VVUserDetailPage() {
                       ) : profile.clubMemberships.length === 0 ? (
                         <EmptyState icon={Crown} text="No VeloxClub membership." />
                       ) : (
-                        <CardList>{profile.clubMemberships.map((m) => <ClubMembershipCard key={m.id} m={m} />)}</CardList>
+                        <CardList>
+                          {profile.clubMemberships.map((m) => (
+                            <ClubMembershipCard
+                              key={m.id}
+                              m={m}
+                              cardCharge={ownCardCharge(m) ?? cardChargeForPayment(billingItems, m.paymentReferenceId)}
+                            />
+                          ))}
+                        </CardList>
                       )}
                     </TabsContent>
 
@@ -583,15 +728,40 @@ export default function VVUserDetailPage() {
 
       <EventDrawer />
 
-      <Modal open={confirmBlock} onClose={() => setConfirmBlock(false)} title="Deactivate account?" size="sm">
+      <Modal open={!!pendingRole} onClose={() => setPendingRole(null)} title="Change role?" size="sm">
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">{data?.user.email} will no longer be able to sign in.</p>
+          <p className="text-sm text-gray-600">
+            {data && pendingRole ? roleChangeConfirmation(displayName, data.user.role, pendingRole) : ''}
+          </p>
+          {pendingRole && pendingRole !== 'USER' && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {vvRoleLabel(pendingRole)} is a staff role with access to VeloxVerse administration.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setPendingRole(null)}>Cancel</Button>
+            <Button onClick={() => void handleRole()} loading={setRole.isPending}>Change role</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={confirmBlock} onClose={() => setConfirmBlock(false)} title={isVVStaffRole(data?.user.role) ? 'Deactivate account?' : 'Block account?'} size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            {isVVStaffRole(data?.user.role) ? deactivateConfirmation(displayName) : blockConfirmation(displayName)}
+          </p>
+          <p className="text-sm text-gray-600">
+            {data?.user.email} will not be able to sign in — not by logging in again, signing up with the same
+            email or verifying it. Only an admin can undo this.
+          </p>
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             If this user was referred, the referrer's referral reward will be clawed back.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirmBlock(false)}>Cancel</Button>
-            <Button variant="danger" onClick={() => void handleStatus(false)} loading={setStatus.isPending}>Deactivate</Button>
+            <Button variant="danger" onClick={() => void handleStatus(false)} loading={setStatus.isPending}>
+              {isVVStaffRole(data?.user.role) ? 'Deactivate' : 'Block'}
+            </Button>
           </div>
         </div>
       </Modal>

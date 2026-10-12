@@ -1,8 +1,8 @@
 import type { ComponentType } from 'react'
 import { Smartphone, Car, Headphones, HandHelping, Crown } from 'lucide-react'
 import Badge from '@/components/ui/Badge'
+import DualAmount from '@/components/ui/DualAmount'
 import { statusBadgeVariant } from '@/features/veloxverse-admin/utils'
-import { formatMoney } from '@/lib/utils'
 import type { CustomerActivityItem } from '../utils/veloxverseActivity'
 
 const KIND_ICON: Record<CustomerActivityItem['kind'], ComponentType<{ className?: string }>> = {
@@ -40,9 +40,13 @@ function ActivityRow({ item }: { item: CustomerActivityItem }) {
         <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">{KIND_LABEL[item.kind]}</p>
       </div>
       {item.amountUsd != null && (
-        <span className="shrink-0 text-sm font-medium text-gray-900">
-          {formatMoney(item.amountUsd, item.currency)}
-        </span>
+        <DualAmount
+          className="shrink-0 text-sm font-medium text-gray-900"
+          amount={item.amountUsd}
+          currency={item.currency}
+          cardChargeAmount={item.cardChargeAmount}
+          cardChargeCurrency={item.cardChargeCurrency}
+        />
       )}
     </li>
   )

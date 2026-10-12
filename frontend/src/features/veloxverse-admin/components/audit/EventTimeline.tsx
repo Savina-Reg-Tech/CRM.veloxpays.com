@@ -1,6 +1,6 @@
 import { Fragment } from 'react'
 import { cn } from '@/lib/utils'
-import { formatDurationMs, formatMinutes, humanize, journeyPhase, relativeOffset, serviceLabel, sourceLabel, supplierLabel } from '../../audit'
+import { formatDurationMs, formatMinutes, journeyPhase, relativeOffset, serviceLabel, sourceLabel, supplierLabel, stepLabel } from '../../audit'
 import type { AuditEvent } from '../../auditTypes'
 import { AuditTime, EventTypeIcon, SeverityBadge, StatusIcon } from './AuditUI'
 import { useOpenEvent } from './EventTable'
@@ -71,7 +71,7 @@ export function EventTimeline({
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <StatusIcon status={e.status} />
-                  <span className={cn('font-medium', failed ? 'text-red-800' : 'text-gray-900')}>{humanize(e.step)}</span>
+                  <span className={cn('font-medium', failed ? 'text-red-800' : 'text-gray-900')}>{stepLabel(e.step)}</span>
                   {e.severity !== 'info' && <SeverityBadge severity={e.severity} />}
                   {system && (
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600" title={sourceLabel(e.source)}>

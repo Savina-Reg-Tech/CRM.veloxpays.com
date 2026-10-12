@@ -14,6 +14,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/app/providers/ToastProvider'
+import StorageStatusCard from '../StorageStatusCard'
 import {
   useVVSettings,
   useVVTestSmtp,
@@ -106,6 +107,9 @@ export default function SettingsPage() {
           all in one place.
         </p>
       </div>
+
+      {/* The CRM's own document storage — independent of the VeloxVerse settings below. */}
+      <StorageStatusCard />
 
       {isLoading || !settings ? (
         <div className="space-y-4">

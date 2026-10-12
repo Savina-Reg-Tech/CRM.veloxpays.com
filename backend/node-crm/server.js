@@ -2,6 +2,10 @@ import "dotenv/config";
 import app from "./src/app.js";
 import pool from "./config/db.js";
 import { startExpiryScheduler } from "./src/jobs/expiryWorker.js";
+import { assertSafeEnv } from "./src/config/validateEnv.js";
+import { storageStatus } from "./src/storage/index.js";
+
+assertSafeEnv();
 
 const PORT = process.env.PORT || 5002;
 
@@ -16,6 +20,12 @@ pool.connect()
     });
     // Daily verification-expiry sweep (in-process scheduler).
     startExpiryScheduler();
+    // Say plainly whether uploaded documents have somewhere safe to live. Never blocks startup.
+    storageStatus().then((s) => {
+      if (!s.ok) console.error(`❌ Document storage is NOT working (${s.kind}): ${s.error}`);
+      else if (s.kind === "s3") console.log(`✅ Document storage: S3 bucket "${s.bucket}" (${s.region}) is reachable`);
+      if (s.warning) console.warn(`⚠️  ${s.warning}`);
+    });
   })
   .catch((err) => {
     console.error("❌ Failed to connect to PostgreSQL:", err.message);

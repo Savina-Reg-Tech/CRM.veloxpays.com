@@ -27,9 +27,12 @@ import {
   useVVUnsuspendEsim,
 } from '../hooks/useVVEsim'
 import { useVVUserDetail } from '../hooks/useVVUsers'
-import { formatDateTime, statusBadgeVariant } from '../utils'
-import { formatMoney } from '@/lib/utils'
+import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
+import { formatDateTime, isUnpaidOrder, ownCardCharge, statusBadgeVariant, unpaidOrderNote } from '../utils'
+import { cardChargeLabel, formatMoney } from '@/lib/utils'
 import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
+import RefundOutcomeNotice from '../components/RefundOutcomeNotice'
+import { describeRefundOutcome, type RefundOutcome } from '../refundOutcome'
 import { EventDrawer } from '../components/audit/EventDrawer'
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -105,7 +108,12 @@ export default function VVEsimDetailPage() {
   // real name/email via the already-bridged admin users endpoint (same one VVUserDetailPage
   // uses) rather than assuming a field the backend never sends.
   const { data: customerDetail } = useVVUserDetail(order?.userId)
+  // AUD the card was really charged for this order (Mint charges in AUD only).
+  const cardChargeByOrderNo = useCardChargeByOrderNo()
+  const cardCharge = order ? cardChargeByOrderNo(order.orderNo, ownCardCharge(order)) : undefined
   const cancelMutation = useVVCancelEsim()
+  // How the last cancel / refund really ended — kept on the page until dismissed.
+  const [refundOutcome, setRefundOutcome] = useState<RefundOutcome | null>(null)
   const suspendMutation = useVVSuspendEsim()
   const unsuspendMutation = useVVUnsuspendEsim()
 
@@ -172,8 +180,17 @@ export default function VVEsimDetailPage() {
     if (!order) return
     const who = customerName || 'this customer'
     try {
-      await cancelMutation.mutateAsync(order.orderNo)
-      showToast({ type: 'success', title: 'Cancellation processed', message: `${who}'s eSIM has been cancelled.` })
+      const result = await cancelMutation.mutateAsync(order.orderNo)
+      // The refund result comes from `refundState` — never from the 200 or `refunded` alone.
+      const outcome = describeRefundOutcome({
+        refundState: result.refundState,
+        amount: result.refundAmount,
+        currency: order.currency,
+        alreadyProcessed: result.alreadyProcessed === true,
+      })
+      if (outcome) setRefundOutcome(outcome)
+      // Older VeloxVerse (no refundState): say only what is known — it was cancelled.
+      else showToast({ type: 'success', title: 'Cancellation processed', message: `${who}'s eSIM has been cancelled.` })
     } catch (err) {
       showToast({
         type: 'error',
@@ -219,6 +236,12 @@ export default function VVEsimDetailPage() {
     order.status === 'FAILED' ||
     order.status === 'REVOKED'
   const profit = order.profitUsd ?? (order.sellingPriceUsd ?? 0) - (order.costUsd ?? 0)
+  // Never paid → there is no cost, sale or profit to show (a dash, not 0.00).
+  const unpaid = isUnpaidOrder(order)
+  // eSIM Access can cancel / revoke an eSIM on its own, leaving the order CANCELLED / REVOKED with
+  // the customer never refunded — so the refund action stays available on those (it refunds
+  // without a second cancel at the supplier, or reports "already refunded" / "nothing to refund").
+  const canRefundClosed = (order.status === 'CANCELLED' || order.status === 'REVOKED') && !isUnpaidOrder(order)
   const title = order.packageName ?? order.packages?.[0]?.name ?? `Order ${order.orderNo}`
 
   return (
@@ -235,12 +258,25 @@ export default function VVEsimDetailPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
           <Badge variant={statusBadgeVariant(order.status)}>{order.status}</Badge>
+          {unpaid && (
+            <span title={unpaidOrderNote(order)} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+              Not paid
+            </span>
+          )}
           {order.esimStatus && (
             <Badge variant="neutral">{order.esimStatus}</Badge>
           )}
         </div>
         <p className="font-mono text-sm text-gray-500">Order #{order.orderNo}</p>
       </div>
+
+      {refundOutcome && (
+        <RefundOutcomeNotice
+          outcome={refundOutcome}
+          subject={`${customerName ?? 'Customer'} · order ${order.orderNo}`}
+          onDismiss={() => setRefundOutcome(null)}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left column: QR + IDs */}
@@ -405,21 +441,33 @@ export default function VVEsimDetailPage() {
 
           <Card>
             <CardHeader title="Pricing" />
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {unpaid && (
+              <p className="mb-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                Not paid. {unpaidOrderNote(order)} There is no cost, sale or profit for this order.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
               <DetailRow
                 icon={CreditCard}
                 label="Cost"
                 value={
-                  formatMoney(order.costUsd ?? 0, order.currency) +
-                  (order.costCurrencyFallback ? ' (approx., FX unavailable)' : '')
+                  unpaid
+                    ? '—'
+                    : formatMoney(order.costUsd ?? 0, order.currency) +
+                      (order.costCurrencyFallback ? ' (approx., FX unavailable)' : '')
                 }
               />
               <DetailRow
                 icon={CreditCard}
                 label="Selling Price"
-                value={formatMoney(order.sellingPriceUsd ?? 0, order.currency)}
+                value={unpaid ? '—' : formatMoney(order.sellingPriceUsd ?? 0, order.currency)}
               />
-              <DetailRow icon={CreditCard} label="Profit" value={formatMoney(profit, order.currency)} />
+              <DetailRow
+                icon={CreditCard}
+                label={`Charged to card (${cardCharge?.currency ?? 'AUD'})`}
+                value={unpaid ? null : cardChargeLabel(order.currency, cardCharge?.amount, cardCharge?.currency)}
+              />
+              <DetailRow icon={CreditCard} label="Profit" value={unpaid ? '—' : formatMoney(profit, order.currency)} />
               <DetailRow icon={CreditCard} label="Payment" value={order.paymentMethod} />
             </div>
           </Card>
@@ -485,6 +533,19 @@ export default function VVEsimDetailPage() {
                   </tbody>
                 </table>
               </div>
+            </Card>
+          )}
+
+          {canRefundClosed && (
+            <Card>
+              <CardHeader
+                title="Refund"
+                description="This eSIM is already cancelled. If the customer was never refunded, this refunds them now; otherwise it tells you what was already refunded."
+              />
+              <Button variant="danger" onClick={() => setShowCancelModal(true)} loading={cancelMutation.isPending}>
+                <Ban className="h-4 w-4" />
+                Check / refund customer
+              </Button>
             </Card>
           )}
 
@@ -563,12 +624,12 @@ export default function VVEsimDetailPage() {
       <Modal
         open={showCancelModal}
         onClose={() => setShowCancelModal(false)}
-        title="Request Cancellation"
+        title={canRefundClosed ? 'Refund customer' : 'Request Cancellation'}
         description={`Order #${order.orderNo}`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCancelModal(false)}>
-              Keep eSIM
+              {canRefundClosed ? 'Close' : 'Keep eSIM'}
             </Button>
             <Button
               variant="danger"
@@ -576,18 +637,27 @@ export default function VVEsimDetailPage() {
               loading={cancelMutation.isPending}
             >
               <Ban className="h-4 w-4" />
-              Confirm cancellation
+              {canRefundClosed ? 'Check / refund' : 'Confirm cancellation'}
             </Button>
           </>
         }
       >
+        {canRefundClosed ? (
+          <p className="text-sm text-gray-600">
+            This eSIM for <span className="font-medium text-gray-900">{customerName ?? 'this customer'}</span> is
+            already {order.status.toLowerCase()}. Nothing more is cancelled at the provider. If the payment was
+            never refunded, the customer is refunded now; if it was, you&apos;ll see &ldquo;Already refunded&rdquo;
+            with the amount, or &ldquo;Nothing to refund&rdquo;.
+          </p>
+        ) : (
         <p className="text-sm text-gray-600">
           This will cancel the eSIM for{' '}
           <span className="font-medium text-gray-900">{customerName ?? 'this customer'}</span>.
-          If it hasn't been activated yet, it's processed as a full refund; if it's already in
-          use, it will be revoked instead and the customer refunded from their wallet. This
-          action can't be undone.
+          If it hasn't been activated yet it is cancelled; if it's already in use it is revoked
+          instead. Any refund owed is then sent automatically — you'll be told here whether it
+          was confirmed, is still pending, or has to be made manually. This action can't be undone.
         </p>
+        )}
       </Modal>
     </div>
   )

@@ -54,6 +54,16 @@ import type {
   PointsTransactionType,
   RedemptionRateSuggestions,
 } from '../types'
+import {
+  PER_ORDER_LIMIT_FIELDS,
+  formatPerOrderLimit,
+  limitOrZero,
+  perOrderPointsWorth,
+  pointsAuditFieldLabel,
+  pointsAuditValue,
+  validatePerOrderLimits,
+  type PerOrderLimitKey,
+} from '../pointsLimits'
 
 // ─────────────────────────── Helpers ───────────────────────────────
 
@@ -643,6 +653,9 @@ function GlobalSettingsTab() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [nums, setNums] = useState<Record<SettingsNumberKey, string>>({ minRedeemPoints: '', maxRedeemPerDayCents: '', pointsExpiryDays: '' })
   const [rates, setRates] = useState<Record<string, string>>({})
+  // "Limit per order" — the two per-order redemption limits (0 = no limit). See pointsLimits.ts.
+  const [limits, setLimits] = useState<Record<PerOrderLimitKey, string>>({ maxRedeemPointsPerOrder: '0', maxRedeemPercentPerOrder: '0' })
+  const [limitServerError, setLimitServerError] = useState('')
   const [suggestions, setSuggestions] = useState<RedemptionRateSuggestions | null>(null)
   const [suggesting, setSuggesting] = useState(false)
 
@@ -654,6 +667,11 @@ function GlobalSettingsTab() {
       pointsExpiryDays: String(settings.pointsExpiryDays),
     })
     setRates(Object.fromEntries(ANALYTICS_CURRENCIES.map((c) => [c, settings.pointsPerUnitRedeem?.[c] != null ? String(settings.pointsPerUnitRedeem[c]) : prefill[c] ?? ''])))
+    setLimits({
+      maxRedeemPointsPerOrder: String(limitOrZero(settings.maxRedeemPointsPerOrder)),
+      maxRedeemPercentPerOrder: String(limitOrZero(settings.maxRedeemPercentPerOrder)),
+    })
+    setLimitServerError('')
     setEditing(true)
   }
 
@@ -708,7 +726,27 @@ function GlobalSettingsTab() {
     .map((f) => ({ ...f, from: settings[f.key], to: Number(nums[f.key]) }))
   const invalidRate = ANALYTICS_CURRENCIES.some((c) => rates[c]?.trim() && !isPosInt(rates[c]))
   const invalidNum = SETTINGS_FIELDS.some((f) => !isNonNegInt(nums[f.key] ?? ''))
-  const canSave = !invalidRate && !invalidNum && (rateChanges.length > 0 || numChanges.length > 0)
+
+  // Per-order limits. The points limit is checked against the minimum to redeem that will be in
+  // force after this save (the edited value when it's valid, else the saved one).
+  const effectiveMinRedeem = isNonNegInt(nums.minRedeemPoints ?? '') ? Number(nums.minRedeemPoints) : settings.minRedeemPoints
+  const limitErrors = validatePerOrderLimits({
+    points: limits.maxRedeemPointsPerOrder,
+    percent: limits.maxRedeemPercentPerOrder,
+    minRedeemPoints: effectiveMinRedeem,
+  })
+  const limitErrorFor = (key: PerOrderLimitKey) => (key === 'maxRedeemPointsPerOrder' ? limitErrors.points : limitErrors.percent)
+  const invalidLimit = !!limitErrors.points || !!limitErrors.percent
+  const limitChanges = invalidLimit
+    ? []
+    : PER_ORDER_LIMIT_FIELDS
+        .map((f) => ({ ...f, from: limitOrZero(settings[f.key]), to: Number(limits[f.key]) }))
+        .filter((c) => c.from !== c.to)
+  // The rates the admin is looking at right now (edited ones included) — for the "worth" line.
+  const ratesInView: Record<string, number | null> = Object.fromEntries(
+    ANALYTICS_CURRENCIES.map((c) => [c, editing && isPosInt(rates[c] ?? '') ? Number(rates[c]) : current[c] ?? null])
+  )
+  const canSave = !invalidRate && !invalidNum && !invalidLimit && (rateChanges.length > 0 || numChanges.length > 0 || limitChanges.length > 0)
 
   // What each changed currency's earning rules would pay back at its NEW rate, vs USD. Earning
   // rules are a points count per 1 unit of each currency, so a new rate for a currency whose
@@ -733,13 +771,25 @@ function GlobalSettingsTab() {
     const patch: PointsSettingsUpdate = {}
     if (rateChanges.length) patch.pointsPerUnitRedeem = Object.fromEntries(rateChanges.map((r) => [r.cur, r.to]))
     for (const n of numChanges) patch[n.key] = n.to
+    // Always a whole number — 0 for "no limit", never null or an empty string.
+    for (const l of limitChanges) patch[l.key] = l.to
+    setLimitServerError('')
     updateMut.mutate(patch, {
       onSuccess: () => { showToast({ type: 'success', title: 'Settings updated' }); setConfirmOpen(false); setEditing(false) },
-      onError: (err) => showToast({
-        type: 'error',
-        title: 'Failed to update settings',
-        message: (err as { response?: { data?: { message?: string } } })?.response?.data?.message,
-      }),
+      onError: (err) => {
+        const body = (err as { response?: { data?: { message?: string; errors?: { field?: string; message?: string }[] } } })?.response?.data
+        // A field-level validation refusal carries the reason per field — show that, not just
+        // "Validation failed".
+        const fieldErrors = (body?.errors ?? []).map((e) => e.message).filter(Boolean).join(' ')
+        const message = fieldErrors || body?.message
+        // A refusal about the per-order limits (e.g. lower than the minimum to redeem) is shown
+        // as-is next to those fields, back in the form where it can be corrected.
+        if (limitChanges.length > 0 && message && (err as { response?: { status?: number } })?.response?.status === 400) {
+          setLimitServerError(message)
+          setConfirmOpen(false)
+        }
+        showToast({ type: 'error', title: 'Failed to update settings', message })
+      },
     })
   }
 
@@ -774,6 +824,50 @@ function GlobalSettingsTab() {
                 <p className="text-xs text-gray-400 mt-0.5">{f.help}</p>
               </div>
             ))}
+
+            <fieldset className="rounded-lg border border-gray-200 p-4">
+              <legend className="px-1 text-sm font-semibold text-gray-900">Limit per order</legend>
+              <p className="mb-3 text-xs text-gray-500">
+                How much of one order a customer can pay with points. Set either or both — the stricter one applies
+                on each order. Applies to every service, immediately.
+              </p>
+              <div className="space-y-4">
+                {PER_ORDER_LIMIT_FIELDS.map((f) => {
+                  const isPercent = f.key === 'maxRedeemPercentPerOrder'
+                  const err = limitErrorFor(f.key)
+                  const draft = limits[f.key]
+                  const worth = !isPercent && !err ? perOrderPointsWorth(Number(draft), ratesInView, ANALYTICS_CURRENCIES) : null
+                  return (
+                    <div key={f.key}>
+                      <label htmlFor={`limit-${f.key}`} className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id={`limit-${f.key}`}
+                          type="number"
+                          min={0}
+                          max={isPercent ? 100 : undefined}
+                          step={1}
+                          inputMode="numeric"
+                          className="max-w-[200px]"
+                          value={draft}
+                          aria-invalid={!!err}
+                          onChange={(e) => { setLimits((p) => ({ ...p, [f.key]: e.target.value })); setLimitServerError('') }}
+                        />
+                        <span className="text-sm text-gray-500">{isPercent ? '%' : 'pts'}</span>
+                        {!err && Number(draft) === 0 && <Badge variant="neutral">No limit</Badge>}
+                        {!err && isPercent && Number(draft) === 100 && <Badge variant="neutral">Same as no limit</Badge>}
+                      </div>
+                      {err && <p role="alert" className="text-xs text-red-600 mt-0.5">{err}</p>}
+                      {worth && <p className="text-xs text-gray-600 mt-0.5">{worth}</p>}
+                      <p className="text-xs text-gray-400 mt-0.5">{f.help}</p>
+                    </div>
+                  )
+                })}
+                {limitServerError && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{limitServerError}</p>
+                )}
+              </div>
+            </fieldset>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -785,6 +879,27 @@ function GlobalSettingsTab() {
                 </p>
               </div>
             ))}
+            <div className="sm:col-span-3">
+              <p className="mb-2 text-sm font-semibold text-gray-900">Limit per order</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {PER_ORDER_LIMIT_FIELDS.map((f) => {
+                  const value = limitOrZero(settings[f.key])
+                  const isPercent = f.key === 'maxRedeemPercentPerOrder'
+                  const worth = isPercent ? null : perOrderPointsWorth(value, current, ANALYTICS_CURRENCIES)
+                  return (
+                    <div key={f.key} className="rounded-lg border border-gray-100 p-4">
+                      <p className="text-xs text-gray-500 mb-1">{f.label}</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {fmtNum(value)} <span className="text-sm font-normal text-gray-400">{isPercent ? '%' : 'pts'}</span>
+                        {value === 0 && <span className="ml-2 align-middle"><Badge variant="neutral">No limit</Badge></span>}
+                      </p>
+                      {worth && <p className="mt-1 text-xs text-gray-500">{worth}</p>}
+                      <p className="mt-1 text-xs text-gray-400">{f.help}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
       </Card>
@@ -902,6 +1017,23 @@ function GlobalSettingsTab() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {limitChanges.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1.5">Limit per order</p>
+              <ul className="space-y-1 text-sm">
+                {limitChanges.map((l) => (
+                  <li key={l.key}>
+                    {l.label.replace(' (%)', '')}: <span className="text-red-500 line-through">{formatPerOrderLimit(l.key, l.from).toLowerCase()}</span>
+                    <span className="mx-1 text-gray-400">→</span>
+                    <span className="font-medium text-green-600">{formatPerOrderLimit(l.key, l.to).toLowerCase()}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-xs text-gray-500">
+                Takes effect immediately for all customers and every service. Orders already paid are not affected.
+              </p>
             </div>
           )}
           {earningMismatches.length > 0 && (
@@ -1302,11 +1434,13 @@ function ChangeLogTab() {
                 <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(e.createdAt)}</td>
                 <td className="px-4 py-3 text-gray-700">{e.adminName}{e.adminEmail ? ` (${e.adminEmail})` : ''}</td>
                 <td className="px-4 py-3"><Badge variant="neutral">{e.table.replace('points_', '')}</Badge></td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-700">{e.fieldName}</td>
+                <td className="px-4 py-3 text-xs text-gray-700">
+                  {pointsAuditFieldLabel(e.fieldName) ?? <span className="font-mono">{e.fieldName}</span>}
+                </td>
                 <td className="px-4 py-3 text-xs">
-                  <span className="text-red-500 line-through">{e.oldValue ?? '—'}</span>
+                  <span className="text-red-500 line-through">{pointsAuditValue(e.fieldName, e.oldValue)}</span>
                   <span className="mx-1 text-gray-400">→</span>
-                  <span className="text-green-600 font-medium">{e.newValue ?? '—'}</span>
+                  <span className="text-green-600 font-medium">{pointsAuditValue(e.fieldName, e.newValue)}</span>
                 </td>
               </tr>
             ))}

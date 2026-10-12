@@ -5,6 +5,7 @@ import { useVVSupportTickets } from '@/features/veloxverse-admin/hooks/useVVSupp
 import { useVVClubMember } from '@/features/veloxverse-admin/hooks/useVVClub'
 import { useVVUserPoints } from '@/features/veloxverse-admin/hooks/useVVPoints'
 import { useVVAdminBillingActivity } from '@/features/veloxverse-admin/hooks/useVVBilling'
+import { useCardChargeByOrderNo } from '@/features/veloxverse-admin/hooks/useVVAnalytics'
 import { useLeads } from '@/features/forms/hooks/useForms'
 import {
   buildVeloxVerseActivity,
@@ -22,6 +23,7 @@ export function useVeloxVerseCustomerProfile(userId: string | null, email?: stri
   const clubQuery = useVVClubMember(userId ?? undefined)
   const pointsQuery = useVVUserPoints(userId ?? undefined)
   const billingQuery = useVVAdminBillingActivity(userId ?? undefined)
+  const cardChargeByOrderNo = useCardChargeByOrderNo()
 
   const normalizedEmail = email?.trim().toLowerCase() ?? ''
 
@@ -60,8 +62,10 @@ export function useVeloxVerseCustomerProfile(userId: string | null, email?: stri
         tickets,
         leads,
         clubMemberships,
+        billingItems: billingQuery.data?.items,
+        cardChargeByOrderNo,
       }),
-    [detailQuery.data, transfers, tickets, leads, clubMemberships]
+    [detailQuery.data, transfers, tickets, leads, clubMemberships, billingQuery.data, cardChargeByOrderNo]
   )
 
   const pendingCount = useMemo(() => countPendingActivity(activity), [activity])

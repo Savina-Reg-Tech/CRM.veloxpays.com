@@ -15,6 +15,7 @@ import {
 } from "../services/verificationService.js";
 import { getRoleDocumentSpec } from "../config/verificationDocs.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { contentDisposition } from "../storage/index.js";
 
 const parsePagination = (req) => {
   const rawLimit = parseInt(req.query.limit, 10);
@@ -158,10 +159,8 @@ export const handleDownloadDocument = async (req, res) => {
       return res.redirect(result.redirectUrl);
     }
     res.setHeader("Content-Type", result.doc.mime_type);
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${result.doc.original_file_name.replace(/"/g, "")}"`
-    );
+    res.setHeader("Content-Disposition", contentDisposition(result.doc.original_file_name));
+    res.setHeader("X-Content-Type-Options", "nosniff");
     return res.send(result.buffer);
   } catch (err) {
     return sendError(res, err.message, err.status || 500);

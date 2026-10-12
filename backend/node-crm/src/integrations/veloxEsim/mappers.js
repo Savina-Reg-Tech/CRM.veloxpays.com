@@ -3,6 +3,19 @@
  */
 
 /**
+ * Card-charge amounts (what Mint really collected, in AUD) are nullable on purpose: `null` means
+ * "no AUD amount" — nothing went to the card (credit / points / VeloxClub benefit), or the order
+ * predates AUD charging. Never coerce it to 0.
+ * @param {unknown} v
+ * @returns {number | null}
+ */
+function numberOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * @param {unknown} raw
  * @returns {object}
  */
@@ -26,6 +39,10 @@ export function mapVeloxPurchase(raw) {
     // Sourced from the same billing pipeline as the customer's own Billing & Invoice page, so
     // this covers every chargeable module, not just eSIM.
     category: p.category ?? null,
+    // What Mint actually charged the card for this purchase (always AUD), locked at checkout by
+    // VeloxVerse. Passed through untouched — the CRM never converts `amountPaid` itself.
+    cardChargeAmount: numberOrNull(p.cardChargeAmount),
+    cardChargeCurrency: p.cardChargeCurrency ?? null,
   };
 }
 
@@ -57,6 +74,12 @@ export function mapVeloxCustomer(raw) {
     totalSpentCurrency: c.totalSpentCurrency ?? "USD",
     // The customer's selected display/payment currency on VeloxVerse (ISO 4217).
     preferredCurrency: c.preferredCurrency ?? "USD",
+    // Real card money in AUD, summed by VeloxVerse exactly as charged / refunded through Mint.
+    // null (not 0) when VeloxVerse doesn't send them, e.g. an older build.
+    cardChargeCurrency: c.cardChargeCurrency ?? null,
+    totalCardCharged: numberOrNull(c.totalCardCharged),
+    totalCardRefunded: numberOrNull(c.totalCardRefunded),
+    netCardCharged: numberOrNull(c.netCardCharged),
     lastPurchaseAt: c.lastPurchaseAt ?? null,
     purchases,
   };

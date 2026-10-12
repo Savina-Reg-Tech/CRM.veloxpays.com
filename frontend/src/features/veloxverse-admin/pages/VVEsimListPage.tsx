@@ -6,12 +6,24 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
+import DualAmount from '@/components/ui/DualAmount'
 import { useVVEsimOrders } from '../hooks/useVVEsim'
-import { formatDateTime, statusBadgeVariant } from '../utils'
+import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
+import { formatDateTime, isUnpaidOrder, ownCardCharge, statusBadgeVariant, unpaidOrderNote } from '../utils'
 import { formatMoney } from '@/lib/utils'
 import type { AdminOrderRow } from '../types'
 
 const LIMIT = 20
+
+/** Cost / price / profit of an order that was never paid: there is no such amount, so a dash —
+ * never "INR 0.00". The quoted price is on hover. */
+function NotPaidDash({ row }: { row: AdminOrderRow }) {
+  return (
+    <span className="text-gray-300" title={unpaidOrderNote(row)}>
+      —
+    </span>
+  )
+}
 
 export default function VVEsimListPage() {
   const [page, setPage] = useState(1)
@@ -27,6 +39,7 @@ export default function VVEsimListPage() {
   const { data, isLoading, isFetching } = useVVEsimOrders(page, LIMIT, { search, status })
 
   const orders = data?.orders ?? []
+  const cardChargeByOrderNo = useCardChargeByOrderNo()
   const pagination = data?.pagination
 
   // Status options are derived from whatever the backend has actually
@@ -86,7 +99,7 @@ export default function VVEsimListPage() {
     {
       key: 'costUsd',
       header: 'Cost',
-      render: (row: AdminOrderRow) => (
+      render: (row: AdminOrderRow) => isUnpaidOrder(row) ? <NotPaidDash row={row} /> : (
         <span className="text-gray-500">
           {formatMoney(row.costUsd ?? 0, row.currency)}
           {row.costCurrencyFallback && (
@@ -98,14 +111,27 @@ export default function VVEsimListPage() {
     {
       key: 'sellingPriceUsd',
       header: 'Selling Price',
-      render: (row: AdminOrderRow) => (
-        <span className="text-gray-900">{formatMoney(row.sellingPriceUsd ?? 0, row.currency)}</span>
-      ),
+      // Customer's currency, with the AUD the card was really charged underneath.
+      render: (row: AdminOrderRow) => {
+        if (isUnpaidOrder(row)) return <NotPaidDash row={row} />
+        const charge = cardChargeByOrderNo(row.orderNo, ownCardCharge(row))
+        return (
+          <DualAmount
+            align="left"
+            className="text-gray-900"
+            amount={row.sellingPriceUsd ?? 0}
+            currency={row.currency}
+            cardChargeAmount={charge?.amount}
+            cardChargeCurrency={charge?.currency}
+          />
+        )
+      },
     },
     {
       key: 'profit',
       header: 'Profit',
       render: (row: AdminOrderRow) => {
+        if (isUnpaidOrder(row)) return <NotPaidDash row={row} />
         const profit = row.profitUsd ?? (row.sellingPriceUsd ?? 0) - (row.costUsd ?? 0)
         return (
           <span className={profit > 0 ? 'text-emerald-600' : 'text-red-600'}>
@@ -118,7 +144,14 @@ export default function VVEsimListPage() {
       key: 'status',
       header: 'Status',
       render: (row: AdminOrderRow) => (
-        <Badge variant={statusBadgeVariant(row.status)}>{row.status}</Badge>
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <Badge variant={statusBadgeVariant(row.status)}>{row.status}</Badge>
+          {isUnpaidOrder(row) && (
+            <span title={unpaidOrderNote(row)} className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">
+              Not paid
+            </span>
+          )}
+        </span>
       ),
     },
     {

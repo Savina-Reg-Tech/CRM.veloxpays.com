@@ -38,10 +38,12 @@ import {
   useVVClubChangeLog,
 } from '../hooks/useVVClub'
 import ClubBenefitsEditor from '../components/ClubBenefitsEditor'
+import DualAmount from '@/components/ui/DualAmount'
+import { useVVAdminBillingActivity } from '../hooks/useVVBilling'
 import Switch from '@/components/ui/Switch'
-import { formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { cardChargeForPayment, formatDate, formatDateTime, ownCardCharge, statusBadgeVariant } from '../utils'
 import { formatCentsIn } from '../loungeUtils'
-import { formatMoney } from '@/lib/utils'
+import { CARD_CHARGE_TOOLTIP, cardChargeLabel, centsToMajorOrNull, formatMoney } from '@/lib/utils'
 import type {
   ClubTierRow,
   ClubMemberRow,
@@ -354,6 +356,9 @@ function MembersTab() {
     status: statusFilter || undefined,
   })
   const { data: memberDetail } = useVVClubMember(selectedUserId ?? undefined)
+  // The member's billing ledger carries the AUD the card was really charged for each membership
+  // payment (matched by the membership's payment id).
+  const { data: memberBilling } = useVVAdminBillingActivity(selectedUserId ?? undefined)
   const forceCancel = useVVClubForceCancel()
   const { showToast } = useToast()
 
@@ -424,7 +429,15 @@ function MembersTab() {
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${TIER_COLORS[m.tierSlug] ?? 'bg-gray-100'}`}>{m.tier}</span>
                     </td>
                     <td className="px-4 py-3"><Badge variant={statusBadgeVariant(m.status)}>{m.status}</Badge></td>
-                    <td className="px-4 py-3">{formatMoney(m.purchasePriceCents / 100, m.currency)}</td>
+                    <td className="px-4 py-3">
+                      <DualAmount
+                        align="left"
+                        amount={m.purchasePriceCents / 100}
+                        currency={m.currency}
+                        cardChargeAmount={m.cardChargeCents === undefined ? undefined : centsToMajorOrNull(m.cardChargeCents)}
+                        cardChargeCurrency={m.cardChargeCurrency}
+                      />
+                    </td>
                     <td className="px-4 py-3">{formatDate(m.billingCycleEnd)}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{m.invoiceNumber ?? '—'}</td>
                     <td className="px-4 py-3">
@@ -457,7 +470,10 @@ function MembersTab() {
                 <span className="font-medium">{memberDetail.user.name}</span> — {memberDetail.user.email}
               </div>
             )}
-            {memberDetail.memberships.map((ms: ClubMembershipDetail) => (
+            {memberDetail.memberships.map((ms: ClubMembershipDetail) => {
+              const charge = ownCardCharge(ms) ?? cardChargeForPayment(memberBilling?.items, ms.paymentReferenceId)
+              const chargeLabel = cardChargeLabel(ms.currency, charge?.amount, charge?.currency)
+              return (
               <div key={ms.id} className="rounded-lg border p-3 text-sm space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -468,7 +484,10 @@ function MembersTab() {
                   <span className="text-xs text-gray-500">v{ms.benefitVersion}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
-                  <div>Paid: <span className="font-medium text-gray-900">{formatMoney(ms.purchasePriceCents / 100, ms.currency)}</span></div>
+                  <div>
+                    Paid: <span className="font-medium text-gray-900">{formatMoney(ms.purchasePriceCents / 100, ms.currency)}</span>
+                    {chargeLabel && <span className="block text-[11px] text-gray-500" title={CARD_CHARGE_TOOLTIP}>{chargeLabel}</span>}
+                  </div>
                   <div>Method: {ms.paymentMethod}</div>
                   <div>Cycle: {formatDate(ms.billingCycleStart)} – {formatDate(ms.billingCycleEnd)}</div>
                   <div>Auto-renew: {ms.autoRenew ? 'Yes' : 'No'}</div>
@@ -497,7 +516,7 @@ function MembersTab() {
                   </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         )}
       </Modal>

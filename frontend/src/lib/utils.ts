@@ -58,6 +58,38 @@ export function formatMoney(amount: number | null | undefined, currency?: string
   }
 }
 
+export type CardChargeKind = 'charged' | 'refunded'
+
+export const CARD_CHARGE_TOOLTIP =
+  "Payments are processed in AUD. The customer's bank may apply its own exchange rate and fees."
+export const NO_CARD_CHARGE_TOOLTIP =
+  'No card charge (paid with credit / points / VeloxClub benefit, or made before AUD charging)'
+
+/**
+ * Second line under a VeloxVerse customer amount: what Mint really moved on the card, e.g.
+ * "AUD 0.86 charged" (or "… refunded" on a refund row). The amount is VeloxVerse's own figure,
+ * locked at checkout — it is never derived from the customer amount here.
+ *
+ * Returns null — i.e. show the customer amount alone — when there is no card charge (`null` means
+ * "no AUD amount", not zero) or when the customer's currency is already the card currency, where
+ * the second line would only repeat the first.
+ */
+export function cardChargeLabel(
+  customerCurrency: string | null | undefined,
+  cardChargeAmount: number | null | undefined,
+  cardChargeCurrency: string | null | undefined,
+  kind: CardChargeKind = 'charged'
+): string | null {
+  if (typeof cardChargeAmount !== 'number' || !Number.isFinite(cardChargeAmount) || !cardChargeCurrency) return null
+  if ((customerCurrency ?? '').toUpperCase() === cardChargeCurrency.toUpperCase()) return null
+  return `${formatMoney(cardChargeAmount, cardChargeCurrency)} ${kind}`
+}
+
+/** Integer cents → major units, keeping `null`/absent as `null` (never 0). */
+export function centsToMajorOrNull(cents: number | null | undefined): number | null {
+  return typeof cents === 'number' && Number.isFinite(cents) ? cents / 100 : null
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

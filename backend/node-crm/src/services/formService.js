@@ -1,6 +1,7 @@
 import Form from "../models/Form.js";
 import crypto from "crypto";
 import { validateRules, validateConditionGroup, validateNotificationRules, validateWebhookRules } from "./ruleEngine.js";
+import { isSafeLinkUrl } from "../utils/safeUrl.js";
 
 const VALID_ON_SUBMIT_ACTIONS = ["message", "redirect_page", "redirect_url", "redirect_meeting", "redirect_payment"];
 const ON_SUBMIT_URL_FIELD_BY_ACTION = {
@@ -31,6 +32,13 @@ function validateOnSubmitOutcomeConfig(cfg, label) {
   const urlField = ON_SUBMIT_URL_FIELD_BY_ACTION[cfg.action];
   if (urlField && cfg[urlField] !== undefined && typeof cfg[urlField] !== "string") {
     throw { status: 400, message: `${label}.${urlField} must be a string` };
+  }
+  // Every URL field that's present, not only the selected action's — they are all stored and
+  // any of them can become the live redirect later.
+  for (const field of Object.values(ON_SUBMIT_URL_FIELD_BY_ACTION)) {
+    if (cfg[field] !== undefined && !isSafeLinkUrl(cfg[field])) {
+      throw { status: 400, message: `${label}.${field} must be an http(s) link or a page path` };
+    }
   }
   // Validate every "open in new tab" flag that's present, not just the one
   // for the currently-selected action — they're preserved independently
@@ -175,6 +183,9 @@ function validateFormJson(formJson) {
           }
           if (btn.action === "external_link" && (!btn.url || typeof btn.url !== "string")) {
             throw { status: 400, message: `Step "${step.title}" button "${btn.label}" is an external link but has no url` };
+          }
+          if (btn.url !== undefined && !isSafeLinkUrl(btn.url)) {
+            throw { status: 400, message: `Step "${step.title}" button "${btn.label}" url must be an http(s) link or a page path` };
           }
         }
       }

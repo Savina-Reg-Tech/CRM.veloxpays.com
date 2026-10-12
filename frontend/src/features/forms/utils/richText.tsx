@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { safeLinkUrl } from './url'
 
 const LINK_PATTERN = /\[([^\]]+)\]\(([^)]+)\)/g
 
@@ -20,7 +21,14 @@ export function parseInlineLinks(text: string): ReactNode[] {
     if (match.index > lastIndex) {
       nodes.push(text.slice(lastIndex, match.index))
     }
-    const [, label, url] = match
+    const [, label, rawUrl] = match
+    // Only real links become links — anything else (e.g. a `javascript:` URL) stays as its label.
+    const url = safeLinkUrl(rawUrl, { allowContact: true })
+    if (!url) {
+      nodes.push(label)
+      lastIndex = match.index + match[0].length
+      continue
+    }
     nodes.push(
       <a
         key={`link-${key++}`}

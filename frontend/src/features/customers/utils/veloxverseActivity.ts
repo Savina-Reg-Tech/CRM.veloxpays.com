@@ -1,6 +1,11 @@
 import type { VVAdminUserDetail } from '@/features/veloxverse-admin/types'
-import type { AdminTransferBooking, VVSupportTicket, ClubMembershipDetail } from '@/features/veloxverse-admin/types'
-import { formatDate } from '@/features/veloxverse-admin/utils'
+import type {
+  AdminBillingLineItem,
+  AdminTransferBooking,
+  VVSupportTicket,
+  ClubMembershipDetail,
+} from '@/features/veloxverse-admin/types'
+import { cardChargeForPayment, formatDate, ownCardCharge, type CardCharge } from '@/features/veloxverse-admin/utils'
 import type { Lead } from '@/features/forms/types'
 
 // Note: VeloxVerse doesn't sell lounge "memberships" (recurring plans) — only one-off paid
@@ -17,6 +22,10 @@ export interface CustomerActivityItem {
   /** Real currency `amountUsd` is denominated in — "Usd" in that field's name is legacy, not a
    * guarantee. Undefined only for kinds that carry no amountUsd (SUPPORT, FORM). */
   currency?: string
+  /** What Mint actually charged the card for this booking (AUD), from the billing ledger.
+   * `null` = no card charge; undefined = not known for this item. */
+  cardChargeAmount?: number | null
+  cardChargeCurrency?: string | null
   isPending: boolean
   isCancelled: boolean
   at: string
@@ -65,8 +74,13 @@ export function buildVeloxVerseActivity(input: {
   tickets: VVSupportTicket[]
   leads?: Lead[]
   clubMemberships?: ClubMembershipDetail[]
+  /** The customer's billing ledger — where a VeloxClub payment's AUD card charge lives. */
+  billingItems?: AdminBillingLineItem[]
+  /** AUD card charge for an eSIM / Pick & Drop order number (see useCardChargeByOrderNo). */
+  cardChargeByOrderNo?: (orderNo: string | null | undefined, own?: CardCharge) => CardCharge | undefined
 }): CustomerActivityItem[] {
   const items: CustomerActivityItem[] = []
+  const cardCharge = (c: CardCharge | undefined) => (c ? { cardChargeAmount: c.amount, cardChargeCurrency: c.currency } : {})
 
   for (const o of input.detail?.orders ?? []) {
     items.push({
@@ -77,6 +91,7 @@ export function buildVeloxVerseActivity(input: {
       status: o.status,
       amountUsd: o.priceUsd ?? 0,
       currency: o.currency,
+      ...cardCharge(input.cardChargeByOrderNo?.(o.orderNo)),
       isPending: isPendingStatus(o.status),
       isCancelled: isCancelledStatus(o.status),
       at: o.orderNo,
@@ -92,6 +107,7 @@ export function buildVeloxVerseActivity(input: {
       status: t.status,
       amountUsd: (t.salePriceCents ?? 0) / 100,
       currency: t.currency,
+      ...cardCharge(input.cardChargeByOrderNo?.(t.orderNo, ownCardCharge(t))),
       isPending: isPendingStatus(t.status),
       isCancelled: isCancelledStatus(t.status),
       at: t.createdAt ?? t.orderNo,
@@ -122,6 +138,7 @@ export function buildVeloxVerseActivity(input: {
       status: m.status,
       amountUsd: m.purchasePriceCents / 100,
       currency: m.currency,
+      ...cardCharge(ownCardCharge(m) ?? cardChargeForPayment(input.billingItems, m.paymentReferenceId)),
       isPending: isPendingStatus(m.status),
       isCancelled: isCancelledStatus(m.status),
       at: m.purchasedAt,

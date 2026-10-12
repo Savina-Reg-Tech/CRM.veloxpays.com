@@ -52,10 +52,47 @@ const resetPasswordLimiter = rateLimit({
   },
 });
 
+// Per-account limits, on top of the per-IP ones above: a reset code is 6 digits, so what must
+// be bounded is guesses per ACCOUNT, however many addresses they come from. Keyed on the
+// submitted email whether or not it belongs to an account, so the limit itself reveals nothing.
+const emailKey = (req) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  return `email:${email.slice(0, 320)}`;
+};
+const hasEmail = (req) => typeof req.body?.email === "string" && req.body.email.trim() !== "";
+
+// At most 3 codes per account per 15 minutes (each code allows 5 guesses).
+const forgotPasswordAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: emailKey,
+  skip: (req) => !hasEmail(req),
+  message: {
+    success: false,
+    message: "Too many reset requests for this account. Please wait 15 minutes and try again.",
+  },
+});
+
+const resetPasswordAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: emailKey,
+  skip: (req) => !hasEmail(req),
+  message: {
+    success: false,
+    message: "Too many attempts for this account. Please wait 15 minutes and try again.",
+  },
+});
+
 router.post("/login",  loginLimiter, login);
 router.post("/logout", logout);
 router.get("/me",      authenticate, getMe);
-router.post("/forgot-password", forgotPasswordLimiter, forgotPassword);
-router.post("/reset-password",  resetPasswordLimiter,  resetPassword);
+router.post("/forgot-password", forgotPasswordLimiter, forgotPasswordAccountLimiter, forgotPassword);
+router.post("/reset-password",  resetPasswordLimiter,  resetPasswordAccountLimiter,  resetPassword);
 
 export default router;

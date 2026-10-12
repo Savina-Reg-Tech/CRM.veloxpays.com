@@ -74,6 +74,10 @@ export interface RecentActivity {
   status: string
   createdAt: string
   customer: { name: string; email: string } | null
+  /** What Mint actually moved on the card for this row (AUD, major units) — on a REFUND row, the
+   * AUD refunded. `null` = no AUD amount (credit / points / VeloxClub, or before AUD charging). */
+  cardChargeAmount?: number | null
+  cardChargeCurrency?: string | null
 }
 
 export interface OrderStats {
@@ -94,6 +98,10 @@ export interface CustomerSpending {
   /** What the customer actually paid in each currency, unconverted (the *Spend fields above are
    * FX-converted into CustomerSpendingResult.currency for ranking). Absent on older VeloxVerse builds. */
   nativeSpend?: { currency: string; amount: number }[]
+  /** Real AUD collected on the card for this customer's fulfilled orders — not a conversion of
+   * the *Spend fields above. Absent on older VeloxVerse builds. */
+  cardCharged?: number | null
+  cardChargeCurrency?: string | null
   orderCount: number
 }
 
@@ -101,6 +109,43 @@ export interface CustomerSpendingResult {
   currency: string
   customers: CustomerSpending[]
   fxSkippedCurrencies: string[]
+}
+
+// The real AUD collected through Mint (GET /admin/analytics/card-charges) — summed from what was
+// actually charged, so it should match the Mint merchant portal. Distinct from `?currency=AUD` on
+// the aggregates above, which is an estimate at today's rate.
+export type CardChargePeriod = '7d' | '30d' | '90d' | '12m' | 'all'
+
+export type CardChargeService =
+  | 'ESIM_ORDER'
+  | 'ESIM_TOPUP'
+  | 'LOUNGE_VISIT'
+  | 'TRANSFER'
+  | 'CLUB_MEMBERSHIP'
+  | 'FLIGHT_BOOKING'
+  | (string & {})
+
+export interface CardChargesByService {
+  service: CardChargeService
+  charged: number
+  refunded: number
+  net: number
+  paymentCount: number
+  refundCount: number
+}
+
+export interface CardCharges {
+  currency: string
+  period: string
+  charged: number
+  refunded: number
+  net: number
+  paymentCount: number
+  refundCount: number
+  byService: CardChargesByService[]
+  /** Older payments/refunds with no AUD amount — NOT in the totals above. */
+  paymentsWithoutAud: number
+  refundsWithoutAud: number
 }
 
 // Finding #397 (CRM dual-amount generalization) — the same "Original Price (native) / FX Rate /
@@ -119,6 +164,8 @@ export interface AdminNativePrice {
 }
 
 // ── eSIM Orders ─────────────────────────────────────────────────────
+import type { RefundState } from './refundOutcome'
+
 export interface VVPagination {
   page: number
   totalPages: number
@@ -142,12 +189,21 @@ export interface AdminOrderRow {
   /** True when cost couldn't be converted into `currency` (FX unavailable) and is shown in its
    * native USD instead — an approximation flag, not a currency mismatch. */
   costCurrencyFallback?: boolean
+  /** false = never paid / never placed with eSIM Access (checkout opened and closed, card
+   * declined…): there was no cost, no sale and no profit, so those three are not real amounts.
+   * Absent on older VeloxVerse builds — then treat the row as before. */
+  paid?: boolean
+  /** The price the customer was SHOWN, in `currency` ("Usd" suffix is legacy). */
+  quotedPriceUsd?: number | null
   iccid?: string
   esimStatus?: string
   smdpStatus?: string
   paymentMethod?: string
   invoiceNo?: string | null
   createdAt: string
+  /** AUD the card was really charged. Not sent by VeloxVerse's eSIM list today — read if present. */
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
 }
 
 // Matches VeloxVerse's adminOrderService.buildAdminOrderDetail (presentOrder() base +
@@ -184,6 +240,11 @@ export interface AdminOrderDetail {
   sellingPriceUsd: number | null
   profitUsd?: number | null
   costCurrencyFallback?: boolean
+  /** See AdminOrderRow.paid / quotedPriceUsd. */
+  paid?: boolean
+  quotedPriceUsd?: number | null
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
   paymentMethod: string
   totalVolume?: number
   /** Bytes used so far, straight from adminOrderService.buildAdminOrderDetail's `dataUsage` —
@@ -296,7 +357,14 @@ export interface LoungeVisit {
   walkinPass?: LoungeWalkinPass | null
   createdAt: string
   customer?: LoungeCustomer | null
-  paymentStatus?: { status: string; amountCents: number; currency: string } | null
+  paymentStatus?: {
+    status: string
+    amountCents: number
+    currency: string
+    /** AUD cents Mint charged. Not sent on the lounge list today — read if present. */
+    chargeAmountCents?: number | null
+    chargeCurrency?: string | null
+  } | null
   dragonpassOrderIds?: string[]
 }
 
@@ -333,8 +401,14 @@ export interface LoungePayment {
   providerReference: string | null
   invoiceNumber: string | null
   currency: string
-  /** Charged to the card. */
+  /** Card portion, in the customer's currency. */
   amountCents: number
+  /** What Mint actually charged (AUD cents). `null` = no AUD amount (before AUD charging). */
+  chargeAmountCents?: number | null
+  chargeCurrency?: string | null
+  /** AUD per 1 unit of `currency`, locked at checkout. */
+  fxRate?: number | null
+  fxRateAt?: string | null
   creditAppliedCents: number | null
   pointsAppliedCents: number | null
   pointsRedeemed: number | null
@@ -475,6 +549,13 @@ export interface AdminTransferBooking {
    * covered by wallet credit or a club benefit redemption). */
   paymentMethod?: string | null
   paymentStatus?: string | null
+  /** true = paid, but ViaTovia never confirmed the ride and there is no reservation number, so
+   * nobody knows whether a ride exists. Staff must check the ViaTovia panel and either link
+   * the reservation or confirm there is none before cancelling. */
+  confirmationUnknown?: boolean
+  /** AUD the card was really charged. Not sent by VeloxVerse's transfer list today — read if present. */
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
   createdAt: string
   customer: { id: string; name: string; email: string } | null
 }
@@ -485,7 +566,27 @@ export interface TransferCancelReason {
 }
 
 export interface TransferCancelResult extends AdminTransferBooking {
+  /** Cents in the booking's currency; 0 when refundState is "failed" or null. */
   refundedCents: number
+  /** How the refund really ended. Absent on older VeloxVerse builds. */
+  refundState?: RefundState
+}
+
+/** Response of the admin eSIM cancel / refund action. */
+export interface EsimCancelResult {
+  orderNo: string
+  status: string
+  supplierOperation?: string
+  /** true only when refundState is "refunded" or "pending" — never a reason to show "Refunded". */
+  refunded: boolean
+  /** How the refund really ended. Absent on older VeloxVerse builds. */
+  refundState?: RefundState
+  /** What the customer actually paid (card + credit), major units, in the payment's currency —
+   * 0 when refundState is "failed" or null. */
+  refundAmount: number
+  /** true = nothing was done this time: the payment was already refunded (refundState and
+   * refundAmount describe that earlier refund) or there was nothing to refund. Not an error. */
+  alreadyProcessed?: boolean
 }
 
 // ── Promo Codes ─────────────────────────────────────────────────────
@@ -646,7 +747,7 @@ export interface PricingAuditEntry {
 }
 
 // ── Users ───────────────────────────────────────────────────────────
-export type VVUserRole = 'SUPER_ADMIN' | 'ADMIN' | 'USER' | 'GUEST'
+export type VVUserRole = 'SUPER_ADMIN' | 'ADMIN' | 'SUPPORT' | 'USER' | 'GUEST'
 
 export interface VVAdminUser {
   id: string
@@ -656,6 +757,11 @@ export interface VVAdminUser {
   email: string
   role: VVUserRole
   isActive: boolean
+  /** true only when an ADMIN blocked the account — not the same as inactive (an idle or
+   * unverified guest is inactive too). Always set by vvUsersService (false when absent). */
+  isBlocked?: boolean
+  /** When it was blocked (ISO date), else null. */
+  blockedAt?: string | null
   isVerified: boolean
   createdAt: string
   guestExpiresAt?: string | null
@@ -812,6 +918,10 @@ export interface PointsSettings {
   minRedeemPoints: number
   /** USD cents, 0 = no cap. Valued at the fixed USD redemption rate. */
   maxRedeemPerDayCents: number
+  /** The most points a customer can use on one order. 0 = no limit. */
+  maxRedeemPointsPerOrder: number
+  /** The most of an order's amount due that points can pay, in percent (1–100). 0 = no limit. */
+  maxRedeemPercentPerOrder: number
   /** 0 = never. */
   pointsExpiryDays: number
   version: number
@@ -829,6 +939,10 @@ export interface PointsSettingsUpdate {
   pointsPerUnitRedeem?: Record<string, number>
   minRedeemPoints?: number
   maxRedeemPerDayCents?: number
+  /** Whole number, 0 or more. 0 = no limit. Never null. */
+  maxRedeemPointsPerOrder?: number
+  /** Whole number 0–100. 0 = no limit. Never null. */
+  maxRedeemPercentPerOrder?: number
   pointsExpiryDays?: number
 }
 
@@ -984,6 +1098,9 @@ export interface ClubMemberRow {
    * this per-row — falls back to 'USD' only for pre-currency-migration memberships). */
   currency: string
   autoRenew: boolean
+  /** AUD the card was really charged. Not sent by VeloxVerse's member list today — read if present. */
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
 }
 
 export interface ClubMembersPage {
@@ -1018,6 +1135,8 @@ export interface ClubMembershipDetail {
   paymentReferenceId: string
   invoiceNumber: string | null
   orderNo: string | null
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
   autoRenew: boolean
   loyaltyDiscountApplied: boolean
   usage: ClubMemberUsage[]
@@ -1107,10 +1226,15 @@ export interface AdminBillingLineItem {
   service: string
   type: string
   amountUsd: number
+  amountCents?: number
   /** Real currency this line item was charged/refunded in — "Usd" in the field name above is
    * legacy naming from before multi-currency existed, not a guarantee the value is in USD. */
   currency: string
   direction: 'debit' | 'credit'
+  /** What Mint actually moved on the card (AUD cents) — on a REFUND row, the AUD returned to the
+   * card. `null` = no AUD amount (credit / points / VeloxClub, or before AUD charging). */
+  cardChargeCents?: number | null
+  cardChargeCurrency?: string | null
   paymentMethod: string | null
   status: string
   /** How much of this line item was covered by redeeming a VeloxClub membership benefit

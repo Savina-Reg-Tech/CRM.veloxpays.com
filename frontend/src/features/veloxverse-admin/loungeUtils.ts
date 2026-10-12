@@ -117,8 +117,28 @@ export function formatStamp(iso?: string | null): string {
   return d.toLocaleString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+/** RECONCILING = Mint charged the card, but not for what the order asked (wrong amount or
+ * currency). VeloxVerse made no booking and will NOT refund it automatically — a person has to
+ * find the charge in the Mint portal (by the payment's provider reference) and refund it there.
+ * It must never read as "processing". */
+export const PAYMENT_NEEDS_REVIEW_STATUS = 'RECONCILING'
+export const PAYMENT_NEEDS_REVIEW_LABEL = 'Needs review — refund manually'
+export const PAYMENT_NEEDS_REVIEW_HELP =
+  'Mint charged the card, but not for what the order asked (wrong amount or currency). No booking was made and VeloxVerse will not refund this automatically. Find the charge in the Mint portal by the provider reference and refund it there.'
+
+export function paymentNeedsReview(status?: string | null): boolean {
+  return (status ?? '').toUpperCase() === PAYMENT_NEEDS_REVIEW_STATUS
+}
+
+/** Text for a VeloxVerse payment status — the raw value, except statuses staff must act on. */
+export function paymentStatusLabel(status?: string | null): string {
+  if (!status) return '—'
+  return paymentNeedsReview(status) ? PAYMENT_NEEDS_REVIEW_LABEL : status
+}
+
 export function paymentStatusVariant(status?: string | null): BadgeVariant {
   const s = (status ?? '').toUpperCase()
+  if (s === PAYMENT_NEEDS_REVIEW_STATUS) return 'danger'
   if (['FULFILLED', 'PAID', 'SUCCEEDED', 'CAPTURED'].includes(s)) return 'success'
   if (['REFUNDED', 'PARTIALLY_REFUNDED'].includes(s)) return 'info'
   if (['ABANDONED', 'FAILED', 'DECLINED'].includes(s)) return 'danger'

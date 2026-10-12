@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { safeLinkUrl } from '../utils/url'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Eye, EyeOff, ArrowUpRight } from 'lucide-react'
 import FormBuilder from '../components/FormBuilder'
@@ -352,8 +353,9 @@ export default function FormBuilderPage() {
                                       setPreviewStep((s) => Math.min(s + 1, totalPreviewSteps - 1))
                                       return
                                     }
-                                    if (b.action === 'external_link' && b.url) {
-                                      window.open(b.url, '_blank', 'noopener,noreferrer')
+                                    const previewLink = b.action === 'external_link' ? safeLinkUrl(b.url) : null
+                                    if (previewLink) {
+                                      window.open(previewLink, '_blank', 'noopener,noreferrer')
                                     }
                                     if (!isPreviewOnSubmitStep) {
                                       setPreviewSubmitFlash(true)

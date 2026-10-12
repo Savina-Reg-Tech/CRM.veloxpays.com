@@ -121,8 +121,13 @@ export const CUSTOM_DOC_PREFIX = "custom_";
  * @param {string | undefined} docType
  * @returns {boolean}
  */
+// A custom document's type is typed by the user and ends up in the file's storage path, so it
+// is held to a strict shape: "custom_" + lowercase letters, digits and underscores. (The CRM
+// builds it as custom_<slug up to 40 chars>_<timestamp>, hence the length.)
+const CUSTOM_DOC_TYPE_RE = /^custom_[a-z0-9_]{1,80}$/;
+
 export function isCustomDocType(docType) {
-  return typeof docType === "string" && docType.startsWith(CUSTOM_DOC_PREFIX);
+  return typeof docType === "string" && CUSTOM_DOC_TYPE_RE.test(docType);
 }
 
 /**

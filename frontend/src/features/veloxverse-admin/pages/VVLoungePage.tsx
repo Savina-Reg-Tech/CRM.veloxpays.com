@@ -31,11 +31,14 @@ import {
   useVVLoungeStats,
 } from '../hooks/useVVLounge'
 import { formatDate, getInitials, statusBadgeVariant } from '../utils'
+import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
+import { CARD_CHARGE_TOOLTIP, cardChargeLabel, centsToMajorOrNull } from '@/lib/utils'
 import {
   formatCentsIn,
   formatVisitDate,
   isWalkIn,
   partyLabel,
+  paymentStatusLabel,
   paymentStatusVariant,
   serviceLabel,
   visitStatusLabel,
@@ -132,6 +135,13 @@ function BookingCard({ v }: { v: LoungeVisit }) {
   const dp = v.dragonpassOrderIds ?? []
   const pay = v.paymentStatus
   const chargedDiffers = pay && (pay.amountCents !== v.totalCost || pay.currency !== v.currency)
+  // AUD the card was really charged: the visit's own payment when VeloxVerse sends it, else looked
+  // up by order number.
+  const lookup = useCardChargeByOrderNo()(v.orderId ?? v.id)
+  const audCharge =
+    pay && pay.chargeAmountCents !== undefined
+      ? cardChargeLabel(pay.currency, centsToMajorOrNull(pay.chargeAmountCents), pay.chargeCurrency)
+      : cardChargeLabel(pay?.currency ?? v.currency, lookup?.amount, lookup?.currency)
 
   return (
     <Link
@@ -203,13 +213,20 @@ function BookingCard({ v }: { v: LoungeVisit }) {
       <div className="mt-auto flex items-end justify-between gap-3 border-t border-gray-100 px-4 py-3">
         <div className="min-w-0">
           <p className="text-lg font-bold leading-tight text-gray-900">{formatCentsIn(v.totalCost, v.currency)}</p>
-          <p className="truncate text-xs text-gray-500">
-            {chargedDiffers ? `${formatCentsIn(pay!.amountCents, pay!.currency)} charged to card` : `Booked ${formatVisitDate(v.createdAt)}`}
-          </p>
+          {audCharge ? (
+            <p className="truncate text-xs text-gray-500" title={CARD_CHARGE_TOOLTIP}>
+              {audCharge}
+              {chargedDiffers ? ` · ${formatCentsIn(pay!.amountCents, pay!.currency)} card portion` : ''}
+            </p>
+          ) : (
+            <p className="truncate text-xs text-gray-500">
+              {chargedDiffers ? `${formatCentsIn(pay!.amountCents, pay!.currency)} charged to card` : `Booked ${formatVisitDate(v.createdAt)}`}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {pay ? (
-            <Badge variant={paymentStatusVariant(pay.status)}>{pay.status}</Badge>
+            <Badge variant={paymentStatusVariant(pay.status)}>{paymentStatusLabel(pay.status)}</Badge>
           ) : (
             <span className="text-xs text-gray-400">Wallet</span>
           )}

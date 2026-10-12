@@ -24,7 +24,6 @@ import {
 import {
   ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
-  formatActivityAmount,
   formatNativeSpend,
   timeAgo,
   getInitials as vvGetInitials,
@@ -32,6 +31,8 @@ import {
 import type { RecentActivity, CustomerSpending } from '@/features/veloxverse-admin/types'
 import { Card, CardHeader } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import DualAmount from '@/components/ui/DualAmount'
+import CardChargesPanel from '@/features/veloxverse-admin/components/CardChargesPanel'
 import Avatar from '@/components/ui/Avatar'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
@@ -176,6 +177,11 @@ export default function SuperAdminDashboard() {
             Full analytics (multi-currency) <ArrowRight size={12} />
           </Link>
         </div>
+        {/* Real AUD collected through Mint — safe to total here, unlike the mixed-currency revenue
+         * figures: every card payment is charged in AUD. Per-service breakdown is on Analytics. */}
+        <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+          <CardChargesPanel showByService={false} />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {vvOverview.isLoading ? (
             Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)
@@ -275,7 +281,7 @@ export default function SuperAdminDashboard() {
         <Card>
           <CardHeader
             title="VeloxVerse Activity"
-            description="Latest transactions and bookings"
+            description="Customer's currency, with the AUD card charge underneath"
             action={
               <Link
                 to="/dashboard/veloxverse/analytics"
@@ -326,9 +332,15 @@ export default function SuperAdminDashboard() {
                         <span className="shrink-0 text-[11px] text-gray-400">{timeAgo(o.createdAt)}</span>
                       </div>
                     </div>
-                    <span className={`shrink-0 text-sm font-semibold tabular-nums ${isCredit ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {formatActivityAmount(o.amountUsd, direction, o.currency)}
-                    </span>
+                    <DualAmount
+                      className={`shrink-0 text-sm font-semibold ${isCredit ? 'text-emerald-600' : 'text-red-500'}`}
+                      prefix={isCredit ? '+' : '−'}
+                      amount={o.amountUsd}
+                      currency={o.currency}
+                      cardChargeAmount={o.cardChargeAmount}
+                      cardChargeCurrency={o.cardChargeCurrency}
+                      kind={o.type === 'REFUND' ? 'refunded' : 'charged'}
+                    />
                   </li>
                 )
               })}
@@ -365,6 +377,7 @@ export default function SuperAdminDashboard() {
                   <th className="w-10 px-4 py-3 text-left text-xs font-semibold text-gray-400">#</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Card charged (AUD)</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ minWidth: 120 }}>Spend</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Orders</th>
                 </tr>
@@ -393,6 +406,9 @@ export default function SuperAdminDashboard() {
                         <span className="font-semibold text-gray-900">
                           {formatNativeSpend(c.nativeSpend) ?? formatMoney(c.totalSpend, vvSpending.data?.currency)}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-700 whitespace-nowrap">
+                        {typeof c.cardCharged === 'number' ? formatMoney(c.cardCharged, c.cardChargeCurrency ?? 'AUD') : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">

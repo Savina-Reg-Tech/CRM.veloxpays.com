@@ -380,6 +380,11 @@ export interface VeloxEsimPurchase {
   status: string | null
   purchasedAt: string | null
   category?: VeloxPurchaseCategory | null
+  /** What Mint actually charged the card (always AUD), locked at checkout by VeloxVerse. `null` =
+   * no AUD amount: nothing went to the card (credit / points / VeloxClub benefit) or the order
+   * predates AUD charging. Never treat as 0, never derive from `amountPaid`. */
+  cardChargeAmount?: number | null
+  cardChargeCurrency?: string | null
 }
 
 export interface VeloxEsimCustomer {
@@ -398,6 +403,12 @@ export interface VeloxEsimCustomer {
   totalSpentCurrency?: string
   /** The customer's selected display/payment currency on VeloxVerse (ISO 4217, e.g. "INR"). */
   preferredCurrency?: string
+  /** Real card money in AUD, summed by VeloxVerse exactly as charged / refunded through Mint —
+   * not a conversion of totalSpent. `null` when VeloxVerse doesn't send them (older build). */
+  cardChargeCurrency?: string | null
+  totalCardCharged?: number | null
+  totalCardRefunded?: number | null
+  netCardCharged?: number | null
   lastPurchaseAt: string | null
   purchases: VeloxEsimPurchase[]
 }

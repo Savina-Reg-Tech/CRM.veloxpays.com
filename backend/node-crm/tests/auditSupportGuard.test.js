@@ -35,6 +35,40 @@ describe("auditSupportGuard (support = read-only audit log)", () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
+  // The proxy's HTTP client resolves dot segments, so these would otherwise leave /admin/audit
+  // (e.g. reach /admin/users) or reach a blocked audit endpoint by another spelling.
+  it.each([
+    "/%2e%2e/users",
+    "/%2E%2E/users",
+    "/../users",
+    "/x/../settings",
+    "/x/%2e%2e/export.csv",
+    "/events/..",
+    "/./settings",
+    "/x%2f..%2fsettings",
+    "/x%5c..%5csettings",
+    "/x\\settings",
+    "//settings",
+    "/Settings",
+    "/EXPORT.CSV",
+    "/Alert-Recipients/abc",
+    "/%73ettings",
+    "/events/%E0%A4%A",
+    "/events/%00",
+  ])("blocks support GET %s (path tricks)", (path) => {
+    const { next, res } = run(AUDIT_SUPPORT_ROLE, "GET", path);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it.each(["/events/a5d5977b-28c8-470e-8e41-e2e3c32d2507", "/bookings/payment/ORD%20123", "/journeys/j_1.2", "/"])(
+    "still lets support GET %s (ids, incl. percent-encoded ones)",
+    (path) => {
+      const { next } = run(AUDIT_SUPPORT_ROLE, "GET", path);
+      expect(next).toHaveBeenCalled();
+    }
+  );
+
   it.each(["super_admin", "admin"])("never restricts %s", (role) => {
     for (const [m, p] of [["PUT", "/settings"], ["GET", "/export.csv"], ["POST", "/alert-recipients"]]) {
       expect(run(role, m, p).next).toHaveBeenCalled();

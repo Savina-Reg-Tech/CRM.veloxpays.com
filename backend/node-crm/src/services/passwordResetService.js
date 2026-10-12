@@ -85,17 +85,22 @@ export const resetPasswordWithOtp = async ({ email, otp, newPassword }) => {
   if (!user || !user.is_active) throw INVALID_OTP_ERROR;
 
   const pending = await PasswordReset.findLatestValid(user.id);
-  if (!pending || pending.attempts >= MAX_ATTEMPTS) throw INVALID_OTP_ERROR;
+  if (!pending) throw INVALID_OTP_ERROR;
+
+  // Spend the guess first (atomically), then compare — a burst of parallel requests gets
+  // MAX_ATTEMPTS guesses in total, not MAX_ATTEMPTS each.
+  const mayGuess = await PasswordReset.claimAttempt(pending.id, MAX_ATTEMPTS);
+  if (!mayGuess) throw INVALID_OTP_ERROR;
 
   const matches = await bcrypt.compare(String(otp).trim(), pending.otp_hash);
-  if (!matches) {
-    await PasswordReset.incrementAttempts(pending.id);
-    throw INVALID_OTP_ERROR;
-  }
+  if (!matches) throw INVALID_OTP_ERROR;
+
+  // Use the code up before changing the password, so it can only ever be redeemed once.
+  const consumed = await PasswordReset.markConsumed(pending.id);
+  if (!consumed) throw INVALID_OTP_ERROR;
 
   const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
   await User.setPassword(user.id, hashedPassword);
-  await PasswordReset.markConsumed(pending.id);
 
   const changedEmail = passwordChangedEmailTemplate(user.name, {
     reason: 'You reset it yourself using the "Forgot password" link.',

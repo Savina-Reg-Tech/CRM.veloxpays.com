@@ -4,6 +4,7 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import type { UnifiedCustomerRow } from '@/types'
 import type { VVAdminUser } from '@/features/veloxverse-admin/types'
+import { vvAccountStatus } from '@/features/veloxverse-admin/userAccess'
 import { CUSTOMER_SOURCES_CONFIG } from '@/config/customerSources'
 import { formatCustomerLegalName } from '../utils'
 import { formatMoney } from '@/lib/utils'
@@ -124,9 +125,11 @@ export default function CustomersTable({
               const u = row.data as VVAdminUser
               return (
                 <div className="flex flex-wrap gap-1">
-                  <Badge variant={u.isActive ? 'success' : 'danger'} dot>
-                    {u.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
+                  <span title={vvAccountStatus(u).tooltip}>
+                    <Badge variant={vvAccountStatus(u).variant} dot>
+                      {vvAccountStatus(u).label}
+                    </Badge>
+                  </span>
                   {!u.isVerified && <Badge variant="warning">Unverified</Badge>}
                 </div>
               )

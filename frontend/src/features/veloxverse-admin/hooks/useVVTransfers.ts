@@ -23,8 +23,24 @@ export function useVVTransferCancelReasons(options?: { enabled?: boolean }) {
 export function useVVCancelTransfer() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ orderNo, cancellationId }: { orderNo: string; cancellationId: number }) =>
-      vvTransferService.cancelBooking(orderNo, cancellationId),
+    mutationFn: ({
+      orderNo,
+      cancellationId,
+      confirmNoRideAtSupplier,
+    }: {
+      orderNo: string
+      cancellationId: number
+      confirmNoRideAtSupplier?: boolean
+    }) => vvTransferService.cancelBooking(orderNo, cancellationId, { confirmNoRideAtSupplier }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-transfers', 'bookings'] }),
+  })
+}
+
+export function useVVLinkTransferReservation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderNo, reservationNo }: { orderNo: string; reservationNo: string }) =>
+      vvTransferService.linkReservation(orderNo, reservationNo),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-transfers', 'bookings'] }),
   })
 }

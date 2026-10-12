@@ -17,6 +17,8 @@ import {
   serviceLabel,
   supplierLabel,
   toLocalInput,
+  stepLabel,
+  REFUND_ATTENTION_STEPS,
 } from '../audit'
 import type { AuditEventFilters } from '../auditTypes'
 import {
@@ -109,7 +111,7 @@ export default function VVAuditLogPage() {
   const activeChips: Array<{ key: string; label: string }> = []
   for (const k of LIST_KEYS) {
     for (const v of splitList(params.get(k))) {
-      const fmt = k === 'service' ? serviceLabel : k === 'supplier' ? supplierLabel : k === 'eventType' ? eventTypeLabel : humanize
+      const fmt = k === 'service' ? serviceLabel : k === 'supplier' ? supplierLabel : k === 'eventType' ? eventTypeLabel : k === 'step' ? stepLabel : humanize
       activeChips.push({ key: `${k}:${v}`, label: `${humanize(k)}: ${fmt(v)}` })
     }
   }
@@ -123,6 +125,8 @@ export default function VVAuditLogPage() {
     patch({ [k]: splitList(params.get(k)).filter((x) => x !== v).join(',') || undefined })
   }
   const clearAll = () => setParams(new URLSearchParams(), { replace: true })
+  const refundAttentionOn =
+    [...splitList(params.get('step'))].sort().join(',') === [...REFUND_ATTENTION_STEPS].sort().join(',')
 
   // ── Global search box (handoff §4.3) ──
   const runSearch = async (e: FormEvent) => {
@@ -256,6 +260,19 @@ export default function VVAuditLogPage() {
               className="h-8 rounded-md border border-gray-300 px-2 text-xs"
             />
           </span>
+          {/* Saved filter: the steps where money has to be checked by a person. */}
+          <button
+            type="button"
+            onClick={() => patch({ step: refundAttentionOn ? undefined : REFUND_ATTENTION_STEPS.join(',') })}
+            aria-pressed={refundAttentionOn}
+            title="Failed refunds, charges refunded after checkout closed, and charges for the wrong amount — check these in the Mint portal"
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+              refundAttentionOn ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100'
+            }`}
+          >
+            <AlertOctagon className="h-3.5 w-3.5" />
+            Refunds needing attention
+          </button>
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-gray-600">
             <input
               type="checkbox"
@@ -274,7 +291,7 @@ export default function VVAuditLogPage() {
           <MultiSelect label="Event type" options={(meta.data?.eventTypes ?? []).filter((t) => t !== 'admin_access')} value={splitList(params.get('eventType'))} onChange={(v) => patch({ eventType: v.join(',') || undefined })} format={eventTypeLabel} />
           <MultiSelect label="Status" options={['success', 'failure', 'warning', 'info']} value={splitList(params.get('status'))} onChange={(v) => patch({ status: v.join(',') || undefined })} />
           <MultiSelect label="Supplier" options={meta.data?.suppliers ?? []} value={splitList(params.get('supplier'))} onChange={(v) => patch({ supplier: v.join(',') || undefined })} format={supplierLabel} />
-          <MultiSelect label="Step" options={meta.data?.steps ?? []} value={splitList(params.get('step'))} onChange={(v) => patch({ step: v.join(',') || undefined })} searchable />
+          <MultiSelect label="Step" options={meta.data?.steps ?? []} value={splitList(params.get('step'))} onChange={(v) => patch({ step: v.join(',') || undefined })} format={stepLabel} searchable />
           <DebouncedInput value={params.get('httpStatus') ?? ''} onChange={(v) => patch({ httpStatus: /^\d{3}$/.test(v) ? v : undefined })} placeholder="HTTP status" type="number" />
           <DebouncedInput value={params.get('errorCode') ?? ''} onChange={(v) => patch({ errorCode: v || undefined })} placeholder="Error code" />
         </div>

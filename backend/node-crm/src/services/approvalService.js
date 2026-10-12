@@ -10,6 +10,7 @@ import {
   resolveSubjectUserRoleForRbac,
   roleRequiresOnboardingApproval,
 } from "../config/approvalRbac.js";
+import { isProtectedAccount } from "../config/crmRoles.js";
 
 export const APPROVAL_KINDS = Object.freeze([
   "user_onboarding",
@@ -109,12 +110,18 @@ export const insertUserOnboardingApprovalInTransaction = async (
  * @param {object} row — approval_requests row
  * @param {string} toStatus
  */
-const syncSubjectUserOnboardingActivation = async (client, row, toStatus) => {
+const syncSubjectUserOnboardingActivation = async (client, row, toStatus, actor) => {
   if (row.kind !== "user_onboarding" || row.subject_user_id == null) {
     return;
   }
 
   if (toStatus === "rejected" || toStatus === "cancelled") {
+    // Never lock out the protected super admin, and never let someone deactivate themselves
+    // through a ticket — same guards as userService.toggleUserStatus.
+    const subject = await User.findById(row.subject_user_id);
+    if (!subject || isProtectedAccount(subject.email) || subject.id === actor?.id) {
+      return;
+    }
     await User.setActive(row.subject_user_id, false, { client });
   } else if (toStatus === "approved" || toStatus === "completed") {
     await User.setActive(row.subject_user_id, true, { client });
@@ -329,7 +336,7 @@ export const transitionApprovalRequest = async (actor, id, payload) => {
       note: payload.note ?? null,
     });
 
-    await syncSubjectUserOnboardingActivation(client, row, toStatus);
+    await syncSubjectUserOnboardingActivation(client, row, toStatus, actor);
 
     await client.query("COMMIT");
     return ApprovalRequest.findById(id);

@@ -31,19 +31,23 @@ import {
   Zap,
 } from 'lucide-react'
 import Badge from '@/components/ui/Badge'
+import DualAmount from '@/components/ui/DualAmount'
 import Spinner from '@/components/ui/Spinner'
-import { formatMoney } from '@/lib/utils'
+import { CARD_CHARGE_TOOLTIP, cardChargeLabel, centsToMajorOrNull, formatMoney } from '@/lib/utils'
 import { useForm } from '@/features/forms/hooks/useForms'
 import { formApi } from '@/features/forms/formService'
 import { SubmissionDataView } from '@/features/forms/utils/submissionDisplay'
 import type { Lead } from '@/features/forms/types'
 import { useVVEsimDetail } from '../hooks/useVVEsim'
-import { formatDate, formatDateTime, statusBadgeVariant } from '../utils'
+import { formatDate, formatDateTime, statusBadgeVariant, type CardCharge } from '../utils'
 import {
   formatCentsIn,
   formatVisitDate,
   isWalkIn,
   partyLabel,
+  PAYMENT_NEEDS_REVIEW_HELP,
+  paymentNeedsReview,
+  paymentStatusLabel,
   paymentStatusVariant,
   serviceLabel,
   visitStatusLabel,
@@ -207,6 +211,16 @@ export function StatusChips({
   )
 }
 
+/** A payment status as text — red, with the staff action on hover, when it needs a manual refund. */
+function PaymentStatusText({ status }: { status: string }) {
+  if (!paymentNeedsReview(status)) return <>{status}</>
+  return (
+    <span className="font-semibold text-red-600" title={PAYMENT_NEEDS_REVIEW_HELP}>
+      {paymentStatusLabel(status)}
+    </span>
+  )
+}
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = { STRIPE: 'Card (Stripe)', MINT: 'Card (Mint)', WALLET: 'Wallet' }
 function paymentMethodLabel(method: string | null | undefined): string | null {
   if (!method) return null
@@ -223,7 +237,16 @@ function formatBytes(bytes?: number | null): string | null {
 
 type EsimOrder = VVAdminUserDetail['orders'][number]
 
-export function EsimOrderCard({ order, payment }: { order: EsimOrder; payment?: AdminBillingLineItem }) {
+export function EsimOrderCard({
+  order,
+  payment,
+  cardCharge,
+}: {
+  order: EsimOrder
+  payment?: AdminBillingLineItem
+  /** AUD card charge for this order, from the billing ledger (see cardChargeForOrder). */
+  cardCharge?: CardCharge
+}) {
   return (
     <ExpandableCard
       icon={Wifi}
@@ -236,7 +259,14 @@ export function EsimOrderCard({ order, payment }: { order: EsimOrder; payment?: 
           {payment && <span>Ordered {formatDateTime(payment.date)}</span>}
         </span>
       }
-      amount={formatMoney(order.priceUsd ?? 0, order.currency)}
+      amount={
+        <DualAmount
+          amount={order.priceUsd ?? 0}
+          currency={order.currency}
+          cardChargeAmount={cardCharge?.amount}
+          cardChargeCurrency={cardCharge?.currency}
+        />
+      }
       amountSub={paymentMethodLabel(payment?.paymentMethod) ?? undefined}
       fullViewHref={`/dashboard/veloxverse/esim-orders/${encodeURIComponent(order.orderNo)}`}
       fullViewLabel="Open eSIM order"
@@ -287,7 +317,9 @@ function EsimOrderDetails({ orderNo, payment }: { orderNo: string; payment?: Adm
       </DetailGroup>
 
       <DetailGroup title="Payment">
-        <Field icon={Receipt} label="Paid">{formatMoney(d.sellingPriceUsd ?? 0, d.currency)}</Field>
+        <Field icon={Receipt} label="Paid">
+          {d.paid === false ? <span className="text-gray-500">Not paid</span> : formatMoney(d.sellingPriceUsd ?? 0, d.currency)}
+        </Field>
         <Field label="Method">{paymentMethodLabel(d.paymentMethod)}</Field>
         <Field label="Invoice">{d.invoiceNo ?? payment?.invoiceNo}</Field>
         {payment?.promoCode && (
@@ -313,10 +345,15 @@ function loungeIcon(v: LoungeVisit): { icon: ElementType; tint: string } {
   }
 }
 
-export function LoungeVisitCard({ v }: { v: LoungeVisit }) {
+export function LoungeVisitCard({ v, cardCharge }: { v: LoungeVisit; cardCharge?: CardCharge }) {
   const { icon, tint } = loungeIcon(v)
   const epass = v.walkinPass?.ePassId ?? v.epassCode
   const pay = v.paymentStatus
+  // AUD the card was charged: the visit's own payment when VeloxVerse sends it, else the lookup.
+  const charge: CardCharge | undefined =
+    pay && pay.chargeAmountCents !== undefined
+      ? { amount: centsToMajorOrNull(pay.chargeAmountCents), currency: pay.chargeCurrency ?? null }
+      : cardCharge
   const phone = v.contactPhone ? `${v.contactCallingCode ? `+${v.contactCallingCode.replace(/^\+/, '')} ` : ''}${v.contactPhone}` : null
   return (
     <ExpandableCard
@@ -334,8 +371,15 @@ export function LoungeVisitCard({ v }: { v: LoungeVisit }) {
           <span>{partyLabel(v)}</span>
         </span>
       }
-      amount={formatCentsIn(v.totalCost, v.currency)}
-      amountSub={pay ? pay.status : 'No card charge'}
+      amount={
+        <DualAmount
+          amount={(v.totalCost ?? 0) / 100}
+          currency={v.currency}
+          cardChargeAmount={charge?.amount}
+          cardChargeCurrency={charge?.currency}
+        />
+      }
+      amountSub={pay ? <PaymentStatusText status={pay.status} /> : 'No card charge'}
       fullViewHref={`/dashboard/veloxverse/lounge-bookings/${v.id}`}
     >
       <DetailGroup title="Visit">
@@ -371,7 +415,7 @@ export function LoungeVisitCard({ v }: { v: LoungeVisit }) {
         <Field label="Payment">
           {pay ? (
             <span className="inline-flex flex-wrap items-center gap-2">
-              <Badge variant={paymentStatusVariant(pay.status)}>{pay.status}</Badge>
+              <Badge variant={paymentStatusVariant(pay.status)}>{paymentStatusLabel(pay.status)}</Badge>
               {formatCentsIn(pay.amountCents, pay.currency)} charged
             </span>
           ) : 'No card charge (credit or VeloxClub)'}
@@ -396,9 +440,20 @@ export function LoungePaymentCard({ li }: { li: AdminBillingLineItem }) {
       icon={Armchair}
       tint="bg-indigo-50 text-indigo-600"
       title={li.description}
-      status={<Badge variant={statusBadgeVariant(li.status)}>{li.status}</Badge>}
+      status={<Badge variant={statusBadgeVariant(li.status)}>{paymentStatusLabel(li.status)}</Badge>}
       subtitle={formatDateTime(li.date)}
-      amount={li.clubRedeemed ? 'VeloxClub' : formatMoney(li.amountUsd, li.currency)}
+      amount={
+        li.clubRedeemed ? (
+          'VeloxClub'
+        ) : (
+          <DualAmount
+            amount={li.amountUsd}
+            currency={li.currency}
+            cardChargeAmount={centsToMajorOrNull(li.cardChargeCents)}
+            cardChargeCurrency={li.cardChargeCurrency}
+          />
+        )
+      }
     >
       <PaymentFields li={li} />
     </ExpandableCard>
@@ -407,7 +462,7 @@ export function LoungePaymentCard({ li }: { li: AdminBillingLineItem }) {
 
 // ── Pick & Drop (VeloxAssist transfers) ─────────────────────────────
 
-export function TransferCard({ t }: { t: AdminTransferBooking }) {
+export function TransferCard({ t, cardCharge }: { t: AdminTransferBooking; cardCharge?: CardCharge }) {
   const travellers = t.adults + t.children + t.infants
   const vehicle = [t.vehicleMake, t.vehicleModel].filter(Boolean).join(' ') || t.vehicleSegment
   return (
@@ -428,8 +483,15 @@ export function TransferCard({ t }: { t: AdminTransferBooking }) {
           {t.flightNumber && <span>✈ {t.flightNumber}</span>}
         </span>
       }
-      amount={formatMoney((t.salePriceCents ?? 0) / 100, t.currency)}
-      amountSub={t.paymentStatus ?? undefined}
+      amount={
+        <DualAmount
+          amount={(t.salePriceCents ?? 0) / 100}
+          currency={t.currency}
+          cardChargeAmount={cardCharge?.amount}
+          cardChargeCurrency={cardCharge?.currency}
+        />
+      }
+      amountSub={t.paymentStatus ? <PaymentStatusText status={t.paymentStatus} /> : undefined}
       fullViewHref="/dashboard/veloxverse/transfers"
       fullViewLabel="Open Pick & Drop bookings"
     >
@@ -473,7 +535,7 @@ export function TransferCard({ t }: { t: AdminTransferBooking }) {
       <DetailGroup title="Payment & references">
         <Field icon={Receipt} label="Charged">{formatMoney((t.salePriceCents ?? 0) / 100, t.currency)}</Field>
         <Field label="Method">{paymentMethodLabel(t.paymentMethod) ?? 'No card charge (credit or VeloxClub)'}</Field>
-        <Field label="Payment status">{t.paymentStatus}</Field>
+        <Field label="Payment status">{t.paymentStatus ? <PaymentStatusText status={t.paymentStatus} /> : null}</Field>
         <Field icon={Hash} label="Reservation no.">{t.reservationNo ? <span className="font-mono text-xs">{t.reservationNo}</span> : null}</Field>
         <Field icon={CalendarDays} label="Booked">{formatDateTime(t.createdAt)}</Field>
       </DetailGroup>
@@ -486,7 +548,7 @@ export function TransferCard({ t }: { t: AdminTransferBooking }) {
 
 // ── VeloxClub ──────────────────────────────────────────────────────
 
-export function ClubMembershipCard({ m }: { m: ClubMembershipDetail }) {
+export function ClubMembershipCard({ m, cardCharge }: { m: ClubMembershipDetail; cardCharge?: CardCharge }) {
   return (
     <ExpandableCard
       icon={Crown}
@@ -494,7 +556,14 @@ export function ClubMembershipCard({ m }: { m: ClubMembershipDetail }) {
       title={`${m.tier} membership`}
       status={<Badge variant={statusBadgeVariant(m.status)}>{m.status}</Badge>}
       subtitle={`Cycle ${formatDate(m.billingCycleStart)} – ${formatDate(m.billingCycleEnd)} · ${m.usage.length} benefit${m.usage.length === 1 ? '' : 's'} used`}
-      amount={formatCentsIn(m.purchasePriceCents, m.currency)}
+      amount={
+        <DualAmount
+          amount={m.purchasePriceCents / 100}
+          currency={m.currency}
+          cardChargeAmount={cardCharge?.amount}
+          cardChargeCurrency={cardCharge?.currency}
+        />
+      }
       amountSub={m.autoRenew ? 'Auto-renews' : 'No auto-renew'}
     >
       <DetailGroup title="Membership">
@@ -523,13 +592,23 @@ export function ClubMembershipCard({ m }: { m: ClubMembershipDetail }) {
 // ── Payments ledger ─────────────────────────────────────────────────
 
 function PaymentFields({ li }: { li: AdminBillingLineItem }) {
+  const isRefund = li.type === 'REFUND'
+  const cardCharge = cardChargeLabel(li.currency, centsToMajorOrNull(li.cardChargeCents), li.cardChargeCurrency, isRefund ? 'refunded' : 'charged')
   return (
     <DetailGroup title="Payment">
       <Field icon={Hash} label="Order no."><span className="font-mono text-xs">{li.orderNo}</span></Field>
+      {cardCharge && (
+        <>
+          <Field icon={Receipt} label="Customer amount">{formatMoney(li.amountUsd, li.currency)}</Field>
+          <Field label={isRefund ? 'Refunded to card' : 'Charged to card'}>
+            <span title={CARD_CHARGE_TOOLTIP}>{cardCharge}</span>
+          </Field>
+        </>
+      )}
       <Field label="Invoice">{li.invoiceNo}</Field>
       <Field label="Service">{li.service}</Field>
       <Field label="Method">{paymentMethodLabel(li.paymentMethod)}</Field>
-      <Field label="Status">{li.status}</Field>
+      <Field label="Status"><PaymentStatusText status={li.status} /></Field>
       <Field icon={CalendarDays} label="Date">{formatDateTime(li.date)}</Field>
       {li.promoCode && (
         <Field label="Promo code">
@@ -559,13 +638,18 @@ export function PaymentRow({ li }: { li: AdminBillingLineItem }) {
         li.clubRedeemed && li.amountUsd === 0 ? (
           <span className="text-emerald-600">VeloxClub</span>
         ) : (
-          <span className={isCredit ? 'text-red-600' : undefined}>
-            {isCredit ? '−' : ''}
-            {formatMoney(li.amountUsd, li.currency)}
-          </span>
+          <DualAmount
+            className={isCredit ? 'text-red-600' : undefined}
+            prefix={isCredit ? '−' : ''}
+            amount={li.amountUsd}
+            currency={li.currency}
+            cardChargeAmount={centsToMajorOrNull(li.cardChargeCents)}
+            cardChargeCurrency={li.cardChargeCurrency}
+            kind={li.type === 'REFUND' ? 'refunded' : 'charged'}
+          />
         )
       }
-      amountSub={li.status}
+      amountSub={<PaymentStatusText status={li.status} />}
     >
       <PaymentFields li={li} />
     </ExpandableCard>

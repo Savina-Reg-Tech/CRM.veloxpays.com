@@ -1,0 +1,4 @@
+# Environment files — real secrets live here, never commit them
+.env
+.env.local
+.env.*.local

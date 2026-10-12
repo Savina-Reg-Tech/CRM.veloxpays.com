@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import ApprovalRequest from "../models/ApprovalRequest.js";
 import VerificationDocument from "../models/VerificationDocument.js";
 import { getClient } from "../../config/db.js";
-import { storage, MIME_EXTENSION } from "../storage/index.js";
+import { storage, MIME_EXTENSION, contentMatchesType } from "../storage/index.js";
 import {
   getRoleDocumentSpec,
   isDocTypeAllowedForRole,
@@ -146,8 +146,13 @@ export const uploadDocument = async (actor, { docType, file, customLabel }, req)
 
   const resolvedLabel = isCustomDocType(docType) ? customLabel.trim().slice(0, 100) : null;
 
+  // The browser's "this is a PDF" is only a label — the file's own first bytes must agree.
+  if (!contentMatchesType(file.buffer, file.mimetype)) {
+    throw { status: 400, message: "This file does not look like a valid PDF, JPG or PNG. Please upload the original document." };
+  }
+
   const ext = MIME_EXTENSION[file.mimetype] || "bin";
-  const key = `user-${actor.id}/${docType}-${randomUUID()}.${ext}`;
+  const key = `verification/user-${actor.id}/${docType}-${randomUUID()}.${ext}`;
   const { storagePath, fileUrl } = await storage.put({
     key,
     buffer: file.buffer,
@@ -611,7 +616,10 @@ export const getDocumentForDownload = async (actor, documentId) => {
     throw { status: 403, message: "You cannot access this document" };
   }
 
-  const signedUrl = await storage.getSignedUrl(doc.storage_path);
+  const signedUrl = await storage.getSignedUrl(doc.storage_path, {
+    fileName: doc.original_file_name,
+    contentType: doc.mime_type,
+  });
   if (signedUrl) return { redirectUrl: signedUrl, doc };
 
   const buffer = await storage.read(doc.storage_path);

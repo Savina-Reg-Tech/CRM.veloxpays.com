@@ -26,16 +26,15 @@ describe("approvalRbac — submit", () => {
     expect(canSubmitApprovalRequest("super_admin", "generic")).toBe(false);
   });
 
-  it("allows super_admin, admin, employee to submit user_onboarding", () => {
-    expect(canSubmitApprovalRequest("super_admin", "user_onboarding")).toBe(true);
-    expect(canSubmitApprovalRequest("admin", "user_onboarding")).toBe(true);
-    expect(canSubmitApprovalRequest("employee", "user_onboarding")).toBe(true);
-  });
-
-  it("denies agent/affiliate from opening user_onboarding tickets", () => {
-    expect(canSubmitApprovalRequest("agent", "user_onboarding")).toBe(false);
-    expect(canSubmitApprovalRequest("affiliate", "user_onboarding")).toBe(false);
-  });
+  // A user_onboarding ticket's outcome activates / deactivates its subject account, so it may
+  // only be opened by the server when an account is provisioned — never by hand for an
+  // arbitrary user id (that let any employee deactivate any account: open, then cancel).
+  it.each(["super_admin", "admin", "employee", "agent", "affiliate", "support"])(
+    "denies %s from opening user_onboarding tickets by hand",
+    (role) => {
+      expect(canSubmitApprovalRequest(role, "user_onboarding")).toBe(false);
+    }
+  );
 });
 
 describe("approvalRbac — approve user onboarding by subject role", () => {

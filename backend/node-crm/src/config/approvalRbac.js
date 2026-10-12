@@ -55,12 +55,13 @@ export const EMPLOYEE_MAY_APPROVE_AGENT = false;
 /** Who may submit `generic` (operational) approval requests. */
 const GENERIC_SUBMIT_ROLES = Object.freeze(["employee", "agent", "affiliate"]);
 
-/** Who may open a `user_onboarding` ticket (e.g. after creating a CRM user). */
-const USER_ONBOARDING_SUBMIT_ROLES = Object.freeze([
-  "super_admin",
-  "admin",
-  "employee",
-]);
+/**
+ * Nobody may open a `user_onboarding` ticket by hand. Its outcome activates / deactivates the
+ * subject account, so a hand-opened ticket for an arbitrary user id would let the requester
+ * deactivate anyone (open, then cancel). These tickets are only ever opened by the server when
+ * an account is provisioned — see approvalService.insertUserOnboardingApprovalInTransaction.
+ */
+const USER_ONBOARDING_SUBMIT_ROLES = Object.freeze([]);
 
 /**
  * New CRM users in these roles get an automatic user_onboarding approval ticket.

@@ -93,6 +93,38 @@ export const ALERT_TYPE_LABEL: Record<string, string> = {
   daily_digest: 'Daily digest',
 }
 
+/** Wording for steps whose raw name doesn't read well humanised. Anything not listed falls back
+ * to the humanised step name, so a new VeloxVerse step always shows up. */
+export const STEP_LABEL: Record<string, string> = {
+  late_approval_refunded: 'Charged after checkout closed — refunded',
+  card_brand_not_accepted: 'Card type not accepted — refunded',
+  promo_no_longer_valid: 'Promo already used — not charged',
+  charge_amount_changed: 'Exchange rate updated — not charged',
+  charge_fx_unavailable: 'No exchange rate — checkout not offered',
+  esim_supplier_outcome_unknown: 'eSIM Access did not answer — checking',
+  esim_supplier_outcome_recovered: 'eSIM order found at eSIM Access — completed',
+  dragonpass_order_outcome_unknown: 'DragonPass did not answer — customer refunded, check DragonPass',
+  dragonpass_orphan_order_cancelled: 'Stray DragonPass booking cancelled automatically',
+  dragonpass_orphan_order: 'Unknown DragonPass booking — check',
+}
+
+/** What staff have to do for a step, shown with the event. Only steps that need a person. */
+export const STEP_STAFF_ACTION: Record<string, string> = {
+  dragonpass_order_outcome_unknown:
+    'The customer was refunded, but the booking may still exist at DragonPass under our order number (metadata.clientUserId). Look it up in the DragonPass portal and cancel it.',
+  dragonpass_orphan_order:
+    'DragonPass reported a booking we cannot tie to any order (or could not cancel). Check it in the DragonPass portal (metadata.dragonpassOrderId).',
+  refund_failed: 'The refund could not be made automatically. Refund the customer manually in the Mint portal.',
+  payment_amount_mismatch:
+    'Mint charged the card, but not for what the order asked. Find the charge in the Mint portal by the payment’s provider reference and refund it there.',
+}
+
+export const stepStaffAction = (s: string | null | undefined): string | undefined => (s ? STEP_STAFF_ACTION[s] : undefined)
+
+/** Steps where money has to be checked by a person. */
+export const REFUND_ATTENTION_STEPS = ['refund_failed', 'late_approval_refunded', 'payment_amount_mismatch'] as const
+
+export const stepLabel = (s: string | null | undefined) => (s ? STEP_LABEL[s] ?? humanize(s) : '—')
 export const serviceLabel = (s: string | null | undefined) => (s ? SERVICE_LABEL[s] ?? humanize(s) : '—')
 export const supplierLabel = (s: string | null | undefined) => (s ? SUPPLIER_LABEL[s] ?? humanize(s) : '—')
 export const eventTypeLabel = (s: string | null | undefined) => (s ? EVENT_TYPE_LABEL[s] ?? humanize(s) : '—')

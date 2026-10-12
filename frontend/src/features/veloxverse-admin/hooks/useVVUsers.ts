@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { vvUsersService } from '../vvAdminService'
-import type { VVUserRole } from '../types'
+import type { VVAdminUserDetail, VVUserRole } from '../types'
 
 export function useVVUsers(
   page = 1,
@@ -27,7 +27,12 @@ export function useVVSetUserStatus() {
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       vvUsersService.setStatus(id, isActive),
-    onSuccess: () => {
+    onSuccess: (updated, { id }) => {
+      // Refresh the open profile straight from the response (new status, isBlocked, blockedAt)
+      // so the badge and button are right immediately; lists are refetched.
+      qc.setQueryData<VVAdminUserDetail>(['vv-users', 'detail', id], (prev) =>
+        prev ? { ...prev, user: { ...prev.user, ...updated } } : prev
+      )
       qc.invalidateQueries({ queryKey: ['vv-users'] })
       // Blocking a referred user claws back the referrer's reward — refresh any open points
       // ledger (the referrer isn't known here, so refresh all points views).

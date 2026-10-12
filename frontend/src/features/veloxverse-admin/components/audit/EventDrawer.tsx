@@ -10,7 +10,8 @@ import {
   humanize,
   serviceLabel,
   sourceLabel,
-  supplierLabel,
+  supplierLabel, stepLabel,
+  stepStaffAction,
 } from '../../audit'
 import type { AuditEvent } from '../../auditTypes'
 import {
@@ -42,7 +43,7 @@ function LinkedEvent({ e }: { e: AuditEvent }) {
       className="flex w-full items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-left text-sm hover:border-indigo-200 hover:bg-indigo-50/40"
     >
       <StatusIcon status={e.status} />
-      <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{humanize(e.step)}</span>
+      <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{stepLabel(e.step)}</span>
       <span className="text-xs text-gray-500">{serviceLabel(e.service)}</span>
       <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
     </button>
@@ -92,11 +93,17 @@ export function EventDrawer() {
               <div className="flex flex-wrap items-center gap-2">
                 <SeverityBadge severity={e.severity} />
                 <StatusIcon status={e.status} withLabel />
-                <h2 className="text-lg font-semibold text-gray-900">{humanize(e.step)}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{stepLabel(e.step)}</h2>
               </div>
               <p className="text-xs text-gray-500">
                 <AuditTime iso={e.createdAt} /> · {serviceLabel(e.service)} · {eventTypeLabel(e.eventType)} · {sourceLabel(e.source)} · actor {e.actor}
               </p>
+              {stepStaffAction(e.step) && (
+                <p role="note" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                  <span className="font-semibold">What to do: </span>
+                  {stepStaffAction(e.step)}
+                </p>
+              )}
             </div>
           ) : (
             <h2 className="text-lg font-semibold text-gray-900">Event</h2>

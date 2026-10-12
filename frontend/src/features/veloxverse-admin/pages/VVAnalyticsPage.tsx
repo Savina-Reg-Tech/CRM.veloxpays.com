@@ -4,7 +4,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BarChart3,
-  DollarSign,
+  ShoppingBag,
   Globe,
   Info,
   PlaneTakeoff,
@@ -17,12 +17,13 @@ import {
 import Skeleton from '@/components/ui/Skeleton'
 import Badge from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import DualAmount from '@/components/ui/DualAmount'
 import { formatMoney } from '@/lib/utils'
 import { LineChart, BarChart } from '../components/Charts'
+import CardChargesPanel from '../components/CardChargesPanel'
 import {
   ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
   activityDirection,
-  formatActivityAmount,
   formatNativeSpend,
   timeAgo,
   getInitials,
@@ -142,7 +143,8 @@ export default function VVAnalyticsPage() {
   // from whatever real currency each underlying booking was actually charged in. "Recent
   // activity" is intentionally NOT affected by this — it always shows each transaction's own
   // real currency, never converted, since that's the one place an admin needs the raw truth.
-  const [currency, setCurrency] = useState('USD')
+  // Defaults to AUD — the currency every card payment is actually processed in.
+  const [currency, setCurrency] = useState('AUD')
 
   const overview = useVVOverview(currency)
   const revenue = useVVRevenue(period, currency)
@@ -204,10 +206,11 @@ export default function VVAnalyticsPage() {
             </div>
           </div>
 
-          {/* Currency selector — converts every aggregate panel below via live FX rates. */}
+          {/* Currency selector — converts the estimated panels (chart, spending, packages) via
+              live FX rates. It never touches the real AUD card totals. */}
           <label className="flex shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <Globe className="h-4 w-4 text-gray-400" />
-            <span className="text-xs font-medium text-gray-500">Show totals in</span>
+            <span className="text-xs font-medium text-gray-500">Show estimates in</span>
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
@@ -223,16 +226,21 @@ export default function VVAnalyticsPage() {
         </div>
       </div>
 
+      {/* Real AUD collected through Mint — kept above, and labelled differently from, the
+       * FX-converted "estimated" revenue cards below so the two are never confused. */}
+      <CardChargesPanel />
+
       {/* Note: totals below are converted, live, from each booking's real currency — this isn't
        * a caveat so much as an explanation of what "Show totals in" does. A separate warning
        * (below, conditional) covers the case where a specific currency's rate wasn't available. */}
       <div className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
         <p className="text-xs text-indigo-700">
-          Total revenue, the revenue breakdown, the revenue chart, customer spending, and package revenue are
-          converted from each booking's real charged currency into <strong>{currency}</strong> using live FX
-          rates. &ldquo;Recent activity&rdquo; below is the exception — it always shows each transaction in its
-          own real currency, unconverted.
+          The revenue chart, customer spending, and package revenue below are{' '}
+          <strong>estimates</strong>: converted from each booking's customer currency into <strong>{currency}</strong>{' '}
+          at today's FX rates. For the money actually collected on cards, use &ldquo;Card money collected
+          (AUD)&rdquo; above. &ldquo;Recent activity&rdquo; shows each transaction in its own currency, with the
+          AUD card charge underneath.
         </p>
       </div>
 
@@ -254,11 +262,10 @@ export default function VVAnalyticsPage() {
         ) : (
           <>
             <StatCard
-              icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
+              icon={<ShoppingBag className="h-5 w-5 text-emerald-500" />}
               tint="bg-emerald-50"
-              label="Total revenue"
-              value={formatMoney(overview.data?.totalRevenue ?? 0, currency)}
-              sub={`${overview.data?.totalOrders ?? 0} orders`}
+              label="Total orders & bookings"
+              value={String(overview.data?.totalOrders ?? 0)}
             />
             <StatCard
               icon={<Users className="h-5 w-5 text-fuchsia-500" />}
@@ -276,36 +283,34 @@ export default function VVAnalyticsPage() {
         )}
       </div>
 
-      {/* Revenue breakdown by service */}
+      {/* Orders by service — counts only. Money per service is in the AUD "By service" table
+       * above (real card money); the old FX-converted revenue cards were removed so no estimated
+       * USD figure sits next to the real AUD ones. */}
       {!overview.isLoading && overview.data && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             icon={<Wifi className="h-5 w-5 text-blue-500" />}
             tint="bg-blue-50"
-            label="eSIM revenue"
-            value={formatMoney(overview.data.esimRevenue, currency)}
-            sub={`${overview.data.esimOrders} orders`}
+            label="eSIM orders"
+            value={String(overview.data.esimOrders)}
           />
           <StatCard
             icon={<PlaneTakeoff className="h-5 w-5 text-violet-500" />}
             tint="bg-violet-50"
-            label="Lounge revenue"
-            value={formatMoney(overview.data.loungeRevenue, currency)}
-            sub={`${overview.data.loungeBookings} bookings`}
+            label="Lounge bookings"
+            value={String(overview.data.loungeBookings)}
           />
           <StatCard
             icon={<Utensils className="h-5 w-5 text-teal-500" />}
             tint="bg-teal-50"
-            label="Benefit revenue"
-            value={formatMoney(overview.data.benefitRevenue, currency)}
-            sub={`${overview.data.benefitBookings} bookings`}
+            label="Benefit bookings"
+            value={String(overview.data.benefitBookings)}
           />
           <StatCard
             icon={<ArrowUpRight className="h-5 w-5 text-rose-500" />}
             tint="bg-rose-50"
-            label="Pick & Drop revenue"
-            value={formatMoney(overview.data.transferRevenue, currency)}
-            sub={`${overview.data.transferBookings} bookings`}
+            label="Pick & Drop bookings"
+            value={String(overview.data.transferBookings)}
           />
         </div>
       )}
@@ -331,7 +336,7 @@ export default function VVAnalyticsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card padding="sm">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue — All Services ({currency})</h2>
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">Revenue — All Services (estimated, in {currency})</h2>
           {revenue.isLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : (
@@ -400,6 +405,7 @@ export default function VVAnalyticsPage() {
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Lounge</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Benefits</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Card charged (AUD)</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ minWidth: 140 }}>Spend</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Orders</th>
                   <th className="w-10 px-4 py-3" />
@@ -435,6 +441,9 @@ export default function VVAnalyticsPage() {
                         {c.nativeSpend && !(c.nativeSpend.length === 1 && c.nativeSpend[0].currency === spending.data?.currency) && (
                           <span className="block text-[11px] font-normal text-gray-500">Paid {formatNativeSpend(c.nativeSpend)}</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-700 whitespace-nowrap">
+                        {typeof c.cardCharged === 'number' ? formatMoney(c.cardCharged, c.cardChargeCurrency ?? 'AUD') : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
@@ -502,7 +511,7 @@ export default function VVAnalyticsPage() {
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
-              <p className="mt-0.5 text-[11px] text-gray-400">Each amount shown in its real transaction currency</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">Customer&rsquo;s currency, with the AUD card charge underneath</p>
             </div>
             <TrendingUp className="h-4 w-4 text-gray-300" />
           </div>
@@ -547,13 +556,15 @@ export default function VVAnalyticsPage() {
                       </div>
                     </div>
                     {/* Amount */}
-                    <span
-                      className={`shrink-0 text-sm font-semibold tabular-nums ${
-                        isCredit ? 'text-emerald-600' : 'text-red-500'
-                      }`}
-                    >
-                      {formatActivityAmount(o.amountUsd, direction, o.currency)}
-                    </span>
+                    <DualAmount
+                      className={`shrink-0 text-sm font-semibold ${isCredit ? 'text-emerald-600' : 'text-red-500'}`}
+                      prefix={isCredit ? '+' : '−'}
+                      amount={o.amountUsd}
+                      currency={o.currency}
+                      cardChargeAmount={o.cardChargeAmount}
+                      cardChargeCurrency={o.cardChargeCurrency}
+                      kind={o.type === 'REFUND' ? 'refunded' : 'charged'}
+                    />
                   </li>
                 )
               })}

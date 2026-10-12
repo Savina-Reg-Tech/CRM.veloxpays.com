@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { serviceLabel, supplierLabel, humanize } from '../../audit'
+import { serviceLabel, supplierLabel, stepLabel } from '../../audit'
 import type { AuditEvent } from '../../auditTypes'
 import { AuditTime, CustomerCell, EventTypeIcon, SeverityBadge, StatusIcon } from './AuditUI'
 
@@ -78,7 +78,7 @@ export function EventTable({ events, highlightCritical = false }: { events: Audi
                   <span className="flex items-center gap-2">
                     <EventTypeIcon type={e.eventType} />
                     <StatusIcon status={e.status} />
-                    <span className="whitespace-nowrap font-medium text-gray-900">{humanize(e.step)}</span>
+                    <span className="whitespace-nowrap font-medium text-gray-900">{stepLabel(e.step)}</span>
                   </span>
                 </td>
                 <td className="max-w-[14rem] px-3 py-2.5 text-xs"><CustomerCell customer={e.customer} anonId={e.anonId} /></td>
@@ -107,7 +107,7 @@ export function EventTable({ events, highlightCritical = false }: { events: Audi
                 <span className="flex min-w-0 items-center gap-2">
                   <EventTypeIcon type={e.eventType} />
                   <StatusIcon status={e.status} />
-                  <span className="truncate font-medium text-gray-900">{humanize(e.step)}</span>
+                  <span className="truncate font-medium text-gray-900">{stepLabel(e.step)}</span>
                 </span>
                 <SeverityBadge severity={e.severity} />
               </div>

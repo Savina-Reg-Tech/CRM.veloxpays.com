@@ -39,14 +39,28 @@ const PasswordReset = {
     return rows[0] || null;
   },
 
-  /** Bump the failed-attempt counter on a pending OTP row. */
-  incrementAttempts: async (id) => {
-    await query(`UPDATE password_resets SET attempts = attempts + 1 WHERE id = $1`, [id]);
+  /**
+   * Spend one guess on a pending OTP row. Counted in a single statement BEFORE the code is
+   * compared, so any number of parallel requests can never get more than `maxAttempts`
+   * guesses between them. Returns false when the row has no guesses left (or is gone).
+   */
+  claimAttempt: async (id, maxAttempts) => {
+    const { rowCount } = await query(
+      `UPDATE password_resets
+          SET attempts = attempts + 1
+        WHERE id = $1 AND attempts < $2 AND consumed_at IS NULL AND expires_at > NOW()`,
+      [id, maxAttempts]
+    );
+    return rowCount === 1;
   },
 
-  /** Mark an OTP row as used, once the password has actually been changed. */
+  /** Mark an OTP row as used. Returns false if it was already used (single-use, race-safe). */
   markConsumed: async (id) => {
-    await query(`UPDATE password_resets SET consumed_at = NOW() WHERE id = $1`, [id]);
+    const { rowCount } = await query(
+      `UPDATE password_resets SET consumed_at = NOW() WHERE id = $1 AND consumed_at IS NULL`,
+      [id]
+    );
+    return rowCount === 1;
   },
 };
 

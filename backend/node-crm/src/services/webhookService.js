@@ -2,6 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import crypto from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
+import net from "node:net";
 
 /**
  * Conditional "webhook" action sender — POSTs submission data to an
@@ -67,10 +68,27 @@ function isBlockedIp(address, family) {
 function isPlausibleWebhookUrl(url) {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    return !isBlockedHostLiteral(parsed.hostname);
   } catch {
     return false;
   }
+}
+
+/** `new URL()` keeps the brackets on an IPv6 host ("[::1]"); net.isIP wants it bare. */
+const bareHost = (hostname) => hostname.replace(/^\[|\]$/g, "");
+
+/**
+ * True when the URL's host is itself a blocked IP address ("http://169.254.169.254/",
+ * "http://[::1]/", and — because `new URL()` normalises them — "http://2130706433/" or
+ * "http://0x7f.1/"). Node never calls the custom `lookup` for an IP-literal host, so this case
+ * has to be checked here, before any connection is made. "localhost" is refused outright too.
+ */
+function isBlockedHostLiteral(hostname) {
+  const host = bareHost(String(hostname ?? "")).toLowerCase();
+  if (host === "" || host === "localhost" || host.endsWith(".localhost")) return true;
+  const family = net.isIP(host);
+  return family !== 0 && isBlockedIp(host, family);
 }
 
 /**
@@ -92,6 +110,10 @@ async function sendWebhook({ url, payload, secret, timeoutMs = DEFAULT_TIMEOUT_M
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return { success: false, error: "Only http/https webhook URLs are allowed", statusCode: null, durationMs: elapsed() };
+  }
+
+  if (isBlockedHostLiteral(parsed.hostname)) {
+    return { success: false, error: "Refusing to call an internal/private/link-local address", statusCode: null, durationMs: elapsed() };
   }
 
   const body = JSON.stringify(payload);
@@ -133,12 +155,16 @@ async function sendWebhook({ url, payload, secret, timeoutMs = DEFAULT_TIMEOUT_M
           lookup: (hostname, options, callback) => {
             dnsLookup(hostname, { all: true, verbatim: true })
               .then((addresses) => {
-                const safe = addresses.find((a) => !isBlockedIp(a.address, a.family));
-                if (!safe) {
+                const safe = addresses.filter((a) => !isBlockedIp(a.address, a.family));
+                if (safe.length === 0) {
                   callback(new Error("Refusing to call an internal/private/link-local address"));
                   return;
                 }
-                callback(null, safe.address, safe.family);
+                // Node 20+ asks for every address (`all: true`) and then expects an array of
+                // { address, family } — answering with a single address string made every
+                // hostname webhook fail with "Invalid IP address: undefined".
+                if (options?.all) callback(null, safe);
+                else callback(null, safe[0].address, safe[0].family);
               })
               .catch((err) => callback(err));
           },
@@ -173,4 +199,4 @@ async function sendWebhook({ url, payload, secret, timeoutMs = DEFAULT_TIMEOUT_M
   });
 }
 
-export { sendWebhook, isPlausibleWebhookUrl, isBlockedIp };
+export { sendWebhook, isPlausibleWebhookUrl, isBlockedIp, isBlockedHostLiteral };

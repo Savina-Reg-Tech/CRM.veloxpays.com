@@ -1,8 +1,10 @@
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
-import { formatDate, formatDateTime, formatMoney } from '@/lib/utils'
+import DualAmount from '@/components/ui/DualAmount'
+import { CARD_CHARGE_TOOLTIP, formatDate, formatDateTime, formatMoney } from '@/lib/utils'
 import type { VeloxEsimCustomer, VeloxEsimPurchase } from '@/types'
+import { paymentStatusLabel, paymentStatusVariant } from '@/features/veloxverse-admin/loungeUtils'
 
 interface Props {
   open: boolean
@@ -29,6 +31,11 @@ function categoryLabel(category: string | null | undefined): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+/** AUD card totals are shown exactly as VeloxVerse sends them; a missing one is "—", never 0. */
+function cardMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+  return typeof amount === 'number' ? formatMoney(amount, currency ?? 'AUD') : '—'
 }
 
 function planLabel(p: VeloxEsimPurchase) {
@@ -98,6 +105,21 @@ export default function VeloxEsimCustomerDetailModal({
             </div>
           </div>
 
+          <div className="grid grid-cols-3 gap-4 rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5" title={CARD_CHARGE_TOOLTIP}>
+            <div>
+              <p className="text-xs text-gray-500">Card charged ({customer.cardChargeCurrency ?? 'AUD'})</p>
+              <p className="font-medium text-gray-900">{cardMoney(customer.totalCardCharged, customer.cardChargeCurrency)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Card refunded ({customer.cardChargeCurrency ?? 'AUD'})</p>
+              <p className="font-medium text-gray-900">{cardMoney(customer.totalCardRefunded, customer.cardChargeCurrency)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Net collected ({customer.cardChargeCurrency ?? 'AUD'})</p>
+              <p className="font-semibold text-emerald-700">{cardMoney(customer.netCardCharged, customer.cardChargeCurrency)}</p>
+            </div>
+          </div>
+
           <div>
             <p className="text-sm font-semibold text-gray-900 mb-2">
               Purchases ({customer.purchases.length})
@@ -127,12 +149,16 @@ export default function VeloxEsimCustomerDetailModal({
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="font-medium text-gray-900">
-                          {formatMoney(p.amountPaid, p.currency)}
-                        </p>
-                        <Badge variant="neutral" className="mt-1">
-                          {p.status ?? '—'}
-                        </Badge>
+                        <DualAmount
+                          className="font-medium text-gray-900"
+                          amount={p.amountPaid}
+                          currency={p.currency}
+                          cardChargeAmount={p.cardChargeAmount}
+                          cardChargeCurrency={p.cardChargeCurrency}
+                        />
+                        <div className="mt-1">
+                          <Badge variant={paymentStatusVariant(p.status)}>{paymentStatusLabel(p.status)}</Badge>
+                        </div>
                       </div>
                     </div>
                   </li>

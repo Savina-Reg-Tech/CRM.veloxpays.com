@@ -23,6 +23,7 @@ import { Card } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/app/providers/ToastProvider'
+import { CARD_CHARGE_TOOLTIP } from '@/lib/utils'
 import { useVVLoungeVisitDetail } from '../hooks/useVVLounge'
 import {
   formatCentsIn,
@@ -31,6 +32,9 @@ import {
   formatVisitDate,
   isWalkIn,
   partyLabel,
+  PAYMENT_NEEDS_REVIEW_HELP,
+  paymentNeedsReview,
+  paymentStatusLabel,
   paymentStatusVariant,
   serviceLabel,
   visitStatusLabel,
@@ -442,17 +446,45 @@ function PaymentSection({ v }: { v: LoungeVisitDetail }) {
   const p = v.payment
   const cur = p?.currency ?? v.currency
   const cents = (n: number | null | undefined) => (n ? formatCentsIn(n, cur) : null)
+  // Mint charges in AUD; VeloxVerse sends what it locked at checkout. Absent on bookings made
+  // before AUD charging, and nothing extra to show when the customer's own currency is AUD.
+  const chargeCur = p?.chargeCurrency ?? null
+  const hasCardCharge =
+    p?.chargeAmountCents != null && !!chargeCur && chargeCur.toUpperCase() !== (cur ?? '').toUpperCase()
   return (
     <Section
       icon={CreditCard}
       title="Payment"
-      badge={p ? <Badge variant={paymentStatusVariant(p.status)}>{p.status}</Badge> : undefined}
+      badge={p ? <Badge variant={paymentStatusVariant(p.status)}>{paymentStatusLabel(p.status)}</Badge> : undefined}
     >
       {p ? (
         <>
+          {paymentNeedsReview(p.status) && (
+            <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+              <p className="font-semibold">Needs review — refund manually</p>
+              <p>{PAYMENT_NEEDS_REVIEW_HELP}</p>
+              {p.providerReference && (
+                <p className="mt-1">
+                  Mint reference: <CopyValue value={p.providerReference} />
+                </p>
+              )}
+            </div>
+          )}
           <Fields
             rows={[
-              ['Charged to card', <span className="font-semibold">{formatCentsIn(p.amountCents, cur)}</span>],
+              [hasCardCharge ? 'Customer amount' : 'Charged to card', <span className="font-semibold">{formatCentsIn(p.amountCents, cur)}</span>],
+              [
+                `Charged to card (${chargeCur ?? 'AUD'})`,
+                hasCardCharge ? (
+                  <span className="font-semibold" title={CARD_CHARGE_TOOLTIP}>{formatCentsIn(p.chargeAmountCents, chargeCur)}</span>
+                ) : null,
+              ],
+              [
+                'Exchange rate',
+                hasCardCharge && p.fxRate != null
+                  ? `1 ${cur} = ${Number(p.fxRate.toPrecision(6))} ${chargeCur}${p.fxRateAt ? ` · locked ${formatStamp(p.fxRateAt)}` : ''}`
+                  : null,
+              ],
               ['Booking total', formatCentsIn(v.totalCost, v.currency)],
               ['Provider', p.provider],
               ['Mint reference', p.providerReference && <CopyValue value={p.providerReference} />],
@@ -793,7 +825,7 @@ export default function VVLoungeBookingDetailPage() {
             <p className="text-xs text-gray-500">Total</p>
             <p className="text-2xl font-bold text-gray-900">{formatCentsIn(visit.totalCost, visit.currency)}</p>
             {visit.paymentStatus && (
-              <Badge variant={paymentStatusVariant(visit.paymentStatus.status)}>{visit.paymentStatus.status}</Badge>
+              <Badge variant={paymentStatusVariant(visit.paymentStatus.status)}>{paymentStatusLabel(visit.paymentStatus.status)}</Badge>
             )}
           </div>
         </div>

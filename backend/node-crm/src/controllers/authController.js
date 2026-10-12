@@ -7,11 +7,17 @@ import { sendSuccess, sendError } from "../utils/response.js";
 // SameSite=Lax + the CORS allowlist together protect against CSRF.
 export const AUTH_COOKIE_NAME = "velox_token";
 
-// `Secure` requires HTTPS, so we keep it tied to a dedicated env flag rather
-// than NODE_ENV: a local docker stack with NODE_ENV=production but http://
-// localhost still needs the cookie to be sent. Set COOKIE_SECURE=true in any
-// deployment that terminates HTTPS.
-const isSecureCookie = String(process.env.COOKIE_SECURE || "").toLowerCase() === "true";
+// `Secure` (cookie only ever sent over HTTPS) is ON by default in production, so a deployment
+// can't ship the session cookie over plain HTTP just because nobody set a flag. COOKIE_SECURE
+// overrides it either way: "false" for a local docker stack that runs NODE_ENV=production on
+// http://localhost (docker-compose.yml does this), "true" to force it on elsewhere.
+export function resolveCookieSecure(env = process.env) {
+  const flag = String(env.COOKIE_SECURE ?? "").trim().toLowerCase();
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+  return env.NODE_ENV === "production";
+}
+const isSecureCookie = resolveCookieSecure();
 
 const cookieOptions = () => ({
   httpOnly: true,

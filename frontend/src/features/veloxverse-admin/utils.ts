@@ -1,6 +1,6 @@
 import type { BadgeVariant } from '@/components/ui/Badge'
-import { formatMoney } from '@/lib/utils'
-import type { ActivityDirection, ActivityType } from './types'
+import { centsToMajorOrNull, formatMoney } from '@/lib/utils'
+import type { ActivityDirection, ActivityType, AdminBillingLineItem, RecentActivity } from './types'
 
 /**
  * Maps a status string (any service) to a CRM Badge variant.
@@ -10,7 +10,8 @@ export function statusBadgeVariant(status: string): BadgeVariant {
   const s = status.toUpperCase()
   if (['ACTIVE', 'COMPLETED', 'PUBLISHED', 'RESOLVED'].includes(s)) return 'success'
   if (['PENDING', 'DRAFT', 'OPEN', 'CONFIRMED'].includes(s)) return 'warning'
-  if (['CANCELLED', 'FAILED', 'ARCHIVED', 'CLOSED', 'EXPIRED', 'REFUNDED'].includes(s)) return 'danger'
+  // RECONCILING = a payment that needs a manual refund (see loungeUtils.paymentStatusLabel).
+  if (['CANCELLED', 'FAILED', 'ARCHIVED', 'CLOSED', 'EXPIRED', 'REFUNDED', 'RECONCILING'].includes(s)) return 'danger'
   if (['IN_PROGRESS', 'APPROVED', 'SUSPENDED'].includes(s)) return 'info'
   return 'neutral'
 }
@@ -71,6 +72,67 @@ export function formatActivityAmount(amountUsd: number, direction: ActivityDirec
 export function formatNativeSpend(native: { currency: string; amount: number }[] | undefined): string | null {
   if (!native?.length) return null
   return native.map((n) => formatMoney(n.amount, n.currency)).join(' + ')
+}
+
+/** The message VeloxVerse sent with a failed request, shown to staff as-is — falls back to the
+ * given text (not axios's "Request failed with status code 409"). */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  const message = (err as { response?: { data?: { message?: unknown } } })?.response?.data?.message
+  return typeof message === 'string' && message.trim() ? message : fallback
+}
+
+export const TRANSFER_UNCONFIRMED_NOTICE = 'Paid — not confirmed by the transport provider. Check the ViaTovia panel.'
+
+/** An eSIM order that was never paid (see AdminOrderRow.paid). Only an explicit `false` counts —
+ * a missing field (older VeloxVerse) leaves the row as it always was. Unpaid rows show "—" for
+ * cost / price / profit and must be left out of any total. */
+export function isUnpaidOrder(order: { paid?: boolean } | null | undefined): boolean {
+  return order?.paid === false
+}
+
+/** Tooltip for an unpaid order's dashes. */
+export function unpaidOrderNote(order: { quotedPriceUsd?: number | null; currency?: string }): string {
+  return typeof order.quotedPriceUsd === 'number'
+    ? `Quoted ${formatMoney(order.quotedPriceUsd, order.currency)} — checkout was not completed.`
+    : 'Checkout was not completed — nothing was paid.'
+}
+
+export interface CardCharge {
+  amount: number | null
+  currency: string | null
+}
+
+/** A row's own AUD card charge, when VeloxVerse sends it on that row. `undefined` = the endpoint
+ * doesn't carry the field (not the same as `null` = "no card charge"). */
+export function ownCardCharge(row: { cardChargeCents?: number | null; cardChargeCurrency?: string | null }): CardCharge | undefined {
+  if (row.cardChargeCents === undefined) return undefined
+  return { amount: centsToMajorOrNull(row.cardChargeCents), currency: row.cardChargeCurrency ?? null }
+}
+
+/**
+ * The AUD card charge of one payment, read off the customer's billing ledger. Ledger purchase
+ * rows are keyed by the payment id (`id` / `orderNo` are both the payment id there — NOT the eSIM
+ * or transfer order number), which is what a VeloxClub membership stores as `paymentReferenceId`.
+ */
+export function cardChargeForPayment(items: AdminBillingLineItem[] | undefined, paymentId: string | null | undefined): CardCharge | undefined {
+  if (!paymentId) return undefined
+  const row = items?.find((li) => li.id === paymentId && li.direction === 'debit' && li.type !== 'REFUND')
+  return row ? ownCardCharge(row) : undefined
+}
+
+/**
+ * Order number → AUD card charge, from the recent-orders feed. VeloxVerse resolves each row's
+ * payment server-side there, so this is exact for eSIM orders, Pick & Drop bookings and
+ * lounge/benefit visits (keyed by `orderId`, else the visit id) — but only for what the feed
+ * returns (the most recent rows), so an older order is simply absent.
+ */
+export function cardChargesByOrderNo(recent: RecentActivity[] | undefined): Map<string, CardCharge> {
+  const map = new Map<string, CardCharge>()
+  for (const o of recent ?? []) {
+    if (o.type === 'REFUND' || o.cardChargeAmount === undefined) continue
+    map.set(o.orderNo, { amount: o.cardChargeAmount, currency: o.cardChargeCurrency ?? null })
+  }
+  return map
 }
 
 /** Format an ISO date string to a readable local date/time. */

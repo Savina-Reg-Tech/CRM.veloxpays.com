@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import RoleGuard from '@/routes/RoleGuard'
 import VerificationGate from '@/routes/VerificationGate'
+import { RouteErrorScreen } from '@/components/ErrorScreen'
 import AppLayout from '@/components/layout/AppLayout'
 import AuthLayout from '@/components/layout/AuthLayout'
 import LoginPage from '@/features/auth/pages/LoginPage'
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
   {
     element: <AuthLayout />,
+    errorElement: <RouteErrorScreen />,
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
@@ -64,11 +66,14 @@ const router = createBrowserRouter([
   },
 
   // ── Public embed form (no auth, no layout) ───────────────────────
-  { path: '/embed/:id', element: <PublicFormPage /> },
+  // Its own boundary: a form embedded on someone else's site should show a small notice, not
+  // a blank frame (and has no dashboard to go back to).
+  { path: '/embed/:id', element: <PublicFormPage />, errorElement: <RouteErrorScreen compact /> },
 
   // ── Authenticated ────────────────────────────────────────────────
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteErrorScreen />,
     children: [
       {
         element: <AppLayout />,
@@ -77,6 +82,10 @@ const router = createBrowserRouter([
             // Confines unverified employees/agents/affiliates to the
             // Verification Dashboard until their account is activated.
             element: <VerificationGate />,
+            // An errorElement replaces the element of the route it sits on. Placed here (inside
+            // AppLayout), a page that fails to render keeps the sidebar and header, so staff can
+            // simply navigate elsewhere.
+            errorElement: <RouteErrorScreen compact />,
             children: [
           // Smart role-based redirect
           { path: '/dashboard', element: <DashboardRedirect /> },

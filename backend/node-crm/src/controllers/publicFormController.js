@@ -3,8 +3,23 @@ import { getPublicForm } from "../services/formService.js";
 import { processFormSubmission } from "../services/submissionService.js";
 import { validateEmail } from "../services/spamService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
-import { storage } from "../storage/index.js";
+import { storage, contentMatchesType } from "../storage/index.js";
 import { FORM_UPLOAD_MIME_EXTENSION } from "../middleware/upload.js";
+
+/**
+ * The part of `form_json` an anonymous visitor's browser needs to render the form. Webhook
+ * rules (URLs + HMAC signing secrets) and notification rules (staff email addresses) are
+ * evaluated on the server only and must never leave it.
+ */
+export function toPublicFormJson(formJson) {
+  if (!formJson || typeof formJson !== "object") return formJson;
+  // eslint-disable-next-line no-unused-vars
+  const { webhookRules, notificationRules, ...publicJson } = formJson;
+  return publicJson;
+}
+
+/** A value shaped like our own stored-file descriptor. Only the server may create these. */
+const looksLikeFileDescriptor = (v) => !!v && typeof v === "object" && !Array.isArray(v) && v.__type === "file";
 
 /** GET /public/forms/:id  — return published form schema */
 export const handleGetPublicForm = async (req, res) => {
@@ -19,7 +34,7 @@ export const handleGetPublicForm = async (req, res) => {
       id: form.id,
       name: form.name,
       description: form.description,
-      form_json: form.form_json,
+      form_json: toPublicFormJson(form.form_json),
       submit_button_label: form.submit_button_label,
       success_message: form.success_message,
     }, "Form fetched");
@@ -49,14 +64,26 @@ export const handleSubmitForm = async (req, res) => {
     } else {
       ({ data, formLoadedAt } = req.body);
     }
-    if (!data || typeof data !== "object") {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw { status: 400, message: "Submission data is required" };
+    }
+
+    // A visitor must not be able to hand us a ready-made file descriptor: staff "download"
+    // reads whatever `storagePath` it names. Real uploads are attached below, from req.files.
+    for (const key of Object.keys(data)) {
+      if (looksLikeFileDescriptor(data[key])) delete data[key];
     }
 
     // Persist any uploaded files (memory-buffered by multer) through the pluggable storage
     // adapter, keyed onto `data[fieldId]` as a structured descriptor — same shape whether the
     // adapter is local disk (dev) or S3 (prod), and recognized by the admin UI's
     // SubmissionDataView to render an actual download link instead of stringifying it.
+    for (const file of req.files ?? []) {
+      // The browser's content type is only a label — the file's own first bytes must agree.
+      if (!contentMatchesType(file.buffer, file.mimetype)) {
+        throw { status: 400, message: "One of the files does not look like a valid PDF, JPG, PNG, DOC or DOCX file." };
+      }
+    }
     for (const file of req.files ?? []) {
       const ext = FORM_UPLOAD_MIME_EXTENSION[file.mimetype] || "bin";
       const key = `form-submissions/${formId}/${randomUUID()}.${ext}`;

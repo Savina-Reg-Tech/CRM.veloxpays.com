@@ -288,7 +288,9 @@ async function processFormSubmission({ formId, data: rawSubmittedData, formLoade
     }).catch((err) => console.error("[submission] Notification email failed:", err.message));
   }
 
-  if (form.auto_respond && lead.email) {
+  // Never auto-reply to a submission scored as spam: the "reply" goes to whatever address the
+  // sender typed, which would let anyone use our mail account to message strangers.
+  if (form.auto_respond && lead.email && status !== "SPAM") {
     sendAutoResponder({ form, lead, data })
       .catch((err) => console.error("[submission] Auto-responder email failed:", err.message));
   }

@@ -15,6 +15,8 @@
  * duplicated deliberately rather than silently drifting.
  */
 
+import { isBlockedHostLiteral } from "./webhookService.js";
+
 const CONDITION_OPERATORS = [
   "equals", "not_equals",
   "contains", "not_contains",
@@ -575,6 +577,9 @@ function validateWebhookRules(rules, fieldIds, label = "form_json.webhookRules")
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw { status: 400, message: `${ruleLabel}.url must use http or https` };
+    }
+    if (isBlockedHostLiteral(parsed.hostname)) {
+      throw { status: 400, message: `${ruleLabel}.url must not point at a local or private network address` };
     }
     if (rule.secret !== undefined && typeof rule.secret !== "string") {
       throw { status: 400, message: `${ruleLabel}.secret must be a string` };

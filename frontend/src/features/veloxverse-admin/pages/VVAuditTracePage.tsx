@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronDown, Globe, Plug, Route as RouteIcon, User, XCircle 
 import { Card } from '@/components/ui/Card'
 import Spinner from '@/components/ui/Spinner'
 import { useVVAuditMeta, useVVAuditTrace } from '../hooks/useVVAudit'
-import { formatDurationMs, humanize, supplierLabel } from '../audit'
+import { formatDurationMs, supplierLabel, stepLabel } from '../audit'
 import {
   AuditEmpty,
   AuditErrorState,
@@ -96,7 +96,7 @@ export default function VVAuditTracePage() {
                     <li key={c.id}>
                       <button type="button" onClick={() => open(c.id)} className="w-full rounded-md border border-gray-100 px-2 py-1.5 text-left text-xs hover:border-indigo-200">
                         <span className="font-medium">{supplierLabel(c.supplier)}</span>
-                        <span className={c.status === 'failure' ? ' text-red-600' : ' text-emerald-600'}> · {humanize(c.step)}</span>
+                        <span className={c.status === 'failure' ? ' text-red-600' : ' text-emerald-600'}> · {stepLabel(c.step)}</span>
                         {typeof c.metadata?.operation === 'string' && <span className="block truncate font-mono text-gray-500">{c.metadata.operation}</span>}
                         <span className="text-gray-500">
                           {formatDurationMs(c.durationMs)}
@@ -117,7 +117,7 @@ export default function VVAuditTracePage() {
                   {data.errors.map((er) => (
                     <li key={er.id}>
                       <button type="button" onClick={() => open(er.id)} className="w-full rounded-md border border-red-100 bg-red-50/60 px-2 py-1.5 text-left text-xs hover:border-red-300">
-                        <span className="font-medium text-red-800">{humanize(er.step)}</span>
+                        <span className="font-medium text-red-800">{stepLabel(er.step)}</span>
                         {er.errorCode && <span className="font-mono text-red-700"> · {er.errorCode}</span>}
                         {er.errorMessage && <span className="block break-words text-red-700">{er.errorMessage}</span>}
                         <AuditTime iso={er.createdAt} className="text-gray-500" />

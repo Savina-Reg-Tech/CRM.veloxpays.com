@@ -96,6 +96,7 @@ export default function VeloxEsimCustomersPage() {
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Orders</th>
               <th className="px-4 py-3 font-medium">Spent</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">Card charged (AUD)</th>
               <th className="px-4 py-3 font-medium">Currency</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Last purchase</th>
@@ -105,13 +106,13 @@ export default function VeloxEsimCustomersPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : customers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
                   No eSIM customers found.
                 </td>
               </tr>
@@ -135,6 +136,11 @@ export default function VeloxEsimCustomersPage() {
                   <td className="px-4 py-3 text-gray-700">{row.totalOrders}</td>
                   <td className="px-4 py-3 text-gray-700">
                     {formatMoney(row.totalSpent, row.totalSpentCurrency)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                    {typeof row.netCardCharged === 'number'
+                      ? formatMoney(row.netCardCharged, row.cardChargeCurrency ?? 'AUD')
+                      : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{row.preferredCurrency ?? 'USD'}</td>
                   <td className="px-4 py-3">

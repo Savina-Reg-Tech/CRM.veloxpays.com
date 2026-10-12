@@ -10,6 +10,8 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useVVUsers } from '../hooks/useVVUsers'
 import VVUserAvatar from '../components/VVUserAvatar'
 import { formatDate } from '../utils'
+import { useAuthStore } from '@/store/authStore'
+import { vvAccountStatus, vvRoleBadgeVariant, vvRoleLabel, type VVAccountStatus } from '../userAccess'
 import type { VVAdminUser, VVUserRole } from '../types'
 
 const LIMIT = 20
@@ -19,13 +21,38 @@ const LIMIT = 20
 // this list gives no way to promote anyone into those roles either — see the detail page).
 const VV_CUSTOMER_ROLES: VVUserRole[] = ['USER', 'GUEST']
 
+/** Active / Blocked / Inactive — Blocked carries "Blocked on {date}. Only an admin can unblock." */
+function AccountStatusBadge({ user }: { user: VVAdminUser }) {
+  const s = vvAccountStatus(user)
+  return (
+    <span title={s.tooltip}>
+      <Badge variant={s.variant}>{s.label}</Badge>
+    </span>
+  )
+}
+
+const STATUS_FILTERS: { value: '' | VVAccountStatus; label: string }[] = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'inactive', label: 'Inactive' },
+]
+
 export default function VVUsersListPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const debounced = useDebounce(search, 300)
   const { data, isLoading } = useVVUsers(page, debounced || undefined)
 
-  const users = (data?.users ?? []).filter((u) => VV_CUSTOMER_ROLES.includes(u.role))
+  // Staff accounts (admin / super admin / support) are managed by super admins only, so only
+  // they are offered the option to list them. Everyone else sees customers, as before.
+  const isSuperAdmin = useAuthStore((s) => s.user?.role) === 'super_admin'
+  const [includeStaff, setIncludeStaff] = useState(false)
+  const showStaff = isSuperAdmin && includeStaff
+  const [statusFilter, setStatusFilter] = useState<'' | VVAccountStatus>('')
+  const users = (data?.users ?? [])
+    .filter((u) => showStaff || VV_CUSTOMER_ROLES.includes(u.role))
+    .filter((u) => !statusFilter || vvAccountStatus(u).status === statusFilter)
   const pagination = data?.pagination
 
   const columns = [
@@ -53,18 +80,14 @@ export default function VVUsersListPage() {
       key: 'role',
       header: 'Account type',
       render: (row: VVAdminUser) => (
-        <Badge variant={row.role === 'GUEST' ? 'warning' : 'neutral'}>
-          {row.role === 'GUEST' ? 'Guest' : 'Registered'}
-        </Badge>
+        <Badge variant={vvRoleBadgeVariant(row.role)}>{vvRoleLabel(row.role)}</Badge>
       ),
     },
     {
       key: 'isActive',
       header: 'Status',
       render: (row: VVAdminUser) => (
-        <Badge variant={row.isActive ? 'success' : 'neutral'}>
-          {row.isActive ? 'Active' : 'Inactive'}
-        </Badge>
+        <AccountStatusBadge user={row} />
       ),
     },
     {
@@ -84,6 +107,33 @@ export default function VVUsersListPage() {
           Search and manage customer accounts.
         </p>
       </div>
+
+      {isSuperAdmin && (
+        <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={includeStaff}
+            onChange={(e) => setIncludeStaff(e.target.checked)}
+            className="rounded border-gray-300 text-indigo-600"
+          />
+          Include staff accounts (admin, super admin, support)
+        </label>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-gray-600">
+        Status
+        <select
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as '' | VVAccountStatus)}
+          className="h-9 rounded-lg border border-gray-300 bg-white px-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        >
+          {STATUS_FILTERS.map((f) => (
+            <option key={f.value} value={f.value}>{f.label}</option>
+          ))}
+        </select>
+        {statusFilter && <span className="text-xs text-gray-400">Applies to the accounts on this page.</span>}
+      </label>
 
       <div className="max-w-md">
         <Input

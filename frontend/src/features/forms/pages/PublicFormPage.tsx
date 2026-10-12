@@ -46,7 +46,7 @@ import { layoutFields } from '../utils/layoutFields'
 import { resolveTheme, FORM_CONTROL_TEXT_CLS } from '../utils/theme'
 import { InlineLinks } from '../utils/richText'
 import { evaluateGroup, evaluateRules, isEffectivelyRequired, resolveOnSubmitOutcome, type RuleEvaluationResult } from '../utils/rules'
-import { ensureAbsoluteUrl } from '../utils/url'
+import { ensureAbsoluteUrl, safeLinkUrl } from '../utils/url'
 import { PUBLIC_API_BASE_URL } from '@/lib/apiConfig'
 
 const PUBLIC_API = PUBLIC_API_BASE_URL
@@ -306,9 +306,130 @@ interface FieldRendererProps {
   /** Folds in any rule-driven require_field/unrequire_field override —
    * falls back to the field's own base `required` when no rule touches it. */
   effectiveRequired: boolean
+  /** File fields only — the file currently chosen for this field (kept by the page, so it
+   * survives moving between steps) and the setter for it. */
+  file?: File
+  onFileChange?: (fieldId: string, file: File | null) => void
 }
 
-function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendererProps) {
+// Mirrors the backend's limits (middleware/upload.js) so a visitor is told straight away,
+// instead of after filling in the whole form.
+const UPLOAD_ACCEPT = '.pdf,.jpg,.jpeg,.png,.doc,.docx'
+const UPLOAD_ALLOWED_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+])
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+function formatFileSize(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+/** Returns why this file can't be uploaded, or null when it's fine. */
+export function uploadProblem(file: Pick<File, 'type' | 'size' | 'name'>): string | null {
+  const byExtension = /\.(pdf|jpe?g|png|docx?)$/i.test(file.name)
+  // Some browsers report an empty type for .doc/.docx — fall back to the extension then.
+  if (file.type ? !UPLOAD_ALLOWED_TYPES.has(file.type) : !byExtension) {
+    return 'This file type is not accepted. Please upload a PDF, JPG, PNG, DOC or DOCX file.'
+  }
+  if (file.size > UPLOAD_MAX_BYTES) return 'This file is too large. The maximum size is 10 MB.'
+  return null
+}
+
+function FileField({
+  field,
+  theme,
+  borderRadius,
+  required,
+  disabled,
+  file,
+  onFileChange,
+}: {
+  field: FormField
+  theme: Theme
+  borderRadius: React.CSSProperties['borderRadius']
+  required: boolean
+  disabled: boolean
+  file?: File
+  onFileChange?: (fieldId: string, file: File | null) => void
+}) {
+  const [error, setError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = e.target.files?.[0]
+    if (!chosen) return
+    const problem = uploadProblem(chosen)
+    if (problem) {
+      setError(problem)
+      e.target.value = ''
+      return
+    }
+    setError('')
+    onFileChange?.(field.id, chosen)
+  }
+
+  const remove = () => {
+    if (inputRef.current) inputRef.current.value = ''
+    setError('')
+    onFileChange?.(field.id, null)
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        {file ? (
+          <div
+            className="flex items-center justify-between gap-3 border p-3 text-sm"
+            style={{ borderRadius, borderColor: `#${theme.primary}`, backgroundColor: `#${theme.inputBgColor}`, color: `#${theme.inputTextColor}` }}
+          >
+            <span className="min-w-0">
+              <span className="block truncate font-medium">✓ {file.name}</span>
+              <span className="block text-xs opacity-70">{formatFileSize(file.size)} · attached</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-3 text-xs font-medium">
+              <button type="button" onClick={() => inputRef.current?.click()} className="underline" style={{ color: `#${theme.primary}` }}>
+                Change
+              </button>
+              <button type="button" onClick={remove} className="underline opacity-70">
+                Remove
+              </button>
+            </span>
+          </div>
+        ) : (
+          <div
+            className="border-2 border-dashed p-4 text-center text-sm text-gray-400 hover:opacity-80 transition-opacity"
+            style={{ borderRadius, borderColor: `#${theme.inputBorderColor}` }}
+          >
+            Click to upload a file
+            <span className="mt-0.5 block text-xs">PDF, JPG, PNG, DOC or DOCX · up to 10 MB</span>
+          </div>
+        )}
+        {/* One input for both states. The file itself is held by the page (not this input), so
+            it is still there after moving to another step; `required` only bites while nothing
+            is chosen. Covers the drop zone when empty; visually hidden (opened via "Change")
+            once a file is attached. */}
+        <input
+          ref={inputRef}
+          type="file"
+          name={field.id}
+          accept={UPLOAD_ACCEPT}
+          required={required && !file}
+          disabled={disabled}
+          onChange={pick}
+          aria-label={field.label}
+          className={file ? 'sr-only' : 'absolute inset-0 h-full w-full cursor-pointer opacity-0'}
+        />
+      </div>
+      {error && <p role="alert" className="mt-1.5 text-xs text-red-600">{error}</p>}
+    </div>
+  )
+}
+
+function FieldRenderer({ field, theme, hidden, effectiveRequired, file, onFileChange }: FieldRendererProps) {
   if (field.type === 'hidden') return null
 
   // `colorScheme: 'light'` keeps native control chrome (checkbox/radio
@@ -407,13 +528,15 @@ function FieldRenderer({ field, theme, hidden, effectiveRequired }: FieldRendere
           disabled={hidden}
         />
       ) : field.type === 'file' ? (
-        <div
-          className="relative border-2 border-dashed p-4 text-center text-sm text-gray-400 cursor-pointer hover:opacity-80 transition-opacity"
-          style={{ borderRadius: inputStyle.borderRadius, borderColor: `#${theme.inputBorderColor}` }}
-        >
-          <input type="file" name={field.id} required={required} disabled={hidden} className="absolute inset-0 opacity-0 cursor-pointer" />
-          Click to upload a file
-        </div>
+        <FileField
+          field={field}
+          theme={theme}
+          borderRadius={inputStyle.borderRadius}
+          required={required}
+          disabled={hidden}
+          file={file}
+          onFileChange={onFileChange}
+        />
       ) : field.type === 'section' ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 space-y-1">
           <p className="text-sm font-semibold text-gray-900">{field.label}</p>
@@ -593,6 +716,21 @@ export default function PublicFormPage() {
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(0)
   const formDataRef = useRef<Record<string, unknown>>({})
+  // Chosen files by field id. Held here (not in the file inputs) because each step renders a
+  // fresh <form>: a file picked on an earlier step would otherwise be gone by the time the
+  // visitor submits on the last one. The ref mirrors the state for use inside handleSubmit.
+  const [files, setFiles] = useState<Record<string, File>>({})
+  const filesRef = useRef<Record<string, File>>({})
+  const hiddenFieldIdsRef = useRef<Set<string>>(new Set())
+  const handleFileChange = useCallback((fieldId: string, file: File | null) => {
+    setFiles((prev) => {
+      const next = { ...prev }
+      if (file) next[fieldId] = file
+      else delete next[fieldId]
+      filesRef.current = next
+      return next
+    })
+  }, [])
   // Steps the visitor actually came through, in order — so Back returns to
   // the step they really left, not the array-previous one (which may be a
   // step a goto_step/skip_step rule routed them past).
@@ -625,6 +763,7 @@ export default function PublicFormPage() {
       applyValueAction(formEl, action.fieldId, action.value)
     }
     setRuleState(result)
+    hiddenFieldIdsRef.current = result.hidden
     applyCheckboxGroupValidity(formEl, form.form_json.fields, result)
   }, [form])
 
@@ -723,9 +862,10 @@ export default function PublicFormPage() {
       // omit the boundary and break parsing.
       const body = new FormData()
       body.append('payload', JSON.stringify({ data, formLoadedAt: loadedAt.current }))
-      e.currentTarget.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach((input) => {
-        if (input.files?.[0]) body.append(input.name, input.files[0])
-      })
+      // Every file chosen on ANY step (see filesRef) — except for fields a rule currently hides.
+      for (const [fieldId, file] of Object.entries(filesRef.current)) {
+        if (!hiddenFieldIdsRef.current.has(fieldId)) body.append(fieldId, file)
+      }
       const res = await fetch(`${PUBLIC_API}/forms/${id}/submit`, {
         method: 'POST',
         body,
@@ -752,9 +892,11 @@ export default function PublicFormPage() {
           : resolvedAction === 'redirect_payment' ? outcome?.paymentUrl
           : undefined
       )?.trim() || undefined
-      const redirectUrl = rawRedirectUrl && resolvedAction !== 'redirect_page'
-        ? ensureAbsoluteUrl(rawRedirectUrl)
-        : rawRedirectUrl
+      // safeLinkUrl: only http(s) links and page paths may ever be navigated to — a
+      // `javascript:` URL saved on the form would otherwise run as this visitor.
+      const redirectUrl = safeLinkUrl(
+        rawRedirectUrl && resolvedAction !== 'redirect_page' ? ensureAbsoluteUrl(rawRedirectUrl) : rawRedirectUrl
+      )
       const openInNewTab = (
         resolvedAction === 'redirect_page' ? outcome?.pageOpenInNewTab
           : resolvedAction === 'redirect_url' ? outcome?.externalOpenInNewTab
@@ -869,8 +1011,8 @@ export default function PublicFormPage() {
       // alreadySubmittedRef guard makes the submit half a harmless no-op,
       // so the same button works correctly whether it's a pre-submission
       // "Open a link" option or a post-submission CTA.
-      const linkUrl = submitter?.dataset.linkUrl
-      if (linkUrl) window.open(ensureAbsoluteUrl(linkUrl), '_blank', 'noopener,noreferrer')
+      const linkUrl = safeLinkUrl(submitter?.dataset.linkUrl ? ensureAbsoluteUrl(submitter.dataset.linkUrl) : null)
+      if (linkUrl) window.open(linkUrl, '_blank', 'noopener,noreferrer')
       handleSubmit(e)
     } else if (action === 'submit') {
       handleSubmit(e)
@@ -1002,6 +1144,7 @@ export default function PublicFormPage() {
                     key={row.field.id} field={row.field} theme={theme}
                     hidden={ruleState.hidden.has(row.field.id)}
                     effectiveRequired={isEffectivelyRequired(row.field, ruleState.requiredOverride)}
+                    file={files[row.field.id]} onFileChange={handleFileChange}
                   />
                 ) : (
                   // Responsive: stack on mobile, side-by-side on sm+
@@ -1011,6 +1154,7 @@ export default function PublicFormPage() {
                         key={f.id} field={f} theme={theme}
                         hidden={ruleState.hidden.has(f.id)}
                         effectiveRequired={isEffectivelyRequired(f, ruleState.requiredOverride)}
+                        file={files[f.id]} onFileChange={handleFileChange}
                       />
                     ))}
                   </div>

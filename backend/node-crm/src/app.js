@@ -15,13 +15,29 @@ import publicFormRoutes from "./routes/publicFormRoutes.js";
 import veloxverseProxy from "./middleware/veloxverseProxy.js";
 import { AUDIT_SUPPORT_ROLE, auditSupportGuard } from "./middleware/auditSupportGuard.js";
 import { authenticate, authorizeRoles } from "./middleware/auth.js";
+import { storageStatus } from "./storage/index.js";
+
+/** @param {string | undefined} raw */
+export function parseTrustProxy(raw) {
+  const value = (raw ?? "").trim();
+  if (value === "") return 1;
+  if (/^\d+$/.test(value)) return Number(value);
+  if (value.toLowerCase() === "false") return false;
+  // "true" would trust every hop, i.e. the client's own header — never allow it.
+  if (value.toLowerCase() === "true") return 1;
+  return value.split(",").map((v) => v.trim()).filter(Boolean);
+}
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
 
-// Behind nginx/load balancers — needed so req.ip reflects the real client
-// address for the verification audit log.
-app.set("trust proxy", true);
+// Behind a load balancer req.ip must be the real client address — the rate limiters and the
+// verification audit log both key on it. Trust only the proxies we actually run: with
+// `true`, Express takes the client-supplied X-Forwarded-For at face value and every per-IP
+// limit (login, password-reset codes, public forms) can be bypassed by rotating that header.
+// TRUST_PROXY = number of proxy hops in front of this API (default 1), or a comma-separated
+// list of proxy addresses / subnets. Use 0 when the API is reached directly.
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
 
 // ── Security headers (must come BEFORE routes) ──────────────────────────────
 // Helmet sets sensible defaults for X-Content-Type-Options, X-Frame-Options,
@@ -46,7 +62,9 @@ const corsOptions = {
     // Allow same-origin/server-to-server tools without an Origin header.
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+    // Refused outright (not just "no CORS headers") — with cookie auth this is also what stops
+    // another site from driving the CRM API. A 403, not a 500 with a stack trace.
+    return callback(Object.assign(new Error("Origin not allowed"), { status: 403 }));
   },
   credentials: true,
   // The VeloxVerse audit-log CSV export reports its filename/row count in headers; a
@@ -54,8 +72,14 @@ const corsOptions = {
   exposedHeaders: ["Content-Disposition", "X-Export-Rows", "X-Export-Truncated", "X-Request-Id"],
 };
 
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+// Public form endpoints are embedded on other people's websites, so they answer any origin —
+// without credentials. They must be matched BEFORE the CRM allowlist above gets a say, or every
+// embed on a third-party site is refused (it used to surface as a 500).
+const publicCors = cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type"] });
+const crmCors = cors(corsOptions);
+export const isPublicPath = (path) => path === "/form.js" || path === "/public" || path.startsWith("/public/");
+
+app.use((req, res, next) => (isPublicPath(req.path) ? publicCors : crmCors)(req, res, next));
 
 // ── Body Parsers ────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -82,6 +106,12 @@ app.use("/api/verification", verificationRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/velox-esim", veloxEsimRoutes);
 app.use("/api/forms", formRoutes);
+
+// Where uploaded documents are stored and whether that storage is reachable — shown on the CRM
+// Settings page. Names the bucket and region only; never credentials.
+app.get("/api/storage/status", authenticate, authorizeRoles("super_admin", "admin"), async (_req, res) => {
+  res.json({ success: true, message: "Storage status", data: await storageStatus() });
+});
 
 // ── VeloxVerse customer-journey audit log — support access (Phase 2) ─
 // Support staff may READ the audit log (VeloxVerse masks customer PII for them) and
@@ -111,17 +141,9 @@ app.use(
 );
 
 // ── Public routes (no auth, wider CORS for embed) ────────────────
-// Allow any origin for public form endpoints so external websites can embed forms
-app.use("/public", (req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  next();
-}, publicFormRoutes);
+// CORS for these paths is handled at the top of the file (publicCors).
+app.use("/public", publicFormRoutes);
 app.get("/form.js", (req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  next();
-}, (req, res, next) => {
   // delegate to the public router handler
   req.url = "/form.js";
   publicFormRoutes(req, res, next);
@@ -137,8 +159,9 @@ app.use((_req, res) => {
 // Application-thrown errors that carry a 4xx status are user-facing and safe
 // to surface verbatim (e.g. validation failures).
 app.use((err, _req, res, _next) => {
-  console.error("Unhandled Error:", err.stack || err);
   const status = err.status || 500;
+  // Expected refusals (4xx) are not worth a stack trace in the logs.
+  if (status >= 500) console.error("Unhandled Error:", err.stack || err);
   const isClientError = status >= 400 && status < 500;
   const safeToShow = !isProduction || isClientError;
   res.status(status).json({

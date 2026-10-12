@@ -2,15 +2,18 @@ import QueryProvider from './providers/QueryProvider'
 import AuthProvider from './providers/AuthProvider'
 import ToastProvider from './providers/ToastProvider'
 import Router from './Router'
+import { AppErrorBoundary } from '@/components/ErrorScreen'
 
 export default function App() {
   return (
-    <QueryProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <Router />
-        </ToastProvider>
-      </AuthProvider>
-    </QueryProvider>
+    <AppErrorBoundary>
+      <QueryProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <Router />
+          </ToastProvider>
+        </AuthProvider>
+      </QueryProvider>
+    </AppErrorBoundary>
   )
 }
