@@ -2,8 +2,16 @@
 // Frontend is deployed separately via AWS Amplify (auto-builds from GitHub,
 // not part of this pipeline).
 
-pipeline {
+ pipeline {
     agent any
+
+    options {
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        pollSCM('H/5 * * * *')
+     }
 
     environment {
         AWS_REGION             = 'ap-southeast-2'
