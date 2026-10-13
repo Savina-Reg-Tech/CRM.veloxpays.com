@@ -23,7 +23,7 @@
         DB_PASSWORD      = credentials('velox-db-password')
         JWT_SECRET       = credentials('velox-jwt-secret')
         // Must exactly match the Amplify frontend origin (no trailing slash).
-        FRONTEND_URL     = 'https://main.d1912mnxcrupni.amplifyapp.com'
+        FRONTEND_URL     = 'https://crm.veloxverse.com'
         // lightsailctl needs a Docker-compatible socket; use the jenkins
         // user's rootless Podman socket (uid 981 on jenkincentos).
         DOCKER_HOST      = 'unix:///run/user/981/podman/podman.sock'
