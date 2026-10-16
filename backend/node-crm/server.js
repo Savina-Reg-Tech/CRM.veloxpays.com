@@ -7,6 +7,13 @@ import { storageStatus } from "./src/storage/index.js";
 
 assertSafeEnv();
 
+// Express 4 ignores the promise an async handler returns, so a rejection that escapes a handler's
+// try/catch lands here. Node's default for these is to exit, which would drop every in-flight
+// request for one bad download. Log it and keep serving; uncaught *exceptions* still exit.
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled promise rejection:", reason);
+});
+
 const PORT = process.env.PORT || 5002;
 
 // Verify DB is reachable, then start the HTTP server

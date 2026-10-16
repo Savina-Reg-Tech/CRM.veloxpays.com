@@ -154,7 +154,7 @@ export const handleDownloadSubmissionFile = async (req, res) => {
     }
     const descriptor = submission.submission_data?.[req.params.fieldId];
     if (!isFileDescriptor(descriptor)) return sendError(res, "File not found", 404);
-    return sendStoredFile(res, descriptor);
+    return await sendStoredFile(res, descriptor);
   } catch (err) {
     return sendError(res, err.message, err.status || 500);
   }
@@ -167,7 +167,7 @@ export const handleDownloadLeadFile = async (req, res) => {
     if (!lead) return sendError(res, "File not found", 404);
     const descriptor = lead.submission_data?.[req.params.fieldId];
     if (!isFileDescriptor(descriptor)) return sendError(res, "File not found", 404);
-    return sendStoredFile(res, descriptor);
+    return await sendStoredFile(res, descriptor);
   } catch (err) {
     return sendError(res, err.message, err.status || 500);
   }
