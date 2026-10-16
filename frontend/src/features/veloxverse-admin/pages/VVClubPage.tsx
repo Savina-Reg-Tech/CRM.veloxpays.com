@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Crown,
   Search,
@@ -13,7 +13,6 @@ import {
   TrendingUp,
   Award,
   RefreshCw,
-  Pencil,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -37,10 +36,10 @@ import {
   useVVClubAnalytics,
   useVVClubChangeLog,
 } from '../hooks/useVVClub'
-import ClubBenefitsEditor from '../components/ClubBenefitsEditor'
+import ClubTiersSheet from '../components/ClubTiersSheet'
+import { formatGb, gymVisits, supportLabel, type Edits } from '../clubSheet'
 import DualAmount from '@/components/ui/DualAmount'
 import { useVVAdminBillingActivity } from '../hooks/useVVBilling'
-import Switch from '@/components/ui/Switch'
 import { cardChargeForPayment, formatDate, formatDateTime, ownCardCharge, statusBadgeVariant } from '../utils'
 import { formatCentsIn } from '../loungeUtils'
 import { CARD_CHARGE_TOOLTIP, cardChargeLabel, centsToMajorOrNull, formatMoney } from '@/lib/utils'
@@ -52,6 +51,7 @@ import type {
   ClubPromoRow,
   ClubBenefitVersion,
   ClubMembershipStatus,
+  ClubMemberDetail,
 } from '../types'
 
 // ─────────────────────────── Constants ────────────────────────────
@@ -75,7 +75,7 @@ const BENEFIT_LABELS: Record<string, string> = {
   esim: 'Travel eSIM',
   pick_drop: 'Pick & Drop',
   meet_greet: 'Meet & Greet',
-  gym: 'Gym Access',
+  gym: 'Gym',
 }
 
 // ─────────────────────────── Error Banner ─────────────────────────
@@ -98,9 +98,7 @@ function ErrorBanner({ error }: { error: unknown }) {
  * backfilled as using the member's whole grant. */
 const ESIM_METERED_SINCE = '2026-09-24T00:00:00Z'
 
-function fmtGb(gb: number): string {
-  return `${Number(gb.toFixed(3)).toLocaleString(undefined, { maximumFractionDigits: 3 })} GB`
-}
+const fmtGb = formatGb
 
 function isPreReleaseEsimClaim(u: ClubMemberUsage, grantGb: number): boolean {
   return u.benefitKey === 'esim' && u.consumedAt < ESIM_METERED_SINCE && Number(u.units) >= grantGb
@@ -118,6 +116,30 @@ function EsimGrantSummary({ ms }: { ms: ClubMembershipDetail }) {
   )
 }
 
+/** Free-tier (Explorer) claims of this calendar year, e.g. the free 0.5 GB eSIM. */
+function ExplorerUsageBlock({ detail }: { detail: ClubMemberDetail }) {
+  const ex = detail.explorerUsage
+  if (!ex || ex.usage.length === 0) return null
+  const esimGb = ex.usage.filter((u) => u.benefitKey === 'esim').reduce((sum, u) => sum + Number(u.units ?? 0), 0)
+  return (
+    <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-gray-900">Explorer (free) usage this year</span>
+        <span className="text-xs text-gray-500">{formatDate(ex.cycleStart)} – {formatDate(ex.cycleEnd)}</span>
+      </div>
+      {esimGb > 0 && <div className="text-xs text-gray-600">Free eSIM data used: <span className="font-medium">{fmtGb(esimGb)}</span></div>}
+      <div className="flex flex-wrap gap-1">
+        {ex.usage.map((u, i) => (
+          <span key={`${u.bookingId}-${i}`} className="rounded bg-white px-2 py-0.5 text-xs text-gray-700 ring-1 ring-gray-200" title={formatDateTime(u.consumedAt)}>
+            {BENEFIT_LABELS[u.benefitKey] ?? u.benefitKey} — {u.bookingType}
+            {u.benefitKey === 'esim' ? ` · ${fmtGb(Number(u.units ?? 0))}` : ''}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // VVClubPage — 5 tabs
 // ═══════════════════════════════════════════════════════════════════
@@ -126,6 +148,9 @@ type TabKey = 'tiers' | 'members' | 'promos' | 'analytics' | 'changelog'
 
 export default function VVClubPage() {
   const [tab, setTab] = useState<TabKey>('tiers')
+  // Unsaved sheet edits live here, so switching tabs doesn't throw them away.
+  const [sheetEdits, setSheetEdits] = useState<Edits>({})
+  const hasUnsaved = Object.keys(sheetEdits).length > 0
 
   return (
     <div className="space-y-6">
@@ -140,7 +165,10 @@ export default function VVClubPage() {
       {/* Tabs */}
       <Tabs defaultValue="tiers" value={tab} onChange={(v: string) => setTab(v as TabKey)}>
         <TabsList>
-          <TabsTrigger value="tiers"><Crown className="mr-1.5 h-4 w-4" />Tiers & Benefits</TabsTrigger>
+          <TabsTrigger value="tiers">
+            <Crown className="mr-1.5 h-4 w-4" />Tiers & Benefits
+            {hasUnsaved && <span className="ml-1.5 h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />}
+          </TabsTrigger>
           <TabsTrigger value="members"><Users className="mr-1.5 h-4 w-4" />Members</TabsTrigger>
           <TabsTrigger value="promos"><Tag className="mr-1.5 h-4 w-4" />Promo Codes</TabsTrigger>
           <TabsTrigger value="analytics"><BarChart3 className="mr-1.5 h-4 w-4" />Analytics</TabsTrigger>
@@ -148,7 +176,7 @@ export default function VVClubPage() {
         </TabsList>
       </Tabs>
 
-      {tab === 'tiers' && <TiersTab />}
+      {tab === 'tiers' && <TiersTab edits={sheetEdits} onEditsChange={setSheetEdits} />}
       {tab === 'members' && <MembersTab />}
       {tab === 'promos' && <PromosTab />}
       {tab === 'analytics' && <AnalyticsTab />}
@@ -161,30 +189,19 @@ export default function VVClubPage() {
 // Tab 1 — Tiers & Benefits
 // ═══════════════════════════════════════════════════════════════════
 
-function TiersTab() {
+function TiersTab({ edits, onEditsChange }: { edits: Edits; onEditsChange: (next: Edits) => void }) {
   const { data: tiers, isLoading, error } = useVVClubTiers()
   const updateTier = useVVUpdateClubTier()
   const { showToast } = useToast()
   const [selectedTierId, setSelectedTierId] = useState<string | null>(null)
-  const [editingTier, setEditingTier] = useState<ClubTierRow | null>(null)
-  const [priceDraft, setPriceDraft] = useState<Record<string, string>>({})
   const { data: versions } = useVVClubTierBenefits(selectedTierId ?? undefined)
+  const historyRef = useRef<HTMLDivElement>(null)
 
-  function savePrice(tier: ClubTierRow) {
-    const draft = priceDraft[tier.id] ?? String((tier.annualFeeCents / 100).toFixed(2))
-    const cents = Math.round(Number(draft) * 100)
-    if (!Number.isFinite(cents) || cents < 0) {
-      showToast({ title: 'Enter a valid annual price', type: 'error' })
-      return
-    }
-    updateTier.mutate(
-      { tierId: tier.id, patch: { annualFeeCents: cents } },
-      {
-        onSuccess: () => showToast({ title: `${tier.name} price updated`, type: 'success' }),
-        onError: (e) => showToast({ title: e instanceof Error ? e.message : 'Update failed', type: 'error' }),
-      }
-    )
-  }
+  // Bring the history panel into view when a tier's History is opened — only then, not on every
+  // re-render (typing in the sheet re-renders this tab).
+  useEffect(() => {
+    if (selectedTierId) historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [selectedTierId])
 
   function toggleActive(tier: ClubTierRow, isActive: boolean) {
     updateTier.mutate(
@@ -201,97 +218,25 @@ function TiersTab() {
 
   return (
     <div className="space-y-6">
-      {/* Tier rows with edit controls */}
-      <div className="space-y-3">
-        {tiers?.map((t: ClubTierRow) => {
-          const isExplorer = t.slug === 'explorer'
-          const draft = priceDraft[t.id] ?? String((t.annualFeeCents / 100).toFixed(2))
-          return (
-            <div
-              key={t.id}
-              className="cursor-pointer"
-              onClick={() => setSelectedTierId(t.id)}
-            >
-            <Card
-              className={`transition hover:ring-2 hover:ring-primary/30 ${selectedTierId === t.id ? 'ring-2 ring-primary' : ''}`}
-              padding="none"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-violet-500 text-white">
-                    <Crown className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLORS[t.slug] ?? 'bg-gray-100 text-gray-700'}`}>
-                        {t.name}
-                      </span>
-                      <Badge variant="neutral">v{t.currentVersion ?? 1}</Badge>
-                      {!t.isActive && <Badge variant="danger">Inactive</Badge>}
-                      {!t.isPurchasable && <Badge variant="info">Default</Badge>}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {t.activeMembers} active member{t.activeMembers === 1 ? '' : 's'}
-                      {t.benefits?.point_multiplier ? ` · ${t.benefits.point_multiplier}x points` : ''}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {!isExplorer && (
-                    <>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs font-medium text-gray-500">USD</span>
-                        <Input
-                          value={draft}
-                          onChange={(e) => setPriceDraft((p) => ({ ...p, [t.id]: e.target.value }))}
-                          className="h-9 w-24"
-                        />
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={updateTier.isPending}
-                          onClick={() => savePrice(t)}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-gray-500">Active</span>
-                        <Switch
-                          checked={t.isActive}
-                          onChange={(v) => toggleActive(t, v)}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setEditingTier(t)}
-                  >
-                    <Pencil className="mr-1 h-3.5 w-3.5" /> Benefits
-                  </Button>
-                </div>
-              </div>
-            </Card>
-            </div>
-          )
-        })}
-      </div>
-
-      <ClubBenefitsEditor
-        tier={editingTier}
-        open={Boolean(editingTier)}
-        onClose={() => setEditingTier(null)}
-        onSuccess={() => showToast({ title: 'Benefits saved', type: 'success' })}
+      <ClubTiersSheet
+        tiers={tiers ?? []}
+        edits={edits}
+        onEditsChange={onEditsChange}
+        historyTierId={selectedTierId}
+        onShowHistory={(id) => setSelectedTierId((cur) => (cur === id ? null : id))}
+        onToggleActive={toggleActive}
+        togglingActive={updateTier.isPending}
       />
 
       {/* Benefit versions for selected tier */}
       {selectedTierId && (
+        <div ref={historyRef}>
         <Card>
           <div className="p-4">
-            <h3 className="text-lg font-semibold mb-4">Benefit History — {tiers?.find((t: ClubTierRow) => t.id === selectedTierId)?.name}</h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold">Benefit History — {tiers?.find((t: ClubTierRow) => t.id === selectedTierId)?.name}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedTierId(null)}>Close</Button>
+            </div>
             {!versions ? (
               <Skeleton className="h-24" />
             ) : versions.length === 0 ? (
@@ -310,8 +255,12 @@ function TiersTab() {
                     {v.changeNote && <p className="text-gray-600 mb-2">{v.changeNote}</p>}
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(v.benefits).map(([key, val]: [string, unknown]) => {
-                        if (key === 'point_multiplier') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">{String(val)}x pts</span>
-                        if (key === 'support_level') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Support: {String(val)}</span>
+                        if (key === 'point_multiplier') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">×{String(val)} points</span>
+                        if (key === 'support_level') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Support: {supportLabel(val)}</span>
+                        if (key === 'gym') {
+                          const visits = gymVisits(val)
+                          return <span key={key} className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-700">Gym: {visits === -1 ? 'unlimited' : visits === 0 ? 'none' : `${visits} / year`}</span>
+                        }
                         if (key === 'dedicated_manager') return <span key={key} className="rounded bg-gray-100 px-2 py-0.5 text-xs">Manager: {val ? 'Yes' : 'No'}</span>
                         // Not delivered by VeloxVerse yet — hidden until the feature exists.
                         if (key === 'credit_cashback_max_cents' || key === 'bank_bonus_bdt') return null
@@ -332,6 +281,7 @@ function TiersTab() {
             )}
           </div>
         </Card>
+        </div>
       )}
     </div>
   )
@@ -470,6 +420,7 @@ function MembersTab() {
                 <span className="font-medium">{memberDetail.user.name}</span> — {memberDetail.user.email}
               </div>
             )}
+            <ExplorerUsageBlock detail={memberDetail} />
             {memberDetail.memberships.map((ms: ClubMembershipDetail) => {
               const charge = ownCardCharge(ms) ?? cardChargeForPayment(memberBilling?.items, ms.paymentReferenceId)
               const chargeLabel = cardChargeLabel(ms.currency, charge?.amount, charge?.currency)

@@ -1047,7 +1047,8 @@ export interface ClubBenefits {
   esim?: ClubBenefitData
   pick_drop?: ClubBenefitQuota
   meet_greet?: ClubBenefitQuota
-  gym?: ClubBenefitBoolean
+  /** Visits per year since 16 Oct 2026; older versions may still hold the on/off shape. */
+  gym?: ClubBenefitQuota | ClubBenefitBoolean
   support_level?: string
   dedicated_manager?: boolean
   credit_cashback_max_cents?: number
@@ -1145,6 +1146,12 @@ export interface ClubMembershipDetail {
 export interface ClubMemberDetail {
   user: { id: string; name: string; email: string } | null
   memberships: ClubMembershipDetail[]
+  /** Free-tier (Explorer) claims of this calendar year, e.g. the free 0.5 GB eSIM. */
+  explorerUsage?: {
+    cycleStart: string
+    cycleEnd: string
+    usage: ClubMemberUsage[]
+  }
 }
 
 export interface ClubPromoRow {
