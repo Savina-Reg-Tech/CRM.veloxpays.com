@@ -223,11 +223,13 @@ export function canApplyApprovalTransition({
   }
 
   if (toStatus === "cancelled") {
-    return (
-      isActorRequester ||
-      actorRole === "super_admin" ||
-      actorRole === "admin"
-    );
+    if (isActorRequester) return true;
+    // Cancelling an onboarding ticket deactivates its subject, so it needs the same authority as
+    // rejecting it — otherwise an admin could deactivate a new admin/super_admin by cancelling.
+    if (kind === "user_onboarding") {
+      return canApproveOrRejectUserOnboarding(actorRole, subjectUserRole);
+    }
+    return actorRole === "super_admin" || actorRole === "admin";
   }
 
   if (kind === "generic") {

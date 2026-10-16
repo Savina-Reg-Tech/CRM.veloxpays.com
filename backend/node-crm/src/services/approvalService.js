@@ -124,7 +124,12 @@ const syncSubjectUserOnboardingActivation = async (client, row, toStatus, actor)
     }
     await User.setActive(row.subject_user_id, false, { client });
   } else if (toStatus === "approved" || toStatus === "completed") {
-    await User.setActive(row.subject_user_id, true, { client });
+    // Accounts are created active, so this only matters when someone has deactivated the
+    // subject since. Re-activating is a super_admin action (toggle-status is super_admin only);
+    // an admin approving a stale ticket must not undo a super_admin's deactivation.
+    if (actor?.role === "super_admin") {
+      await User.setActive(row.subject_user_id, true, { client });
+    }
   }
 };
 

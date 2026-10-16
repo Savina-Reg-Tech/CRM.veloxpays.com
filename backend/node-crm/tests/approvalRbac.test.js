@@ -111,6 +111,26 @@ describe("approvalRbac — transitions", () => {
     ).toBe(true);
   });
 
+  it("canApplyApprovalTransition — cancelling onboarding needs reject authority over the subject", () => {
+    const cancel = (actorRole, subjectUserRole, isActorRequester = false) =>
+      canApplyApprovalTransition({
+        actorRole,
+        kind: "user_onboarding",
+        subjectUserRole,
+        fromStatus: "pending",
+        toStatus: "cancelled",
+        isActorRequester,
+      });
+    // Cancelling deactivates the subject — an admin must not be able to do that to a super_admin.
+    expect(cancel("admin", "super_admin")).toBe(false);
+    expect(cancel("admin", "admin")).toBe(false);
+    expect(cancel("super_admin", "admin")).toBe(true);
+    expect(cancel("admin", "employee")).toBe(true);
+    expect(cancel("employee", "employee")).toBe(false);
+    // The requester can always withdraw their own ticket.
+    expect(cancel("super_admin", "super_admin", true)).toBe(true);
+  });
+
   it("canApplyApprovalTransition — generic staff moves require moderator", () => {
     expect(
       canApplyApprovalTransition({
