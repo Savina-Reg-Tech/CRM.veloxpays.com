@@ -59,9 +59,14 @@ export const handleSubmitForm = async (req, res) => {
     // as before (that widget never had file fields, so nothing is lost).
     let data, formLoadedAt;
     if (typeof req.body?.payload === "string") {
-      const parsed = JSON.parse(req.body.payload);
-      data = parsed.data;
-      formLoadedAt = parsed.formLoadedAt;
+      let parsed;
+      try {
+        parsed = JSON.parse(req.body.payload);
+      } catch {
+        throw { status: 400, message: "Submission data is not valid JSON" };
+      }
+      data = parsed?.data;
+      formLoadedAt = parsed?.formLoadedAt;
     } else {
       ({ data, formLoadedAt } = req.body);
     }
@@ -75,43 +80,66 @@ export const handleSubmitForm = async (req, res) => {
       if (looksLikeFileDescriptor(data[key])) delete data[key];
     }
 
-    // Persist any uploaded files (memory-buffered by multer) through the pluggable storage
-    // adapter, keyed onto `data[fieldId]` as a structured descriptor — same shape whether the
-    // adapter is local disk (dev) or S3 (prod), and recognized by the admin UI's
-    // SubmissionDataView to render an actual download link instead of stringifying it.
-    for (const file of req.files ?? []) {
+    // Nothing is stored for a form that doesn't exist or isn't live, or for a part that isn't one
+    // of its file fields — otherwise anyone could fill the bucket through any form id.
+    const files = req.files ?? [];
+    if (files.length > 0) {
+      const form = await getPublicForm(formId);
+      const fileFieldIds = new Set(
+        (form.form_json?.fields ?? []).filter((f) => f?.type === "file").map((f) => String(f.id))
+      );
+      if (files.some((file) => !fileFieldIds.has(file.fieldname))) {
+        throw { status: 400, message: "This form does not accept a file there." };
+      }
+    }
+    for (const file of files) {
       // The browser's content type is only a label — the file's own first bytes must agree.
       if (!contentMatchesType(file.buffer, file.mimetype)) {
         throw { status: 400, message: "One of the files does not look like a valid PDF, JPG, PNG, DOC or DOCX file." };
       }
     }
-    for (const file of req.files ?? []) {
-      const ext = FORM_UPLOAD_MIME_EXTENSION[file.mimetype] || "bin";
-      const key = `form-submissions/${formId}/${randomUUID()}.${ext}`;
-      const { storagePath } = await storage.put({
-        key,
-        buffer: file.buffer,
-        contentType: file.mimetype,
-      });
-      data[file.fieldname] = {
-        __type: "file",
-        originalName: file.originalname,
-        storagePath,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-      };
-    }
 
     const ipAddress = req.ip || req.connection?.remoteAddress || null;
     const userAgent = req.headers["user-agent"] || null;
 
-    const result = await processFormSubmission({
-      formId,
-      data,
-      formLoadedAt,
-      ipAddress,
-      userAgent,
-    });
+    const storedKeys = [];
+    let result;
+    try {
+      // Persist any uploaded files (memory-buffered by multer) through the pluggable storage
+      // adapter, keyed onto `data[fieldId]` as a structured descriptor — same shape whether the
+      // adapter is local disk (dev) or S3 (prod), and recognized by the admin UI's
+      // SubmissionDataView to render an actual download link instead of stringifying it.
+      for (const file of files) {
+        const ext = FORM_UPLOAD_MIME_EXTENSION[file.mimetype] || "bin";
+        const key = `form-submissions/${formId}/${randomUUID()}.${ext}`;
+        const { storagePath } = await storage.put({
+          key,
+          buffer: file.buffer,
+          contentType: file.mimetype,
+        });
+        storedKeys.push(storagePath);
+        data[file.fieldname] = {
+          __type: "file",
+          originalName: file.originalname,
+          storagePath,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+        };
+      }
+
+      result = await processFormSubmission({
+        formId,
+        data,
+        formLoadedAt,
+        ipAddress,
+        userAgent,
+      });
+    } catch (err) {
+      // Storing failed partway, or the submission was refused (validation, spam rules…):
+      // files already stored for it must not linger.
+      await Promise.all(storedKeys.map((key) => storage.remove(key).catch(() => {})));
+      throw err;
+    }
 
     return sendSuccess(
       res,
