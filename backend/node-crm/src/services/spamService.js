@@ -64,35 +64,58 @@ const DISPOSABLE_DOMAINS = new Set([
 ]);
 console.log(`[spamService] Disposable domain set: ${DISPOSABLE_DOMAINS.size} total (npm + GitHub conf + supplemental)`);
 
-// ── MX record cache (in-memory, 24h TTL) ─────────────────────────
+// ── MX record cache (in-memory, bounded) ─────────────────────────
 const mxCache = new Map(); // domain → { hasMx: boolean, expiresAt: number }
-const MX_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const MX_TIMEOUT   = 4000; // 4 seconds max per lookup
+const MX_CACHE_TTL    = 24 * 60 * 60 * 1000; // a domain that accepts mail: 24 hours
+const NO_MX_CACHE_TTL = 60 * 60 * 1000;      // a definite "no mail here": 1 hour
+const MX_CACHE_MAX    = 10_000;              // anonymous callers can submit any domain
+const MX_TIMEOUT      = 4000;                // 4 seconds max per lookup
+
+// Resolver answers that really mean "this domain does not receive email". Anything else
+// (timeout, SERVFAIL, refused, network trouble) says nothing about the domain itself.
+const DEFINITE_NO_MX_CODES = new Set(["ENOTFOUND", "ENODATA"]);
+
+function cacheMx(domain, hasMx) {
+  if (mxCache.size >= MX_CACHE_MAX) {
+    // Maps iterate in insertion order: drop the oldest entry.
+    mxCache.delete(mxCache.keys().next().value);
+  }
+  mxCache.set(domain, { hasMx, expiresAt: Date.now() + (hasMx ? MX_CACHE_TTL : NO_MX_CACHE_TTL) });
+}
 
 /**
  * Check whether a domain has MX records (i.e. can receive email).
- * Results are cached for 24 hours to avoid hammering DNS on repeat submissions.
- * On timeout or DNS error, defaults to "no MX" (conservative / flags as suspicious).
+ *
+ * @returns {Promise<boolean | null>} true / false for a definite DNS answer (cached), or null
+ *   when the lookup itself failed. Callers must treat null as "unknown", never as "no MX": one
+ *   slow lookup used to be cached as "no MX" for 24 hours, rejecting every lead from that domain
+ *   (gmail.com included) for a day.
  */
 async function hasMxRecords(domain) {
-  const now = Date.now();
   const cached = mxCache.get(domain);
-  if (cached && cached.expiresAt > now) return cached.hasMx;
+  if (cached && cached.expiresAt > Date.now()) return cached.hasMx;
+  if (cached) mxCache.delete(domain);
 
+  let timer;
   try {
     const records = await Promise.race([
       dns.resolveMx(domain),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("mx_timeout")), MX_TIMEOUT)
-      ),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(new Error("mx_timeout"), { code: "ETIMEOUT" })), MX_TIMEOUT);
+      }),
     ]);
     const hasMx = Array.isArray(records) && records.length > 0;
-    mxCache.set(domain, { hasMx, expiresAt: now + MX_CACHE_TTL });
+    cacheMx(domain, hasMx);
     return hasMx;
-  } catch {
-    // DNS error or timeout — treat as no MX
-    mxCache.set(domain, { hasMx: false, expiresAt: now + MX_CACHE_TTL });
-    return false;
+  } catch (err) {
+    if (DEFINITE_NO_MX_CODES.has(err?.code)) {
+      cacheMx(domain, false);
+      return false;
+    }
+    console.warn(`[spamService] MX lookup for ${domain} failed (${err?.code || err?.message}) — not judging the domain`);
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -143,7 +166,7 @@ async function calculateSpamScore({ email, timeTakenSeconds }) {
       // Skip for domains already caught above to save DNS calls.
       if (!blocked && !DISPOSABLE_DOMAINS.has(domain)) {
         const mx = await hasMxRecords(domain);
-        if (!mx) {
+        if (mx === false) {
           score += 50;
           flags.push("no_mx_records");
         }
@@ -198,7 +221,7 @@ async function validateEmail(email) {
 
   // ── MX record check ────────────────────────────────────────────
   const mx = await hasMxRecords(domain);
-  if (!mx) {
+  if (mx === false) {
     return {
       valid: false,
       reason: `"${domain}" doesn't appear to be a valid email domain. Please double-check your address.`,
