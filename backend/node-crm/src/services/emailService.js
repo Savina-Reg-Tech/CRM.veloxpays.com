@@ -1,44 +1,24 @@
 /**
- * Email service — powered by Nodemailer + Gmail app password.
+ * Email service — form-submission notifications and auto-responders.
  *
- * Uses MAIL_USER / MAIL_APP_PASSWORD env vars.
- * If not configured, all sends are silently skipped (dev-friendly).
+ * Delivery goes through the shared transport in utils/mailer.js (SMTP, or a Gmail app
+ * password via MAIL_USER / MAIL_APP_PASSWORD). If none is configured, sends are skipped.
  */
 
-import nodemailer from "nodemailer";
+import { getMailTransport, isMailConfigured, MAIL_FROM } from "../utils/mailer.js";
 import { escapeHtml, singleLine, textToHtml } from "../utils/escapeHtml.js";
-
-const MAIL_USER = process.env.MAIL_USER || "";
-const MAIL_APP_PASSWORD = process.env.MAIL_APP_PASSWORD || "";
-const MAIL_FROM = process.env.MAIL_FROM || `Velox CRM <${MAIL_USER}>`;
-
-let _transporter = null;
-
-function getTransporter() {
-  if (_transporter) return _transporter;
-  if (!MAIL_USER || !MAIL_APP_PASSWORD) return null;
-
-  _transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: MAIL_USER,
-      pass: MAIL_APP_PASSWORD,
-    },
-  });
-
-  return _transporter;
-}
 
 /**
  * Send a plain-text / HTML email.
- * Silently skips if transporter is not configured.
+ * Skips (and says so) if no mail transport is configured.
  */
 async function sendMail({ to, subject, text, html }) {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.log(`[emailService] No credentials configured — skipping email to ${to}`);
+  if (!isMailConfigured()) {
+    const log = process.env.NODE_ENV === "production" ? console.error : console.log;
+    log(`[emailService] No mail transport configured — email NOT sent ("${singleLine(subject)}")`);
     return;
   }
+  const transporter = getMailTransport();
 
   try {
     await transporter.sendMail({

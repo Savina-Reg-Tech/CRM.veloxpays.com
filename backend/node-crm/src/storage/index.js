@@ -13,8 +13,25 @@ import { s3Storage } from "./s3Storage.js";
 
 const useS3 = Boolean(process.env.S3_BUCKET);
 
+// A container's own disk is wiped at every deploy, so in production a new upload saved there is a
+// document silently lost later. Refuse new uploads instead (reads still work, for anything already
+// on disk). ALLOW_LOCAL_STORAGE=true opts back in where the disk is a persistent volume, e.g. the
+// local docker compose stack, which also runs with NODE_ENV=production.
+const localUploadsRefused =
+  !useS3 && process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_STORAGE !== "true";
+
+const refusingLocalStorage = {
+  ...localStorage,
+  put: async () => {
+    throw Object.assign(
+      new Error("File uploads are unavailable: document storage is not configured on the server."),
+      { status: 503 }
+    );
+  },
+};
+
 /** @type {{ kind: string; describe: Function; put: Function; remove: Function; getSignedUrl: Function; read: Function; check: Function }} */
-export const storage = useS3 ? s3Storage : localStorage;
+export const storage = useS3 ? s3Storage : localUploadsRefused ? refusingLocalStorage : localStorage;
 
 export { assertSafeKey, contentDisposition, contentMatchesType } from "./keys.js";
 
@@ -33,9 +50,10 @@ export async function storageStatus() {
     ok: check.ok,
     error: check.ok ? null : check.error,
     durable,
-    warning:
-      !durable && process.env.NODE_ENV === "production"
-        ? "Documents are being saved on the server's own disk. On a container host they are lost at the next deploy or restart. Set S3_BUCKET to store them in S3."
+    warning: localUploadsRefused
+      ? "S3_BUCKET is not set, so new document and form-file uploads are REFUSED (the server's own disk is lost at the next deploy). Set S3_BUCKET, or ALLOW_LOCAL_STORAGE=true if this disk is persistent."
+      : !durable && process.env.NODE_ENV === "production"
+        ? "Documents are being saved on the server's own disk (ALLOW_LOCAL_STORAGE=true). Make sure it is a persistent volume."
         : null,
   };
 }

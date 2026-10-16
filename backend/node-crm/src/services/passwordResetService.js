@@ -17,7 +17,7 @@ import crypto from "crypto";
 import User from "../models/User.js";
 import PasswordReset from "../models/PasswordReset.js";
 import { validatePassword } from "../utils/passwordPolicy.js";
-import { sendMail } from "../utils/mailer.js";
+import { sendMail, isMailConfigured } from "../utils/mailer.js";
 import { notify } from "./notificationService.js";
 import { otpEmailTemplate, passwordChangedEmailTemplate } from "../utils/emailTemplates.js";
 
@@ -46,6 +46,15 @@ const generateOtp = () => crypto.randomInt(0, 1_000_000).toString().padStart(6, 
 export const requestPasswordReset = async (email) => {
   const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
   if (!normalizedEmail) throw { status: 400, message: "Email is required" };
+
+  // Without a mail transport the code would never arrive, while the response claimed it was sent.
+  // Checked before the user lookup, so the answer is the same for every address (no enumeration).
+  if (process.env.NODE_ENV === "production" && !isMailConfigured()) {
+    throw {
+      status: 503,
+      message: "Password reset by email is temporarily unavailable. Please contact your administrator.",
+    };
+  }
 
   const user = await User.findByEmail(normalizedEmail);
   if (!user || !user.is_active) {
