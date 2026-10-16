@@ -18,11 +18,11 @@ const User = {
     return rows[0] || null;
   },
 
-  /** Find a user by primary key. */
-  findById: async (id) => {
+  /** Find a user by primary key. Pass { includePassword: true } when you need the hash. */
+  findById: async (id, { includePassword = false } = {}) => {
     const { rows } = await query(
       `SELECT id, name, email, role, is_active, account_status,
-              verification_deadline, archived_at, created_by, created_at
+              verification_deadline, archived_at, created_by, created_at${includePassword ? ", password" : ""}
          FROM users WHERE id = $1 LIMIT 1`,
       [id]
     );

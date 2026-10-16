@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
-import generateToken from "../utils/generateToken.js";
+import generateToken, { sessionVersion } from "../utils/generateToken.js";
 
 // Single generic message for every failed-login path. Returning different
 // messages or status codes for "unknown email", "deactivated", and
@@ -34,7 +34,7 @@ export const loginUser = async (email, password) => {
     throw { status: 401, message: INVALID_LOGIN_MESSAGE };
   }
 
-  const token = generateToken({ id: user.id, role: user.role });
+  const token = generateToken({ id: user.id, role: user.role, sv: sessionVersion(user.password) });
 
   return {
     token,

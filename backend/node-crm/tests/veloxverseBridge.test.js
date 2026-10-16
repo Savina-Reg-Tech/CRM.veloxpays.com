@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import jwt from "jsonwebtoken";
+import { sessionVersion } from "../src/utils/generateToken.js";
 
 const mockQuery = vi.fn();
 vi.mock("../config/db.js", () => ({
@@ -31,10 +32,10 @@ beforeEach(() => {
   upstream.mockResolvedValue({ status: 200, data: { success: true, data: {} }, headers: {} });
 });
 
-const dbUser = (over = {}) => ({ id: 7, name: "Sam", email: "sam@crm.example", role: "admin", is_active: true, account_status: "active", ...over });
+const dbUser = (over = {}) => ({ id: 7, name: "Sam", email: "sam@crm.example", role: "admin", is_active: true, account_status: "active", password: "hash", ...over });
 const actAs = (user) => mockQuery.mockResolvedValue({ rows: [user], rowCount: 1 });
 /** The session cookie as the browser holds it — its role claim may be days old. */
-const sessionCookie = (claims) => `velox_token=${jwt.sign(claims, SECRET, { algorithm: "HS256", expiresIn: "7d" })}`;
+const sessionCookie = (claims) => `velox_token=${jwt.sign({ sv: sessionVersion("hash"), ...claims }, SECRET, { algorithm: "HS256", expiresIn: "7d" })}`;
 const forwarded = () => {
   const config = upstream.mock.calls[0][0];
   const token = config.headers.Authorization.replace(/^Bearer /, "");
@@ -76,7 +77,7 @@ describe("VeloxVerse bridge — who the CRM says is acting", () => {
     actAs(dbUser({ role: "super_admin" }));
     await request(app)
       .get("/api/vv-admin/admin/users")
-      .set("Authorization", `Bearer ${jwt.sign({ id: 7, role: "admin" }, SECRET, { algorithm: "HS256" })}`);
+      .set("Authorization", `Bearer ${jwt.sign({ id: 7, role: "admin", sv: sessionVersion("hash") }, SECRET, { algorithm: "HS256" })}`);
     expect(forwarded().claims.role).toBe("super_admin");
   });
 });

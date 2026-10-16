@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import jwt from "jsonwebtoken";
+import { sessionVersion } from "../src/utils/generateToken.js";
 
 // Same approach as authRoutes.test.js: stub the DB before any app code imports it.
 const mockQuery = vi.fn();
@@ -35,7 +36,7 @@ beforeEach(() => {
   mockClient.query.mockReset();
 });
 
-const tokenFor = (id) => jwt.sign({ id }, SECRET, { algorithm: "HS256", expiresIn: "5m" });
+const tokenFor = (id) => jwt.sign({ id, sv: sessionVersion("hash") }, SECRET, { algorithm: "HS256", expiresIn: "5m" });
 const userRow = (over = {}) => ({
   id: 7,
   name: "Sam",
@@ -43,6 +44,7 @@ const userRow = (over = {}) => ({
   role: "employee",
   is_active: true,
   account_status: "active",
+  password: "hash",
   ...over,
 });
 /** Every query resolves to the acting user (authenticate's lookup) unless a test says otherwise. */

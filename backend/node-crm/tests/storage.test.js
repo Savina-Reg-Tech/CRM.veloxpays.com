@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { promises as fs } from "fs";
 import jwt from "jsonwebtoken";
+import { sessionVersion } from "../src/utils/generateToken.js";
 
 const mockQuery = vi.fn();
 vi.mock("../config/db.js", () => ({
@@ -118,9 +119,9 @@ describe("S3 setup errors are explained in plain language", () => {
 });
 
 // ── through the API ─────────────────────────────────────────────────────────
-const admin = { id: 2, name: "Admin", email: "a@crm.example", role: "admin", is_active: true, account_status: "active" };
+const admin = { id: 2, name: "Admin", email: "a@crm.example", role: "admin", is_active: true, account_status: "active", password: "hash" };
 const employee = { ...admin, id: 5, role: "employee" };
-const bearer = (id) => `Bearer ${jwt.sign({ id }, SECRET, { algorithm: "HS256", expiresIn: "5m" })}`;
+const bearer = (id) => `Bearer ${jwt.sign({ id, sv: sessionVersion("hash") }, SECRET, { algorithm: "HS256", expiresIn: "5m" })}`;
 
 /** Route every query by its SQL so one mock serves authenticate + the handler. */
 function db({ user, submission, lead }) {

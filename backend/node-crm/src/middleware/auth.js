@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { sessionVersion } from "../utils/generateToken.js";
 import { AUTH_COOKIE_NAME } from "../controllers/authController.js";
 import { roleRequiresVerification } from "../config/verificationDocs.js";
 
@@ -50,8 +51,10 @@ export const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
 
-    const user = await User.findById(decoded.id);
-    if (!user || !user.is_active) {
+    const { password, ...user } = (await User.findById(decoded.id, { includePassword: true })) ?? {};
+    // `sv` must match the current password: a reset ends every older session. Tokens without
+    // one (issued before this check, or VeloxVerse bridge tokens) are not CRM sessions.
+    if (!user.id || !user.is_active || typeof decoded.sv !== "string" || decoded.sv !== sessionVersion(password)) {
       return res.status(401).json({ success: false, message: "Session invalid" });
     }
 
