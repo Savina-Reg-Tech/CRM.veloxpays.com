@@ -20,6 +20,8 @@ const pool = new Pool({
   database: process.env.DB_NAME     || "crm_db",
   user:     process.env.DB_USER     || "postgres",
   password: process.env.DB_PASSWORD || "",
+  // Same rule as node-crm/config/db.js: SSL unless DB_SSL=false (managed Postgres requires it).
+  ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
 });
 
 // Must stay the protected account — see PROTECTED_SUPER_ADMIN_EMAIL in node-crm/src/config/crmRoles.js.
