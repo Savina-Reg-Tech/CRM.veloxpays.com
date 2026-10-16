@@ -419,6 +419,7 @@ Backend requirements behind a proxy:
 | Endpoint | Method | Expected response |
 |----------|--------|-------------------|
 | `/health` | GET | `{"status":"ok","timestamp":"..."}` |
+| `/ready` | GET | `{"status":"ok","database":"ok",...}`, or **503** when the database is unreachable. Point uptime monitoring here; keep the container health check on `/health` |
 | `/` | GET | Same as above |
 | Frontend `/` | GET | `index.html` (nginx) |
 

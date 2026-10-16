@@ -16,18 +16,48 @@ process.on("unhandledRejection", (reason) => {
 });
 
 const PORT = process.env.PORT || 5002;
+const SHUTDOWN_GRACE_MS = 10_000;
+
+/**
+ * On SIGTERM (a deploy or scale-down) stop taking new connections, let in-flight requests
+ * finish, then close the DB pool. Without this Node exited mid-request on every rollout.
+ */
+function handleShutdown(server, expiryTask) {
+  let closing = false;
+  const shutdown = (signal) => {
+    if (closing) return;
+    closing = true;
+    console.log(`🛑 ${signal} received — finishing in-flight requests`);
+    expiryTask?.stop();
+    // Don't wait forever on a hung request or keep-alive socket.
+    setTimeout(() => {
+      console.error("⏱️  Shutdown grace period over — exiting");
+      process.exit(1);
+    }, SHUTDOWN_GRACE_MS).unref();
+    server.close(() => {
+      pool.end().finally(() => {
+        console.log("👋 Shut down cleanly");
+        process.exit(0);
+      });
+    });
+    server.closeIdleConnections?.();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
 
 // Verify DB is reachable, then start the HTTP server
 pool.connect()
   .then((client) => {
     client.release();
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`   Environment : ${process.env.NODE_ENV || "development"}`);
       console.log(`   Database    : ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}`);
     });
     // Daily verification-expiry sweep (in-process scheduler).
-    startExpiryScheduler();
+    const expiryTask = startExpiryScheduler();
+    handleShutdown(server, expiryTask);
     if (isMailConfigured()) console.log(`📧 Email      : ${mailTransportKind()}`);
     else if (process.env.NODE_ENV === "production")
       console.error("❌ Email is NOT configured (set SMTP_HOST, or MAIL_USER + MAIL_APP_PASSWORD): password reset is disabled and no notifications are sent");

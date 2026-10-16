@@ -16,6 +16,7 @@ import veloxverseProxy from "./middleware/veloxverseProxy.js";
 import { AUDIT_SUPPORT_ROLE, auditSupportGuard } from "./middleware/auditSupportGuard.js";
 import { authenticate, authorizeRoles } from "./middleware/auth.js";
 import { storageStatus } from "./storage/index.js";
+import { query } from "../config/db.js";
 
 /** @param {string | undefined} raw */
 export function parseTrustProxy(raw) {
@@ -92,8 +93,20 @@ app.get("/", (_req, res) => {
 });
 
 // ── Health Check ────────────────────────────────────────────────────────────
+// Liveness: is the process up? Lightsail's health check uses this, so it deliberately does not
+// touch the database — a short DB blip must not make Lightsail recycle a healthy container.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Readiness: can this instance actually serve requests? For uptime monitoring.
+app.get("/ready", async (_req, res) => {
+  try {
+    await query("SELECT 1");
+    res.json({ status: "ok", database: "ok", timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: "unavailable", database: "unreachable", timestamp: new Date().toISOString() });
+  }
 });
 
 // ── API Routes ──────────────────────────────────────────────────────────────
