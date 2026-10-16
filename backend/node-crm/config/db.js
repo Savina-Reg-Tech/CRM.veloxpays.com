@@ -35,7 +35,33 @@ pool.on("error", (err) => {
 /**
  * Usage: query("SELECT * FROM users WHERE id = $1", [userId])
  */
-export const query = (text, params) => pool.query(text, params);
+/**
+ * Postgres errors that mean "the request was bad", not "the server broke". Controllers answer
+ * with `err.status || 500` and `err.message`, so giving these a status and a plain message turns
+ * e.g. GET /customers/abc into a 400 instead of a 500 quoting Postgres. `err.code` is kept, so
+ * services that map 23505 to their own message still can.
+ */
+const CLIENT_ERRORS = {
+  "22P02": [400, "Invalid input"],            // invalid_text_representation ('abc' for an integer id)
+  "22003": [400, "A number is out of range"], // numeric_value_out_of_range
+  "22007": [400, "Invalid date"],             // invalid_datetime_format
+  "22008": [400, "Invalid date"],             // datetime_field_overflow
+  "23505": [409, "This record already exists"], // unique_violation
+};
+
+const withHttpStatus = (err) => {
+  const mapped = err?.status === undefined && CLIENT_ERRORS[err?.code];
+  if (mapped) {
+    err.dbMessage = err.message;
+    [err.status, err.message] = mapped;
+  }
+  return err;
+};
+
+export const query = (text, params) =>
+  pool.query(text, params).catch((err) => {
+    throw withHttpStatus(err);
+  });
 
 /**
  * Remember to call client.release() when done.
