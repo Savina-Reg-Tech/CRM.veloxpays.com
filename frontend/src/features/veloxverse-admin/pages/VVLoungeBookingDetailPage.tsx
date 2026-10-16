@@ -24,6 +24,7 @@ import Badge from '@/components/ui/Badge'
 import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/app/providers/ToastProvider'
 import { CARD_CHARGE_TOOLTIP } from '@/lib/utils'
+import { safeLinkUrl } from '@/features/forms/utils/url'
 import { useVVLoungeVisitDetail } from '../hooks/useVVLounge'
 import {
   formatCentsIn,
@@ -187,6 +188,8 @@ function VoucherCard({ voucher, index }: { voucher: LoungeVoucher; index: number
   const type = (voucher.voucherType ?? voucher.type ?? '').toString().toUpperCase()
   const holder = voucher.passengerName ?? voucher.name ?? null
   const showQr = !!code && (type.includes('QR') || type === '')
+  // Partner-supplied: never let a javascript: (or data:) URL become a clickable link.
+  const voucherHref = safeLinkUrl(voucher.url)
   return (
     <div className="flex gap-4 rounded-lg border border-gray-200 p-3">
       {showQr && code && <QrBlock value={voucher.url && /^https?:/.test(voucher.url) ? voucher.url : code} />}
@@ -205,8 +208,8 @@ function VoucherCard({ voucher, index }: { voucher: LoungeVoucher; index: number
             Status: <span className="text-gray-900">{String(voucher.status)}</span>
           </p>
         )}
-        {voucher.url && !showQr && (
-          <a href={voucher.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline">
+        {voucherHref && !showQr && (
+          <a href={voucherHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline">
             Open voucher <ExternalLink className="h-3 w-3" />
           </a>
         )}
