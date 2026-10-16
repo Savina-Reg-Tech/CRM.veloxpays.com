@@ -1,4 +1,24 @@
-# Environment files — real secrets live here, never commit them
+# ── Environment files (contain secrets) ──────────────────────
 .env
 .env.local
 .env.*.local
+backend/node-crm/.env
+
+# ── OS noise ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Local document storage (S3 used in production) ───────────
+backend/node-crm/uploads/
+uploads/
+
+# ── Dependencies (installed from package-lock.json; never committed) ──
+node_modules/
+
+# ── Build output / caches ────────────────────────────────────
+dist/
+*.tsbuildinfo

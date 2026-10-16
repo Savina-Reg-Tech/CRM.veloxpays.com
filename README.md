@@ -120,17 +120,19 @@ cp backend/node-crm/.env.example backend/node-crm/.env
 | `COOKIE_SECURE` | Yes (HTTPS) | Set `true` when the site is served over HTTPS so auth cookies include the `Secure` flag |
 | `VELOX_API_URL` | If using eSIM | Base URL of the Velox eSIM service (no trailing slash) |
 | `VELOX_API_KEY` | If using eSIM | Shared API key (must match Velox eSIM `CRM_API_KEY`) |
-| `S3_BUCKET` | Prod recommended | S3 bucket for verification documents; leave empty for local disk |
+| `DB_SSL` | No | SSL to Postgres is **on** unless this is `false` (managed Postgres requires SSL; set `false` only for a local Postgres) |
+| `S3_BUCKET` | Yes (prod) | S3 bucket for verification documents and form uploads. With `NODE_ENV=production` and no bucket, new uploads are **refused** (503) |
+| `ALLOW_LOCAL_STORAGE` | No | `true` lets production store uploads on local disk without S3 — only when that disk is a persistent volume |
 | `AWS_REGION` | If S3 | AWS region (default `us-east-1`) |
 | `S3_PREFIX` | No | Key prefix inside the bucket (default `verification/`) |
 | `S3_SIGNED_URL_TTL` | No | Presigned URL lifetime in seconds (default `300`) |
 | `STORAGE_LOCAL_DIR` | Dev only | Local upload directory when `S3_BUCKET` is empty (default `uploads`) |
-| `SMTP_HOST` | Recommended | SMTP server; if empty, notification emails are logged, not sent |
+| `SMTP_HOST` | Yes (prod) | SMTP server for **all** email. If empty, the Gmail pair below is used; with neither, emails are only logged and in production "Forgot password" returns 503 |
 | `SMTP_PORT` | No | Default `587` |
 | `SMTP_SECURE` | No | `true` for TLS on port 465 |
 | `SMTP_USER` / `SMTP_PASS` | If SMTP auth | SMTP credentials |
 | `MAIL_FROM` | No | From address for SMTP notifications |
-| `MAIL_USER` / `MAIL_APP_PASSWORD` | If using forms | Gmail credentials for **form submission** emails (separate from SMTP notifications) |
+| `MAIL_USER` / `MAIL_APP_PASSWORD` | If no SMTP | Gmail account + app password, used for **all** email when `SMTP_HOST` is empty |
 | `PUBLIC_API_BASE` | Prod (embed forms) | Public URL of the API used by `/form.js` embed script, e.g. `https://api.crm.veloxpays.com` |
 | `EXPIRY_CRON_DISABLED` | No | `true` to disable in-process expiry scheduler |
 | `EXPIRY_CRON_SCHEDULE` | No | Cron expression (default `0 2 * * *` — daily at 02:00 server time) |
@@ -151,7 +153,7 @@ cp frontend/.env.example frontend/.env
 |----------|----------|-------------|
 | `VITE_API_URL` | Yes | Backend API base URL **including** `/api`, e.g. `https://api.crm.veloxpays.com/api` |
 
-`VITE_API_URL` is **baked into the JavaScript bundle at build time**. Rebuild the frontend image whenever the API URL changes.
+`VITE_API_URL` is **baked into the JavaScript bundle at build time**. Rebuild the frontend image whenever the API URL changes. A production `vite build` without it stops with an error (it used to fall back to localhost).
 
 ---
 
@@ -401,8 +403,7 @@ Backend requirements behind a proxy:
 - [ ] `COOKIE_SECURE=true` on HTTPS deployments
 - [ ] `VITE_API_URL` points to production API; frontend image rebuilt
 - [ ] `S3_BUCKET` + IAM credentials configured (do not rely on local disk)
-- [ ] SMTP configured for account/verification notifications
-- [ ] Gmail (`MAIL_USER` / `MAIL_APP_PASSWORD`) configured if form builder emails are used
+- [ ] Email configured: `SMTP_HOST` (+ credentials), or `MAIL_USER` / `MAIL_APP_PASSWORD` — startup log shows `📧 Email : SMTP` or `Gmail`
 - [ ] `PUBLIC_API_BASE` set for public form embeds (`/public/*`, `/form.js`)
 - [ ] Super admin password changed after first login
 - [ ] Velox eSIM / VeloxVerse URLs and keys configured if those features are enabled
