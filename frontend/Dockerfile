@@ -19,9 +19,10 @@ RUN npm install
 COPY . .
 
 # VITE_API_URL is baked into the bundle at build time (see src/lib/apiConfig.ts).
-# For testing/production, pass the real API URL as a build-arg — do not rely on localhost.
+# There is no default: pass the real API URL as a build-arg (docker compose passes one). Without
+# it, `vite build` stops with an error rather than shipping a bundle that calls localhost.
 
-ARG VITE_API_URL=http://localhost:5001/api
+ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
