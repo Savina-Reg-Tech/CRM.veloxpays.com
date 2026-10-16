@@ -18,14 +18,36 @@ import VerificationDocument from "../models/VerificationDocument.js";
 import { getClient } from "../../config/db.js";
 import { storage } from "../storage/index.js";
 import { notify } from "../services/notificationService.js";
+import { getProgressForUser, isWaitingOnModerators } from "../services/verificationService.js";
 
 const PURGE_FILES = process.env.EXPIRY_PURGE_FILES === "true";
 
+/** Past-deadline accounts that still owe documents — not ones only waiting on a moderator. */
+const findAccountsToChase = async (opts) => {
+  const candidates = await User.findExpiryCandidates(opts);
+  const owing = [];
+  for (const u of candidates) {
+    const progress = await getProgressForUser({ ...u, account_status: "pending" });
+    if (!isWaitingOnModerators(progress)) owing.push(u);
+  }
+  return owing;
+};
+
+/** A notification failing for one user must not stop the sweep for everyone after them. */
+const notifySafely = async (payload) => {
+  try {
+    await notify(payload);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`Expiry notification "${payload.event}" failed for user ${payload.recipient?.id}:`, err.message);
+  }
+};
+
 /** Send the "expiring in 24 hours" warning. */
 export const runExpiryWarnings = async () => {
-  const soon = await User.findExpiryCandidates({ withinHours: 24 });
+  const soon = await findAccountsToChase({ withinHours: 24 });
   for (const u of soon) {
-    await notify({
+    await notifySafely({
       recipient: u,
       event: "account_expiring_24h",
       title: "Your account expires in 24 hours",
@@ -38,7 +60,7 @@ export const runExpiryWarnings = async () => {
 
 /** Expire + soft-delete all accounts past their verification deadline. */
 export const runExpirySweep = async () => {
-  const expired = await User.findExpiryCandidates();
+  const expired = await findAccountsToChase();
   let processed = 0;
 
   for (const u of expired) {
@@ -46,6 +68,18 @@ export const runExpirySweep = async () => {
     let archivedPaths = [];
     try {
       await client.query("BEGIN");
+
+      // Re-read under a row lock: a moderator may have activated the account since the list
+      // was built, and an active account must never be expired.
+      const { rows: current } = await client.query(
+        "SELECT account_status FROM users WHERE id = $1 FOR UPDATE",
+        [u.id]
+      );
+      if (current[0]?.account_status !== "pending") {
+        await client.query("ROLLBACK");
+        client.release();
+        continue;
+      }
 
       // Expire the account (sets is_active=false + archived_at via setAccountStatus).
       await User.setAccountStatus(u.id, "expired", { client });
@@ -93,7 +127,7 @@ export const runExpirySweep = async () => {
       await Promise.all(archivedPaths.map((p) => storage.remove(p).catch(() => {})));
     }
 
-    await notify({
+    await notifySafely({
       recipient: u,
       event: "account_expired",
       title: "Your account has expired",

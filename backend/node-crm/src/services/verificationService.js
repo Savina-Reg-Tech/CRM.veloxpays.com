@@ -124,6 +124,21 @@ export const computeProgress = (role, liveDocs, accountStatus) => {
   };
 };
 
+/**
+ * Whether the user has done their part: every required document is uploaded and none was
+ * rejected, so the only thing left is a moderator's review. The expiry sweep must not punish
+ * them for a review queue that is running behind.
+ *
+ * @param {ReturnType<typeof computeProgress>} progress
+ */
+export const isWaitingOnModerators = (progress) => {
+  const required = progress.documents.filter((d) => d.required);
+  return (
+    required.length > 0 &&
+    required.every((d) => d.status === "pending" || d.status === "in_review" || d.status === "approved")
+  );
+};
+
 // ── Upload ───────────────────────────────────────────────────────────────────
 
 /**
