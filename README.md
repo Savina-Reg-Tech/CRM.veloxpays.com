@@ -133,7 +133,8 @@ cp backend/node-crm/.env.example backend/node-crm/.env
 | `SMTP_USER` / `SMTP_PASS` | If SMTP auth | SMTP credentials |
 | `MAIL_FROM` | No | From address for SMTP notifications |
 | `MAIL_USER` / `MAIL_APP_PASSWORD` | If no SMTP | Gmail account + app password, used for **all** email when `SMTP_HOST` is empty |
-| `PUBLIC_API_BASE` | Prod (embed forms) | Public URL of the API used by `/form.js` embed script, e.g. `https://api.crm.veloxpays.com` |
+| `PUBLIC_API_BASE` | Yes (prod) | Public URL of the API, used by the `/form.js` embed script, e.g. `https://api-crm.veloxverse.com`. Without it `/form.js` is built from the request host and served `no-store` |
+| `PUBLIC_APP_URL` | No | Public URL of the web app, used for iframe embed codes and form links (`/embed/:id`). Defaults to the first `ALLOWED_ORIGINS` entry |
 | `EXPIRY_CRON_DISABLED` | No | `true` to disable in-process expiry scheduler |
 | `EXPIRY_CRON_SCHEDULE` | No | Cron expression (default `0 2 * * *` — daily at 02:00 server time) |
 | `EXPIRY_PURGE_FILES` | No | `true` to delete file bytes from storage when accounts expire |

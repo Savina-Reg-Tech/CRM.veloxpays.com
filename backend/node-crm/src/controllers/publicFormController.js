@@ -5,6 +5,7 @@ import { validateEmail } from "../services/spamService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { storage, contentMatchesType } from "../storage/index.js";
 import { FORM_UPLOAD_MIME_EXTENSION } from "../middleware/upload.js";
+import { publicApiBase } from "../utils/publicUrls.js";
 
 /**
  * The part of `form_json` an anonymous visitor's browser needs to render the form. Webhook
@@ -153,14 +154,16 @@ export const handleValidateEmail = async (req, res) => {
  * schema from the API and renders the form into a target element.
  */
 export const handleServeEmbedScript = (req, res) => {
-  const apiBase = process.env.PUBLIC_API_BASE || `${req.protocol}://${req.get("host")}`;
+  const { url: apiBase, configured } = publicApiBase(req);
+  if (!apiBase) return sendError(res, "Invalid Host header", 400);
 
   const script = `
 (function(window, document) {
   'use strict';
 
   var CRMForm = {
-    _apiBase: '${apiBase}',
+    // JSON-encoded (and '<' escaped): the value can never end the string literal.
+    _apiBase: ${JSON.stringify(apiBase).replace(/</g, "\\u003c")},
 
     render: function(opts) {
       var formId = opts.formId;
@@ -303,6 +306,9 @@ export const handleServeEmbedScript = (req, res) => {
 `.trim();
 
   res.setHeader("Content-Type", "application/javascript");
-  res.setHeader("Cache-Control", "public, max-age=86400");
+  // Built from the Host header when PUBLIC_API_BASE is unset: then a shared cache must not keep
+  // it, or a request with a forged Host would serve every embedding site a script pointing at
+  // the forger's server.
+  res.setHeader("Cache-Control", configured ? "public, max-age=86400" : "private, no-store");
   res.send(script);
 };

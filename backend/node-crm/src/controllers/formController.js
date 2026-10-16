@@ -13,6 +13,7 @@ import Form from "../models/Form.js";
 import WebhookDelivery from "../models/WebhookDelivery.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { storage, contentDisposition } from "../storage/index.js";
+import { publicApiBase, publicAppBase } from "../utils/publicUrls.js";
 
 const FORM_UPLOAD_KEY_PREFIX = "form-submissions/";
 
@@ -106,12 +107,16 @@ export const handleGetEmbedCodes = async (req, res) => {
   try {
     const formId = parseInt(req.params.id, 10);
     const form = await getForm(formId);
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    // /embed/:id is a page of the web app; /form.js is served by the API. In production those
+    // are different hosts, so each code gets its own base.
+    const appBase = publicAppBase(req);
+    const { url: apiBase } = publicApiBase(req);
+    if (!appBase || !apiBase) return sendError(res, "Invalid Host header", 400);
 
     return sendSuccess(res, {
-      iframe: generateIframeEmbed(formId, baseUrl),
-      javascript: generateJsEmbed(formId, baseUrl),
-      formUrl: `${baseUrl}/embed/${formId}`,
+      iframe: generateIframeEmbed(formId, appBase),
+      javascript: generateJsEmbed(formId, apiBase),
+      formUrl: `${appBase}/embed/${formId}`,
     }, "Embed codes generated");
   } catch (err) {
     return sendError(res, err.message, err.status || 500);
