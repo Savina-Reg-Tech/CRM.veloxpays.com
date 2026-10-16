@@ -7,7 +7,7 @@
 const MIN_JWT_SECRET_LENGTH = 32;
 
 // Values that have appeared in this repo's examples / compose defaults — never acceptable.
-const PLACEHOLDER_RE = /change|your_|example|secret_?key|placeholder|do-not-use|test-secret/i;
+const PLACEHOLDER_RE = /change|your_|example|secret_?key|placeholder|do-not-use|test-secret|replace/i;
 
 /**
  * @param {NodeJS.ProcessEnv} env

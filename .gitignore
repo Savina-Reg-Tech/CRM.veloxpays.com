@@ -2,6 +2,14 @@
 .env
 .env.local
 .env.*.local
+# Production / per-environment settings (live credentials) — never commit
+.env.production
+.env.production.*
+.env.staging
+backend/node-crm/.env.production
+# …but the documented templates stay tracked
+!.env.example
+!**/.env.example
 backend/node-crm/.env
 
 # ── OS noise ─────────────────────────────────────────────────

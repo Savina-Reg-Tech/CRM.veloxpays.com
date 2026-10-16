@@ -17,7 +17,12 @@ describe("startup secret checks", () => {
     expect(findEnvProblems({ NODE_ENV: "production", JWT_SECRET: "a1b2c3d4e5f6a7b8c" }).join(" ")).toMatch(/too short/);
   });
 
-  it.each(["change_me_to_a_long_random_string_please_now", "your_super_secret_jwt_key_here_0123456789"])(
+  it.each([
+    "change_me_to_a_long_random_string_please_now",
+    "your_super_secret_jwt_key_here_0123456789",
+    // the fill-in marker in .env.production, if nobody replaced it
+    "REPLACE_WITH_JENKINS_velox-jwt-secret",
+  ])(
     "rejects the example placeholder %s in production",
     (secret) => {
       expect(findEnvProblems({ NODE_ENV: "production", JWT_SECRET: secret }).join(" ")).toMatch(/placeholder/);

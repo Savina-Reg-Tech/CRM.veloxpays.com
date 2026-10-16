@@ -5,6 +5,9 @@ node-crm/node_modules
 node-crm/.env
 node-crm/.env.local
 node-crm/.env.*.local
+node-crm/.env.production
+node-crm/.env.production.*
+node-crm/.env.staging
 
 # Build / editor noise
 node-crm/*.tsbuildinfo
