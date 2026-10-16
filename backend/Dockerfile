@@ -2,7 +2,8 @@
 #  Velox-CRM — Backend
 #  Build context: ./backend  (contains node-crm/ and database/)
 # ─────────────────────────────────────────────────────────────
-FROM node:20-alpine
+# Node 22 LTS (Node 20 reached end of life in April 2026).
+FROM node:22-alpine
 
 # Install dumb-init + wget for downloading the disposable email blocklist
 RUN apk add --no-cache dumb-init wget
@@ -33,6 +34,12 @@ RUN mkdir -p /app/data && \
 # can be run inside the container:
 #   docker compose run --rm seed
 COPY database/ ./database/
+
+# Run as the image's unprivileged `node` user, not root. It only needs to write local-disk
+# uploads (dev / ALLOW_LOCAL_STORAGE); everything else in /app stays read-only to it.
+# COPY keeps the build machine's file modes, so make the app readable regardless of them.
+RUN chmod -R a+rX /app && mkdir -p /app/uploads && chown node:node /app/uploads
+USER node
 
 EXPOSE 5002
 
