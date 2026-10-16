@@ -19,7 +19,8 @@
 
 DO $$ BEGIN
   ALTER TABLE form_templates ADD CONSTRAINT form_templates_name_key UNIQUE (name);
-EXCEPTION WHEN duplicate_object THEN null;
+-- The constraint's backing index already existing surfaces as duplicate_table (42P07).
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN null;
 END $$;
 
 INSERT INTO form_templates (name, description, theme, created_by) VALUES

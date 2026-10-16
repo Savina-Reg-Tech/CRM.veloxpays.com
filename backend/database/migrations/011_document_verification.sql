@@ -28,17 +28,25 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
-ALTER TABLE users
-  ADD COLUMN IF NOT EXISTS account_status account_status NOT NULL DEFAULT 'pending';
+-- The backfill runs only in the same step that creates the column. This file is re-run by
+-- `docker compose run --rm migrate`; an unguarded backfill would then mark every pending
+-- (is_active, not yet KYC-verified) account as 'active' and skip verification entirely.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'account_status'
+  ) THEN
+    ALTER TABLE users ADD COLUMN account_status account_status NOT NULL DEFAULT 'pending';
+    -- Existing rows: anything already active should reflect that in the new column.
+    UPDATE users SET account_status = 'active' WHERE is_active = TRUE;
+  END IF;
+END $$;
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS verification_deadline TIMESTAMPTZ;
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
-
--- Existing rows: anything already active should reflect that in the new column.
-UPDATE users SET account_status = 'active' WHERE is_active = TRUE AND account_status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_users_account_status ON users (account_status);
 
