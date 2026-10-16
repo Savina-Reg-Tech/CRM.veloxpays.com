@@ -44,6 +44,19 @@ async function sendStoredFile(res, descriptor) {
   return res.send(buffer);
 }
 
+/**
+ * One CSV cell. Text that a spreadsheet would run as a formula (= + - @, or a leading tab/CR)
+ * gets a ' prefix: submissions are typed by anonymous visitors, and an admin opens the export
+ * in Excel. Real numbers are left alone.
+ */
+export const csvCell = (v) => {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") return String(v);
+  let s = Array.isArray(v) ? v.join("; ") : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
 const parsePagination = (req) => {
   const rawLimit  = parseInt(req.query.limit, 10);
   const rawOffset = parseInt(req.query.offset, 10);
@@ -226,16 +239,8 @@ export const handleExportSubmissions = async (req, res) => {
     const extraCols = [...dataKeys];
 
     // Build CSV
-    const escape = (v) => {
-      if (v === null || v === undefined) return "";
-      const s = Array.isArray(v) ? v.join("; ") : String(v);
-      return s.includes(",") || s.includes('"') || s.includes("\n")
-        ? `"${s.replace(/"/g, '""')}"`
-        : s;
-    };
-
     const header = ["id", "email", "status", "spam_score", "time_taken_seconds", "ip_address", "submitted_at", ...extraCols];
-    const lines = [header.join(",")];
+    const lines = [header.map(csvCell).join(",")];
     rows.forEach((r) => {
       const data = r.submission_data ?? {};
       const base = [r.id, r.email, r.status, r.spam_score, r.time_taken_seconds, r.ip_address, r.created_at];
@@ -243,7 +248,7 @@ export const handleExportSubmissions = async (req, res) => {
         const v = data[k];
         return isFileDescriptor(v) ? v.originalName : v;
       });
-      lines.push([...base, ...extra].map(escape).join(","));
+      lines.push([...base, ...extra].map(csvCell).join(","));
     });
 
     const csv = lines.join("\n");
