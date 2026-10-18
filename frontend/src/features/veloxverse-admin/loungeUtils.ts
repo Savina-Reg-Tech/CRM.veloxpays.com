@@ -1,5 +1,5 @@
 import type { BadgeVariant } from '@/components/ui/Badge'
-import { formatMoney } from '@/lib/utils'
+import { formatMoney, zoneAbbr } from '@/lib/utils'
 import { statusBadgeVariant } from './utils'
 import type { LoungeVisit, LoungeVisitStatus } from './types'
 
@@ -115,6 +115,26 @@ export function formatStamp(iso?: string | null): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   return d.toLocaleString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+/** UTC ISO → "18 Oct 2026, 11:44 IST" in the viewer's zone. A stamp with no zone is read as UTC
+ * (older VeloxVerse builds passed Mint's zone-less UTC time straight through). */
+export function formatStampWithZone(iso?: string | null): string {
+  if (!iso) return '—'
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/i.test(iso.trim())
+  const d = new Date(hasZone ? iso : `${iso.trim().replace(' ', 'T')}Z`)
+  if (isNaN(d.getTime())) return iso
+  const zone = zoneAbbr(d)
+  return `${formatStamp(d.toISOString())}${zone ? ` ${zone}` : ''}`
+}
+
+/** Mint refund status → chip. Anything not APPROVED means the money did not go back by itself. */
+export function refundStatusChip(status?: string | null): { label: string; variant: 'success' | 'danger' | 'neutral' } | null {
+  if (!status) return null
+  const s = status.toUpperCase()
+  if (s === 'APPROVED') return { label: 'Refunded', variant: 'success' }
+  if (s === 'DECLINED' || s === 'FAILED') return { label: 'Refund failed — refund manually in Mint', variant: 'danger' }
+  return { label: status, variant: 'neutral' }
 }
 
 /** RECONCILING = Mint charged the card, but not for what the order asked (wrong amount or

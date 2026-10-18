@@ -391,7 +391,7 @@ function PromoRow({ promo }: { promo: PromoCode }) {
         />
       </div>
       {overrides.length > 0 && (
-        <p className="text-xs text-gray-500">
+        <p className="break-words text-xs text-gray-500">
           {overrides
             .map(([cur, a]) =>
               [

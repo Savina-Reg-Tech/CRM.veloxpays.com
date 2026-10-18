@@ -249,7 +249,7 @@ function OverviewTab({ onOpenReferrals }: { onOpenReferrals: (status?: string) =
                       {c.rewards} award{c.rewards === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <p className="mt-1 text-lg font-bold text-gray-900">{formatPoints(c.pointsInForce)}</p>
+                  <p className="mt-1 break-words text-lg font-bold text-gray-900">{formatPoints(c.pointsInForce)}</p>
                   <p className="text-xs">
                     {worth ? (
                       <span className="text-emerald-700">{worth} in force</span>
@@ -390,10 +390,12 @@ function ReferralCard({ row }: { row: ReferralRow }) {
     <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-sm font-semibold text-gray-900">{row.code ?? '—'}</p>
+          <p className="break-all font-mono text-sm font-semibold text-gray-900">{row.code ?? '—'}</p>
           <p className="text-xs text-gray-500">{formatDateTime(row.createdAt)}</p>
         </div>
-        <StatusBadge status={row.displayStatus} />
+        <div className="shrink-0">
+          <StatusBadge status={row.displayStatus} />
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-3 rounded-md bg-gray-50 p-2.5 min-[400px]:grid-cols-2">
         <div className="min-w-0">
@@ -405,7 +407,7 @@ function ReferralCard({ row }: { row: ReferralRow }) {
           <PartyCell party={row.referee} compact />
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
         <span>{row.reversalCount > 0 ? `${row.reversalCount} reversal${row.reversalCount === 1 ? '' : 's'}` : row.completedAt ? `Rewarded ${formatDate(row.completedAt)}` : 'Not rewarded yet'}</span>
         <Link to={`/dashboard/veloxverse/refer-earn/${row.id}`} className="inline-flex items-center gap-0.5 font-medium text-indigo-600">
           Details
@@ -510,7 +512,7 @@ function ReferralsTab() {
           </p>
         ) : (
           <div className={isFetching && isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
-            <div className="hidden overflow-x-auto rounded-xl border border-gray-200 md:block">
+            <div className="hidden overflow-x-auto rounded-xl border border-gray-200 lg:block">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -550,7 +552,7 @@ function ReferralsTab() {
                 </tbody>
               </table>
             </div>
-            <div className="space-y-2 md:hidden">
+            <div className="space-y-2 lg:hidden">
               {rows.map((r) => (
                 <ReferralCard key={r.id} row={r} />
               ))}
@@ -647,7 +649,7 @@ function CodeEditModal({ code, onClose }: { code: AdminReferralCode | null; onCl
       {code && (
         <form id="vv-referral-code-form" onSubmit={submit} className="space-y-4">
           <div className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 p-3">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900">Code is active</p>
               <p className="text-xs text-gray-500">
                 An inactive code is rejected when someone tries to use it. Referrals already made with it are not affected.
@@ -743,7 +745,7 @@ function CodesTab() {
           <p className="py-10 text-center text-sm text-gray-500">No codes match.</p>
         ) : (
           <div className={isFetching && isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
-            <div className="hidden overflow-x-auto rounded-xl border border-gray-200 md:block">
+            <div className="hidden overflow-x-auto rounded-xl border border-gray-200 lg:block">
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -790,19 +792,19 @@ function CodesTab() {
                 </tbody>
               </table>
             </div>
-            <div className="space-y-2 md:hidden">
+            <div className="space-y-2 lg:hidden">
               {codes.map((c) => {
                 const st = codeState(c)
                 return (
                   <div key={c.id} className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-mono text-sm font-semibold text-gray-900">{c.code}</p>
+                        <p className="break-all font-mono text-sm font-semibold text-gray-900">{c.code}</p>
                         <Link to={`/dashboard/veloxverse/users/${c.owner.id}`} className="block truncate text-xs text-gray-600 hover:text-indigo-600">
                           {personLabel(c.owner)}
                         </Link>
                       </div>
-                      <Badge variant={st.variant}>{st.label}</Badge>
+                      <Badge variant={st.variant} className="shrink-0">{st.label}</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-2 rounded-md bg-gray-50 p-2 text-xs">
                       <div>
@@ -818,7 +820,7 @@ function CodesTab() {
                         <p className="truncate font-medium text-gray-900">{c.expiresAt ? formatDate(c.expiresAt) : 'Never'}</p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <Switch
                         checked={c.isActive}
                         disabled={update.isPending}
@@ -893,7 +895,7 @@ export default function VVReferEarnPage() {
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
           <Gift className="h-6 w-6" />
         </div>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Refer &amp; Earn</h1>
           <p className="text-sm text-gray-500">Who referred whom, the points each side earned, reversals, codes and reward settings.</p>
         </div>

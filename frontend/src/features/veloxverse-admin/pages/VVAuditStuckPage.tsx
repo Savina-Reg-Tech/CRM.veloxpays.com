@@ -24,7 +24,7 @@ const AUDIT = '/dashboard/veloxverse/audit-logs'
 
 function Actions({ item }: { item: AuditStuckItem }) {
   const customerHref = useCustomerHref()
-  const link = 'rounded-md px-2 py-1 text-xs font-medium text-indigo-600 ring-1 ring-indigo-100 hover:bg-indigo-50'
+  const link = 'inline-flex min-h-11 items-center rounded-md px-3 py-1 text-sm font-medium text-indigo-600 ring-1 ring-indigo-100 hover:bg-indigo-50 lg:min-h-0 lg:px-2 lg:text-xs'
   return (
     <div className="flex flex-wrap gap-1.5">
       {item.journeyId && <Link to={`${AUDIT}/journeys/${item.journeyId}`} className={link}>Open journey</Link>}
@@ -38,11 +38,11 @@ function Details({ item }: { item: AuditStuckItem }) {
   const entries = stuckDetailEntries(item.details ?? {})
   if (!entries.length) return <span className="text-gray-400">—</span>
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-xs">
       {entries.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-gray-500">{k}</dt>
-          <dd className="min-w-0 break-words font-mono text-gray-800">{v}</dd>
+          <dd className="min-w-0 break-all font-mono text-gray-800">{v}</dd>
         </div>
       ))}
     </dl>
@@ -79,7 +79,7 @@ export default function VVAuditStuckPage() {
         <button
           type="button"
           onClick={() => setRule('')}
-          className={cn('rounded-full px-3 py-1 text-xs font-medium', !rule ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+          className={cn('min-h-11 rounded-full px-3 py-1 text-sm font-medium md:min-h-8 md:text-xs', !rule ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
         >
           All rules
         </button>
@@ -90,7 +90,7 @@ export default function VVAuditStuckPage() {
             onClick={() => setRule(r.key)}
             title={`${r.description}${r.thresholdMinutes ? ` — after ${formatMinutes(r.thresholdMinutes)}` : ''}`}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium',
+              'inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-left text-sm font-medium md:min-h-8 md:text-xs',
               rule === r.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             )}
           >
@@ -115,14 +115,14 @@ export default function VVAuditStuckPage() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    <th className="px-3 py-2.5">Severity</th>
-                    <th className="px-3 py-2.5">Problem</th>
-                    <th className="px-3 py-2.5">Customer</th>
-                    <th className="px-3 py-2.5">Service</th>
-                    <th className="px-3 py-2.5">Reference</th>
-                    <th className="px-3 py-2.5">Stuck for</th>
-                    <th className="px-3 py-2.5">Details</th>
-                    <th className="px-3 py-2.5">Actions</th>
+                    <th scope="col" className="px-3 py-2.5">Severity</th>
+                    <th scope="col" className="px-3 py-2.5">Problem</th>
+                    <th scope="col" className="px-3 py-2.5">Customer</th>
+                    <th scope="col" className="px-3 py-2.5">Service</th>
+                    <th scope="col" className="px-3 py-2.5">Reference</th>
+                    <th scope="col" className="px-3 py-2.5">Stuck for</th>
+                    <th scope="col" className="px-3 py-2.5">Details</th>
+                    <th scope="col" className="px-3 py-2.5">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -151,8 +151,8 @@ export default function VVAuditStuckPage() {
               {items.map((i) => (
                 <li key={`${i.rule}:${i.referenceId}`} className={cn('rounded-lg border p-3', i.severity === 'critical' ? 'border-red-200 bg-red-50/70' : 'border-gray-200')}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-gray-900">{i.description}</p>
-                    <SeverityBadge severity={i.severity} />
+                    <p className="min-w-0 break-words font-medium text-gray-900">{i.description}</p>
+                    <SeverityBadge severity={i.severity} className="shrink-0" />
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500">{serviceLabel(i.service)} · stuck {formatMinutes(i.minutesStuck)}</p>
                   <div className="mt-1 text-xs"><CustomerCell customer={i.customer} /></div>

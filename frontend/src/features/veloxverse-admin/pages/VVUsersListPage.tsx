@@ -94,7 +94,7 @@ export default function VVUsersListPage() {
       key: 'createdAt',
       header: 'Joined',
       render: (row: VVAdminUser) => (
-        <span className="text-gray-500">{formatDate(row.createdAt)}</span>
+        <span className="whitespace-nowrap text-gray-500">{formatDate(row.createdAt)}</span>
       ),
     },
   ]
@@ -120,7 +120,7 @@ export default function VVUsersListPage() {
         </label>
       )}
 
-      <label className="flex items-center gap-2 text-sm text-gray-600">
+      <label className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
         Status
         <select
           aria-label="Filter by status"

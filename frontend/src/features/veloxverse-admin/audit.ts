@@ -2,8 +2,18 @@
 // formatting, search-box routing and error parsing. No React here so it's unit-testable
 // (audit.test.ts).
 import type { BadgeVariant } from '@/components/ui/Badge'
-import { formatMoney } from '@/lib/utils'
-import type { EventStatus, JourneyOutcome, Severity } from './auditTypes'
+import { formatMoney, zoneAbbr } from '@/lib/utils'
+import type {
+  ApiLogDirection,
+  ApiLogOutcome,
+  ApiLogStatusClass,
+  ApiLogSummary,
+  ApiLogTruncatedBody,
+  ApiTimelineItem,
+  EventStatus,
+  JourneyOutcome,
+  Severity,
+} from './auditTypes'
 
 // ── Roles ───────────────────────────────────────────────────────────
 /** Full audit access (settings, recipients, export, unmasked data). Phase 2 adds a read-only,
@@ -193,7 +203,7 @@ export function formatAuditTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('en-GB', {
+  const local = d.toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -201,8 +211,26 @@ export function formatAuditTime(iso: string | null | undefined): string {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-    timeZoneName: 'short',
   })
+  const zone = zoneAbbr(d)
+  return zone ? `${local} ${zone}` : local
+}
+
+/** "10:21:07" in the viewer's zone — list rows (the full stamp goes in the title). */
+export function formatClockTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+/** "3 min ago" / "2 h ago" / "4 days ago". */
+export function formatRelative(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return ''
+  const ms = now - new Date(iso).getTime()
+  if (!Number.isFinite(ms)) return ''
+  if (ms < 60_000) return 'just now'
+  return `${formatMinutes(ms / 60_000)} ago`
 }
 
 /** Hover text: the exact UTC value on the wire. */
@@ -370,4 +398,254 @@ export function splitHttpStatus(record: Record<string, number>): { codes: Array<
 /** Sorted [key, count] pairs, biggest first. */
 export function sortedCounts(record: Record<string, number> | undefined): Array<[string, number]> {
   return Object.entries(record ?? {}).sort((a, b) => b[1] - a[1])
+}
+
+// ── API logs ────────────────────────────────────────────────────────
+// Badges pair a light tint with dark text of the same hue (≥ 4.5:1) and always carry a label.
+
+export const API_OUTCOME_META: Record<ApiLogOutcome, { label: string; colour: string; className: string }> = {
+  success: { label: 'Success', colour: '#16a34a', className: 'bg-green-50 text-green-800 ring-green-200' },
+  failure: { label: 'Failed', colour: '#ea580c', className: 'bg-orange-50 text-orange-800 ring-orange-200' },
+  error: { label: 'Error', colour: '#dc2626', className: 'bg-red-50 text-red-800 ring-red-200' },
+  timeout: { label: 'Timed out', colour: '#ca8a04', className: 'bg-yellow-50 text-yellow-800 ring-yellow-200' },
+  unknown: { label: 'Outcome unknown', colour: '#7c3aed', className: 'bg-violet-50 text-violet-800 ring-violet-200' },
+}
+
+export function apiOutcomeMeta(outcome: string) {
+  return API_OUTCOME_META[outcome as ApiLogOutcome] ?? { label: humanize(outcome), colour: '#6b7280', className: 'bg-gray-100 text-gray-700 ring-gray-200' }
+}
+
+export const API_DIRECTION_LABEL: Record<ApiLogDirection, string> = {
+  inbound: 'Inbound (customer / CRM)',
+  outbound: 'Supplier call',
+  webhook: 'Webhook',
+}
+
+/** Short form for rows and cards. */
+export const API_DIRECTION_SHORT: Record<ApiLogDirection, string> = { inbound: 'Inbound', outbound: 'Supplier', webhook: 'Webhook' }
+
+export const apiDirectionLabel = (d: string | null | undefined) => (d ? API_DIRECTION_LABEL[d as ApiLogDirection] ?? humanize(d) : '—')
+
+/** API-log supplier names (the journey audit keeps its own SUPPLIER_LABEL). */
+export const API_SUPPLIER_LABEL: Record<string, string> = {
+  dragonpass: 'DragonPass',
+  mint: 'Mint',
+  viatovia: 'ViaTovia',
+  esim: 'eSIM Access',
+  travelfusion: 'TravelFusion',
+  email: 'Email (SMTP)',
+  s3: 'S3 storage',
+}
+
+export const apiSupplierLabel = (s: string | null | undefined) => (s ? API_SUPPLIER_LABEL[s] ?? humanize(s) : '—')
+
+export type ApiStatusClassKey = ApiLogStatusClass | '1xx'
+
+/** null = no answer at all (timeout / network) — never "0". */
+export function statusClassOf(code: number | null | undefined): ApiStatusClassKey {
+  if (code === null || code === undefined || !Number.isFinite(code) || code < 100) return 'none'
+  if (code < 200) return '1xx'
+  if (code < 300) return '2xx'
+  if (code < 400) return '3xx'
+  if (code < 500) return '4xx'
+  return '5xx'
+}
+
+export const API_STATUS_CLASS_META: Record<ApiStatusClassKey, { label: string; className: string; colour: string }> = {
+  '1xx': { label: 'Informational', className: 'bg-gray-100 text-gray-700 ring-gray-200', colour: '#9ca3af' },
+  '2xx': { label: 'OK', className: 'bg-green-50 text-green-800 ring-green-200', colour: '#16a34a' },
+  '3xx': { label: 'Redirect', className: 'bg-blue-50 text-blue-800 ring-blue-200', colour: '#2563eb' },
+  '4xx': { label: 'Client error', className: 'bg-amber-50 text-amber-800 ring-amber-200', colour: '#d97706' },
+  '5xx': { label: 'Server error', className: 'bg-red-50 text-red-800 ring-red-200', colour: '#dc2626' },
+  none: { label: 'No answer', className: 'bg-gray-100 text-gray-700 ring-gray-300', colour: '#6b7280' },
+}
+
+/** Badge text for a status code: "502" or "No answer". */
+export function statusCodeText(code: number | null | undefined): string {
+  return statusClassOf(code) === 'none' ? 'No answer' : String(code)
+}
+
+/** API-log durations: "812 ms" / "15.0 s". */
+export function formatApiDuration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—'
+  if (ms < 1000) return `${Math.round(ms)} ms`
+  return `${(ms / 1000).toFixed(1)} s`
+}
+
+/** Amber when > 5 s, red when > 15 s. */
+export function durationTone(ms: number | null | undefined): 'normal' | 'slow' | 'very-slow' {
+  if (!ms) return 'normal'
+  if (ms > 15_000) return 'very-slow'
+  if (ms > 5_000) return 'slow'
+  return 'normal'
+}
+
+export const DURATION_TONE_CLASS = { normal: 'text-gray-700', slow: 'text-amber-700 font-medium', 'very-slow': 'text-red-700 font-semibold' } as const
+
+/** "1.2 KB" */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+const ACTOR_LABEL: Record<string, string> = { customer: 'Customer', guest: 'Guest', admin: 'Admin', support: 'Support', system: 'System' }
+export const actorLabel = (a: string | null | undefined) => (a ? ACTOR_LABEL[a] ?? humanize(a) : '—')
+
+/** The call as one line: "POST /api/v1/lounge/visits/:id/cancel" (inbound/webhook) or
+ * "DragonPass · POST /v2/orders/:id/cancel" (supplier). */
+export function apiCallText(log: Pick<ApiLogSummary, 'direction' | 'method' | 'route' | 'operation' | 'supplier' | 'url'>): string {
+  if (log.direction === 'outbound') {
+    const op = log.operation ?? [log.method, log.route ?? log.url].filter(Boolean).join(' ')
+    return log.supplier ? `${apiSupplierLabel(log.supplier)} · ${op || '—'}` : op || '—'
+  }
+  const path = log.route ?? log.operation ?? log.url ?? '—'
+  return [log.method, path].filter(Boolean).join(' ')
+}
+
+/** Who made a call, for the Customer column: email, "Guest", job name or "System". */
+export function apiActorText(log: Pick<ApiLogSummary, 'customer' | 'actor' | 'jobName'>): string {
+  if (log.customer) return log.customer.email ?? log.customer.name ?? log.customer.id
+  if (log.jobName) return log.jobName
+  return actorLabel(log.actor)
+}
+
+// ── API-log search routing ──────────────────────────────────────────
+export type ApiSearchTarget =
+  | { kind: 'empty' }
+  | { kind: 'apiRequest'; requestId: string }
+  | { kind: 'uuid'; id: string }
+  | { kind: 'apiRef'; ref: string }
+  | { kind: 'audit'; target: AuditSearchTarget }
+
+/** Which screen a search box entry goes to: request ids and job runs → API timeline by request;
+ * order numbers (LNG-, BNF-, TRF-, TKT-) and long Mint numbers → API timeline by ref; UUIDs →
+ * the page offers both views; anything else (email, browser crash code…) → the journey search. */
+export function routeSearch(raw: string): ApiSearchTarget {
+  const q = raw.trim().replace(/^ref(erence)?:\s*/i, '')
+  if (!q) return { kind: 'empty' }
+  if (/^[0-9a-f]{16}$/i.test(q)) return { kind: 'apiRequest', requestId: q.toLowerCase() }
+  if (/^job-[\w-]+$/i.test(q)) return { kind: 'apiRequest', requestId: q }
+  if (UUID_RE.test(q)) return { kind: 'uuid', id: q.toLowerCase() }
+  if (/^(LNG|BNF|TRF|TKT)-[\w-]+$/i.test(q)) return { kind: 'apiRef', ref: q.toUpperCase() }
+  if (/^\d{10,}$/.test(q)) return { kind: 'apiRef', ref: q }
+  return { kind: 'audit', target: classifyAuditSearch(q) }
+}
+
+// ── API timeline grouping ───────────────────────────────────────────
+export interface ApiTimelineGroup {
+  /** Stable React key. */
+  key: string
+  requestId: string | null
+  title: string
+  items: ApiTimelineItem[]
+  needsAttention: boolean
+}
+
+export type ApiTimelineRow =
+  | { type: 'day'; key: string; label: string }
+  | { type: 'gap'; key: string; minutes: number; label: string }
+  | { type: 'group'; key: string; group: ApiTimelineGroup }
+
+/** Gap marker threshold between two consecutive items. */
+export const TIMELINE_GAP_MINUTES = 10
+
+function itemRequestId(item: ApiTimelineItem): string | null {
+  return item.kind === 'api_log' ? item.log.requestId : item.event.requestId
+}
+
+function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
+/** "Sat 18 Oct 2026" in the viewer's zone. */
+export function formatDayLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/** "80 min later" / "3 h 5 min later" / "2 days later" */
+export function gapLabel(minutes: number): string {
+  return minutes < 180 ? `${Math.round(minutes)} min later` : `${formatMinutes(minutes)} later`
+}
+
+/** A group's title from its first inbound or webhook call (or the job / first item). */
+export function groupTitle(items: ApiTimelineItem[]): string {
+  const logs = items.flatMap((i) => (i.kind === 'api_log' ? [i.log] : []))
+  const job = logs.find((l) => l.jobName)?.jobName ?? (itemRequestId(items[0])?.startsWith('job-') ? 'run' : null)
+  const head = logs.find((l) => l.direction === 'inbound' || l.direction === 'webhook')
+  if (head?.direction === 'webhook') {
+    return `${head.supplier ? apiSupplierLabel(head.supplier) : 'Supplier'} push · webhook · ${statusCodeText(head.statusCode)}`
+  }
+  if (head) return `${actorLabel(head.actor)} · ${apiCallText(head)} · ${statusCodeText(head.statusCode)}`
+  if (job) return `Job ${job}`
+  const first = items[0]
+  if (first.kind === 'api_log') return `${apiCallText(first.log)} · ${statusCodeText(first.log.statusCode)}`
+  return `Journey · ${stepLabel(first.event.step)}`
+}
+
+/** Timeline rows, oldest first: day separators, gap markers (> 10 min between consecutive
+ * items) and request groups (consecutive items sharing a requestId). */
+export function groupTimeline(items: ApiTimelineItem[]): ApiTimelineRow[] {
+  const sorted = [...items].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+  const groups: ApiTimelineItem[][] = []
+  for (const item of sorted) {
+    const prev = groups[groups.length - 1]
+    const rid = itemRequestId(item)
+    const prevLast = prev?.[prev.length - 1]
+    const sameRequest = prevLast && rid && itemRequestId(prevLast) === rid
+    const gap = prevLast ? (new Date(item.at).getTime() - new Date(prevLast.at).getTime()) / 60_000 : 0
+    if (sameRequest && gap <= TIMELINE_GAP_MINUTES) prev.push(item)
+    else groups.push([item])
+  }
+
+  const rows: ApiTimelineRow[] = []
+  let lastDay: string | null = null
+  let lastAt: number | null = null
+  groups.forEach((g, i) => {
+    const firstAt = new Date(g[0].at)
+    const day = localDayKey(firstAt)
+    if (day !== lastDay) {
+      rows.push({ type: 'day', key: `day-${day}`, label: formatDayLabel(g[0].at) })
+      lastDay = day
+    }
+    if (lastAt !== null) {
+      const minutes = (firstAt.getTime() - lastAt) / 60_000
+      if (minutes > TIMELINE_GAP_MINUTES) rows.push({ type: 'gap', key: `gap-${i}`, minutes, label: gapLabel(minutes) })
+    }
+    const requestId = itemRequestId(g[0])
+    rows.push({
+      type: 'group',
+      key: `g-${i}-${requestId ?? 'none'}`,
+      group: {
+        key: `g-${i}`,
+        requestId,
+        title: groupTitle(g),
+        items: g,
+        needsAttention: g.some((it) => it.kind === 'api_log' && it.log.needsAttention),
+      },
+    })
+    lastAt = new Date(g[g.length - 1].at).getTime()
+  })
+  return rows
+}
+
+/** "Not stored" explanation for an empty body. */
+export function missingBodyReason(log: Pick<ApiLogSummary, 'method' | 'statusCode' | 'hasBodies'>): string {
+  if (log.method === 'GET' && statusClassOf(log.statusCode) === '2xx') return 'Not stored — successful reads are kept without bodies'
+  return 'Not stored — bodies are turned off in settings'
+}
+
+/** A stored body over 16 KB. */
+export function isTruncatedBody(body: unknown): body is ApiLogTruncatedBody {
+  return !!body && typeof body === 'object' && (body as { _truncated?: unknown })._truncated === true
+}
+
+/** A non-JSON body arrives as { text }. */
+export function textBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const keys = Object.keys(body)
+  return keys.length === 1 && keys[0] === 'text' && typeof (body as { text: unknown }).text === 'string' ? (body as { text: string }).text : null
 }

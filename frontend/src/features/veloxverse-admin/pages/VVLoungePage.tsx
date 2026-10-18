@@ -164,7 +164,7 @@ function BookingCard({ v }: { v: LoungeVisit }) {
             </p>
           </div>
         </div>
-        <Badge variant={visitStatusVariant(v)}>{visitStatusLabel(v)}</Badge>
+        <Badge variant={visitStatusVariant(v)} className="shrink-0">{visitStatusLabel(v)}</Badge>
       </div>
 
       {/* Customer */}
@@ -507,24 +507,24 @@ export default function VVLoungePage() {
 
       <Tabs defaultValue="lounge" value={activeTab} onChange={changeTab}>
         <TabsList className="overflow-x-auto">
-          <TabsTrigger value="lounge" className="gap-1.5">
+          <TabsTrigger value="lounge" className="shrink-0 gap-1.5 whitespace-nowrap">
             <Sofa className="h-3.5 w-3.5" />
             Lounge
           </TabsTrigger>
-          <TabsTrigger value="dining" className="gap-1.5">
+          <TabsTrigger value="dining" className="shrink-0 gap-1.5 whitespace-nowrap">
             <UtensilsCrossed className="h-3.5 w-3.5" />
             Dining
           </TabsTrigger>
-          <TabsTrigger value="fasttrack" className="gap-1.5">
+          <TabsTrigger value="fasttrack" className="shrink-0 gap-1.5 whitespace-nowrap">
             <Zap className="h-3.5 w-3.5" />
             Fast Track
           </TabsTrigger>
-          <TabsTrigger value="fitness" className="gap-1.5">
+          <TabsTrigger value="fitness" className="shrink-0 gap-1.5 whitespace-nowrap">
             <Dumbbell className="h-3.5 w-3.5" />
             Fitness
           </TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="memberships">Memberships</TabsTrigger>
+          <TabsTrigger value="all" className="shrink-0 whitespace-nowrap">All</TabsTrigger>
+          <TabsTrigger value="memberships" className="shrink-0 whitespace-nowrap">Memberships</TabsTrigger>
         </TabsList>
         <TabsContent value="memberships">
           <MembershipsTab />

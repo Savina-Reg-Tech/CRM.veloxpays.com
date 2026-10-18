@@ -364,7 +364,7 @@ function PriceListEditor({ lists, initialCurrency, picking, onClose }: {
                 const bad = raw.trim() !== '' && !isValidPrice(raw)
                 return (
                   <div key={t.tierId} className="space-y-1">
-                    <label htmlFor={`price-${t.slug}`} className="flex items-baseline justify-between gap-2 text-sm font-medium text-gray-700">
+                    <label htmlFor={`price-${t.slug}`} className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-sm font-medium text-gray-700">
                       {t.name}
                       <span className="text-xs font-normal text-gray-400">{lists.homeCurrency} price: {majorAmount(t.priceCents)}</span>
                     </label>

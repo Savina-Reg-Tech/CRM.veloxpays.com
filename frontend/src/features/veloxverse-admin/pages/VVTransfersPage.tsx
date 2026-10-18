@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Car,
@@ -46,6 +46,8 @@ import RefundOutcomeNotice from '../components/RefundOutcomeNotice'
 import { describeRefundOutcome, type RefundOutcome } from '../refundOutcome'
 import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
 import { EventDrawer } from '../components/audit/EventDrawer'
+import { ApiLogDrawer } from '../components/vv-audit/ApiLogDrawer'
+import { ApiTimelineSection } from '../components/vv-audit/ApiTimeline'
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   STRIPE: 'Card (Stripe)',
@@ -89,9 +91,9 @@ function StatCard({
       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tint}`}>
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-xl font-bold text-gray-900">{value}</p>
+        <p className="break-words text-xl font-bold text-gray-900">{value}</p>
       </div>
     </div>
   )
@@ -153,7 +155,7 @@ function BookingCard({
             <p className="text-sm text-gray-400">Unknown customer</p>
           )}
         </div>
-        <Badge variant={statusBadgeVariant(booking.status)}>{booking.status}</Badge>
+        <Badge variant={statusBadgeVariant(booking.status)} className="shrink-0">{booking.status}</Badge>
       </div>
 
       {unconfirmed && (
@@ -209,7 +211,7 @@ function BookingCard({
             <Car className="h-4 w-4 text-gray-300" />
           </div>
         )}
-        <span className="text-sm text-gray-700">
+        <span className="min-w-0 break-words text-sm text-gray-700">
           {[booking.vehicleMake, booking.vehicleModel].filter(Boolean).join(' ') || booking.vehicleSegment || 'Vehicle TBD'}
         </span>
       </div>
@@ -249,8 +251,8 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   if (value == null || value === '') return null
   return (
     <div className="flex flex-col gap-0.5 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium text-gray-900 sm:text-right">{value}</span>
+      <span className="shrink-0 text-gray-500">{label}</span>
+      <span className="min-w-0 break-words font-medium text-gray-900 sm:text-right">{value}</span>
     </div>
   )
 }
@@ -276,6 +278,12 @@ export default function VVTransfersPage() {
   const { data: bookings, isLoading, isError, refetch } = useVVTransferBookings(status || undefined)
 
   const [detailBooking, setDetailBooking] = useState<AdminTransferBooking | null>(null)
+  // The audit drawers (?event= / ?log=) sit outside the detail modal, whose focus trap would
+  // swallow their clicks — so the modal steps aside while one is open and comes back on close.
+  const [searchParams] = useSearchParams()
+  const auditDrawerOpen = searchParams.has('event') || searchParams.has('log')
+  // Order no. whose "API timeline" section is expanded (survives the modal stepping aside).
+  const [apiTimelineFor, setApiTimelineFor] = useState<string | null>(null)
   // How the last admin cancel's refund really ended — kept on the page until dismissed.
   const [refundOutcome, setRefundOutcome] = useState<{ outcome: RefundOutcome; subject: string } | null>(null)
   const cardChargeByOrderNo = useCardChargeByOrderNo()
@@ -509,7 +517,7 @@ export default function VVTransfersPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-500">Status:</span>
             <select
               value={status}
@@ -553,7 +561,7 @@ export default function VVTransfersPage() {
 
       {/* ── Detail modal ── */}
       <Modal
-        open={!!detailBooking}
+        open={!!detailBooking && !auditDrawerOpen}
         onClose={() => setDetailBooking(null)}
         title="Booking details"
         description={detailBooking?.orderNo}
@@ -616,17 +624,17 @@ export default function VVTransfersPage() {
             )}
             {/* Status, price, and quick reference info up top */}
             <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-gray-50 p-4">
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Badge variant={statusBadgeVariant(detailBooking.status)}>{detailBooking.status}</Badge>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                   {detailBooking.reservationNo && (
                     <button
                       type="button"
                       onClick={() => handleCopyReservation(detailBooking.reservationNo!)}
-                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 -ml-1.5 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                      className="inline-flex max-w-full items-center gap-1 break-all rounded-md px-1.5 py-0.5 -ml-1.5 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
                       title="Copy reservation number"
                     >
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-3 w-3 shrink-0" />
                       Res. {detailBooking.reservationNo}
                     </button>
                   )}
@@ -652,13 +660,13 @@ export default function VVTransfersPage() {
             <SectionCard icon={<User className="h-3.5 w-3.5" />} title="Customer">
               {detailBooking.customer ? (
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-900">{detailBooking.customer.name}</p>
+                  <p className="break-words text-sm font-medium text-gray-900">{detailBooking.customer.name}</p>
                   {detailBooking.customer.email && (
                     <a
                       href={`mailto:${detailBooking.customer.email}`}
-                      className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
+                      className="inline-flex max-w-full items-center gap-1.5 break-all text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
                     >
-                      <Mail className="h-3.5 w-3.5" />
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
                       {detailBooking.customer.email}
                     </a>
                   )}
@@ -825,10 +833,18 @@ export default function VVTransfersPage() {
             <SectionCard icon={<HistoryIcon className="h-3.5 w-3.5" />} title="Audit trail">
               <BookingAuditTrail referenceType="transfer_booking" referenceId={detailBooking.orderNo} />
             </SectionCard>
+
+            <ApiTimelineSection
+              refValue={detailBooking.orderNo}
+              open={apiTimelineFor === detailBooking.orderNo}
+              onOpenChange={(o) => setApiTimelineFor(o ? detailBooking.orderNo : null)}
+              className="border-gray-100 shadow-none"
+            />
           </div>
         )}
       </Modal>
       <EventDrawer />
+      <ApiLogDrawer />
 
       {/* ── Cancel modal ── */}
       <Modal
@@ -859,7 +875,8 @@ export default function VVTransfersPage() {
               <p className="text-sm text-gray-600">
                 This ride for{' '}
                 <span className="font-medium text-gray-900">{cancelBooking?.customer?.name ?? 'this customer'}</span> was
-                paid but never confirmed by ViaTovia. Cancelling here refunds the customer in full — it does{' '}
+                paid but never confirmed by ViaTovia. Cancelling here refunds the customer the ride price (a Flexible
+                booking&apos;s flexible booking fee is non-refundable and is kept) — it does{' '}
                 <span className="font-semibold">not</span> cancel anything at ViaTovia. If a ride does exist there,
                 use &ldquo;Link reservation&rdquo; instead. This can&apos;t be undone.
               </p>
@@ -877,8 +894,8 @@ export default function VVTransfersPage() {
             <p className="text-sm text-gray-600">
               This cancels the Pick & Drop booking for{' '}
               <span className="font-medium text-gray-900">{cancelBooking?.customer?.name ?? 'this customer'}</span> with
-              ViaTovia. Refundable bookings are refunded automatically (minus any refund-protection fee); non-refundable
-              bookings are not refunded. This can&apos;t be undone.
+              ViaTovia. Flexible booking — the customer will be refunded the ride price, excluding the non-refundable
+              flexible booking fee. Non-refundable bookings are not refunded. This can&apos;t be undone.
             </p>
           )}
           {cancelError && (

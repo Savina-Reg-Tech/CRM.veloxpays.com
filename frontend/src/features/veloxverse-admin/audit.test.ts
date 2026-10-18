@@ -159,3 +159,163 @@ describe('auditError', () => {
     expect(auditError(axiosErr(404, { message: 'Audit event not found.' })).notFound).toBe(true)
   })
 })
+
+// ── API logs ────────────────────────────────────────────────────────
+import {
+  apiCallText,
+  apiOutcomeMeta,
+  apiSupplierLabel,
+  durationTone,
+  formatApiDuration,
+  groupTimeline,
+  missingBodyReason,
+  routeSearch,
+  statusClassOf,
+  statusCodeText,
+  textBody,
+  isTruncatedBody,
+} from './audit'
+import type { ApiLogSummary, ApiTimelineItem } from './auditTypes'
+
+function apiLog(over: Partial<ApiLogSummary>): ApiLogSummary {
+  return {
+    id: 'l1', createdAt: '2026-10-18T04:51:00.000Z', direction: 'inbound', service: 'lounge', supplier: null,
+    operation: null, method: 'POST', url: null, route: '/api/v1/lounge/visits/:id/cancel', statusCode: 200,
+    outcome: 'success', needsAttention: false, isMoneyCall: false, durationMs: 120, attempt: null,
+    idempotencyKey: null, errorCode: null, errorMessage: null, actor: 'customer', jobName: null,
+    requestId: 'ab12cd34ef56ab12', journeyId: null, userId: null, refs: [], hasBodies: true,
+    bodyTruncated: false, isSensitiveMasked: false, ip: null, userAgent: null, customer: null,
+    ...over,
+  }
+}
+const logItem = (over: Partial<ApiLogSummary>): ApiTimelineItem => {
+  const log = apiLog(over)
+  return { kind: 'api_log', at: log.createdAt, log }
+}
+
+describe('API log labels', () => {
+  it('labels outcomes and keeps unknown purple', () => {
+    expect(apiOutcomeMeta('unknown').label).toBe('Outcome unknown')
+    expect(apiOutcomeMeta('unknown').colour).toBe('#7c3aed')
+    expect(apiOutcomeMeta('failure').label).toBe('Failed')
+    expect(apiOutcomeMeta('weird').label).toBe('Weird')
+  })
+
+  it('labels suppliers for API logs', () => {
+    expect(apiSupplierLabel('mint')).toBe('Mint')
+    expect(apiSupplierLabel('email')).toBe('Email (SMTP)')
+    expect(apiSupplierLabel('s3')).toBe('S3 storage')
+  })
+
+  it('describes the call', () => {
+    expect(apiCallText(apiLog({}))).toBe('POST /api/v1/lounge/visits/:id/cancel')
+    expect(apiCallText(apiLog({ direction: 'outbound', supplier: 'dragonpass', operation: 'POST /v2/orders/:id/cancel' }))).toBe(
+      'DragonPass · POST /v2/orders/:id/cancel'
+    )
+  })
+})
+
+describe('formatApiDuration', () => {
+  it('uses ms below a second and one decimal above', () => {
+    expect(formatApiDuration(812)).toBe('812 ms')
+    expect(formatApiDuration(15003)).toBe('15.0 s')
+    expect(formatApiDuration(null)).toBe('—')
+  })
+  it('flags slow calls', () => {
+    expect(durationTone(800)).toBe('normal')
+    expect(durationTone(5001)).toBe('slow')
+    expect(durationTone(15003)).toBe('very-slow')
+  })
+})
+
+describe('statusClassOf', () => {
+  it('classifies codes and treats null as no answer', () => {
+    expect(statusClassOf(200)).toBe('2xx')
+    expect(statusClassOf(301)).toBe('3xx')
+    expect(statusClassOf(404)).toBe('4xx')
+    expect(statusClassOf(502)).toBe('5xx')
+    expect(statusClassOf(null)).toBe('none')
+    expect(statusCodeText(null)).toBe('No answer')
+    expect(statusCodeText(0)).toBe('No answer')
+    expect(statusCodeText(502)).toBe('502')
+  })
+})
+
+describe('routeSearch', () => {
+  it('sends request ids and job runs to the API timeline', () => {
+    expect(routeSearch('AB12CD34EF56AB12')).toEqual({ kind: 'apiRequest', requestId: 'ab12cd34ef56ab12' })
+    expect(routeSearch('job-dragonpassReconciliation-1')).toEqual({ kind: 'apiRequest', requestId: 'job-dragonpassReconciliation-1' })
+  })
+  it('offers both views for a UUID', () => {
+    expect(routeSearch('CC2FCDD9-7E20-4FF7-A189-AC2C7AEE6877')).toEqual({ kind: 'uuid', id: 'cc2fcdd9-7e20-4ff7-a189-ac2c7aee6877' })
+  })
+  it('sends order numbers and long Mint numbers to the API timeline by ref', () => {
+    expect(routeSearch('trf-1234')).toEqual({ kind: 'apiRef', ref: 'TRF-1234' })
+    expect(routeSearch('LNG-ABC123')).toEqual({ kind: 'apiRef', ref: 'LNG-ABC123' })
+    expect(routeSearch('882736451209')).toEqual({ kind: 'apiRef', ref: '882736451209' })
+  })
+  it('falls back to the journey search', () => {
+    expect(routeSearch('jane@example.com')).toEqual({ kind: 'audit', target: { kind: 'email', email: 'jane@example.com' } })
+    expect(routeSearch('  ')).toEqual({ kind: 'empty' })
+  })
+})
+
+describe('groupTimeline', () => {
+  // The 18 Oct case: cancel times out at DragonPass, the push arrives 80 minutes later.
+  const items: ApiTimelineItem[] = [
+    logItem({ id: 'a', createdAt: '2026-10-18T04:51:00.000Z', statusCode: 502, outcome: 'error', requestId: 'r1' }),
+    logItem({
+      id: 'b', createdAt: '2026-10-18T04:51:15.000Z', direction: 'outbound', supplier: 'dragonpass',
+      operation: 'POST /v2/orders/:id/cancel', statusCode: null, outcome: 'unknown', needsAttention: true, requestId: 'r1',
+    }),
+    {
+      kind: 'audit_event', at: '2026-10-18T04:51:16.000Z',
+      event: { id: 'e1', createdAt: '2026-10-18T04:51:16.000Z', service: 'lounge', eventType: 'step', step: 'cancel_failed', status: 'failure', severity: 'high', requestId: 'r1', journeyId: null, referenceType: null, referenceId: null, errorCode: null, errorMessage: null, supplier: null },
+    },
+    logItem({ id: 'c', createdAt: '2026-10-18T06:11:16.000Z', direction: 'webhook', supplier: 'dragonpass', route: '/webhooks/dragonpass', requestId: 'r2' }),
+    logItem({ id: 'd', createdAt: '2026-10-18T06:11:17.000Z', direction: 'outbound', supplier: 'mint', operation: 'POST /v5/purchase/:id/refund', isMoneyCall: true, requestId: 'r2' }),
+  ]
+
+  it('groups by request, adds one day separator and an 80-minute gap marker', () => {
+    const rows = groupTimeline(items)
+    expect(rows.map((r) => r.type)).toEqual(['day', 'group', 'gap', 'group'])
+    const gap = rows[2]
+    expect(gap.type === 'gap' && gap.label).toBe('80 min later')
+    const [g1, g2] = rows.filter((r) => r.type === 'group').map((r) => (r.type === 'group' ? r.group : null))
+    expect(g1?.items).toHaveLength(3)
+    expect(g1?.needsAttention).toBe(true)
+    expect(g1?.title).toBe('Customer · POST /api/v1/lounge/visits/:id/cancel · 502')
+    expect(g2?.title).toBe('DragonPass push · webhook · 200')
+    expect(g2?.needsAttention).toBe(false)
+  })
+
+  it('sorts oldest first and splits a new day', () => {
+    const rows = groupTimeline([
+      logItem({ id: 'x', createdAt: '2026-10-19T12:00:00.000Z', requestId: 'r9' }),
+      logItem({ id: 'y', createdAt: '2026-10-17T12:00:00.000Z', requestId: 'r8' }),
+    ])
+    expect(rows.filter((r) => r.type === 'day')).toHaveLength(2)
+    expect(rows[1].type === 'group' && rows[1].group.items[0].at).toBe('2026-10-17T12:00:00.000Z')
+  })
+
+  it('keeps items without a request id as their own groups', () => {
+    const rows = groupTimeline([
+      logItem({ id: 'p', requestId: null }),
+      logItem({ id: 'q', createdAt: '2026-10-18T04:52:00.000Z', requestId: null }),
+    ])
+    expect(rows.filter((r) => r.type === 'group')).toHaveLength(2)
+  })
+})
+
+describe('bodies', () => {
+  it('explains a missing body', () => {
+    expect(missingBodyReason({ method: 'GET', statusCode: 200, hasBodies: false })).toMatch(/successful reads/)
+    expect(missingBodyReason({ method: 'POST', statusCode: 200, hasBodies: false })).toMatch(/turned off/)
+  })
+  it('recognises truncated and text bodies', () => {
+    expect(isTruncatedBody({ _truncated: true, _bytes: 40000, preview: '{' })).toBe(true)
+    expect(isTruncatedBody({ a: 1 })).toBe(false)
+    expect(textBody({ text: '<html>' })).toBe('<html>')
+    expect(textBody({ text: 'x', other: 1 })).toBeNull()
+  })
+})

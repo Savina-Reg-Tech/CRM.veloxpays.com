@@ -27,7 +27,7 @@ export default function RefundOutcomeNotice({
   return (
     <div role={outcome.tone === 'danger' ? 'alert' : 'status'} className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${t.box}`}>
       <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${t.iconClass}`} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 break-words">
         <p className="text-sm font-semibold">{outcome.title}</p>
         <p className="text-sm">{outcome.message}</p>
         {subject && <p className="mt-0.5 text-xs opacity-75">{subject}</p>}

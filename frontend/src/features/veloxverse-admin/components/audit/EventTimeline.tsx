@@ -71,7 +71,7 @@ export function EventTimeline({
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <StatusIcon status={e.status} />
-                  <span className={cn('font-medium', failed ? 'text-red-800' : 'text-gray-900')}>{stepLabel(e.step)}</span>
+                  <span className={cn('min-w-0 break-words font-medium', failed ? 'text-red-800' : 'text-gray-900')}>{stepLabel(e.step)}</span>
                   {e.severity !== 'info' && <SeverityBadge severity={e.severity} />}
                   {system && (
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600" title={sourceLabel(e.source)}>
@@ -83,10 +83,10 @@ export function EventTimeline({
                     <AuditTime iso={e.createdAt} />
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 break-words text-xs text-gray-500">
                   {serviceLabel(e.service)}
                   {e.supplier && ` · ${supplierLabel(e.supplier)}`}
-                  {operation && <> · <span className="font-mono">{operation}</span></>}
+                  {operation && <> · <span className="break-all font-mono">{operation}</span></>}
                   {upstream != null && ` · upstream ${String(upstream)}`}
                   {e.durationMs != null && ` · ${formatDurationMs(e.durationMs)}`}
                   {e.httpStatus != null && ` · HTTP ${e.httpStatus}`}

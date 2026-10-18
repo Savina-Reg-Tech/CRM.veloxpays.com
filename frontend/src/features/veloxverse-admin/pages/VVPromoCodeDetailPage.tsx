@@ -115,7 +115,7 @@ function ConfigItem({ label, children }: { label: string; children: ReactNode })
   return (
     <div className="min-w-0">
       <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</dt>
-      <dd className="mt-1 text-sm text-gray-900">{children}</dd>
+      <dd className="mt-1 break-words text-sm text-gray-900">{children}</dd>
     </div>
   )
 }
@@ -255,7 +255,7 @@ function StatsSection({ stats, loading }: { stats?: PromoCodeStats; loading: boo
                     {c.uses} {c.uses === 1 ? 'use' : 'uses'}
                   </span>
                 </div>
-                <p className="mt-1 text-lg font-bold text-emerald-600">{money(c.discountCents, c.currency)} saved</p>
+                <p className="mt-1 break-words text-lg font-bold text-emerald-600">{money(c.discountCents, c.currency)} saved</p>
                 <p className="text-xs text-gray-500">
                   {money(c.chargedCents, c.currency)} paid · {money(c.orderValueCents, c.currency)} order value
                 </p>
@@ -418,7 +418,7 @@ function UsageCard({ row }: { row: PromoUsageRow }) {
         </div>
       </div>
       <div className="space-y-0.5 text-xs text-gray-500">
-        <p className="text-gray-700">
+        <p className="break-words text-gray-700">
           <span className="font-medium">{row.serviceLabel}</span> · {row.description}
         </p>
         <p>
@@ -569,10 +569,10 @@ function UsageHistory({ promo }: { promo: PromoCode }) {
           </div>
         ) : (
           <div className={isFetching && isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
-            <div className="hidden md:block">
+            <div className="hidden lg:block">
               <Table columns={columns} data={rows} keyField="id" emptyMessage={emptyMessage} />
             </div>
-            <div className="space-y-2 md:hidden">
+            <div className="space-y-2 lg:hidden">
               {rows.length === 0 ? (
                 <p className="py-10 text-center text-sm text-gray-500">{emptyMessage}</p>
               ) : (
@@ -702,7 +702,7 @@ export default function VVPromoCodeDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
           <Switch
             checked={promo.isActive}
             disabled={update.isPending}
@@ -719,7 +719,7 @@ export default function VVPromoCodeDetailPage() {
       <ConfigurationCard promo={promo} />
 
       {statsError ? (
-        <Card padding="sm" className="flex items-center justify-between gap-3">
+        <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-600">Could not load usage stats.</p>
           <Button variant="outline" size="sm" onClick={() => refetchStats()}>
             <RefreshCw className="h-4 w-4" />

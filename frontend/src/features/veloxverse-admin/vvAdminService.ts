@@ -22,6 +22,7 @@ import type {
   AuditMeta, AuditEventPage, AuditEventDetail, AuditTrace, AuditJourney, AuditTimelinePage, AuditBookingTrail,
   AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
   AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult,
+  ApiLogDetailResponse, ApiLogExport, ApiLogFilters, ApiLogListResponse, ApiLogStats, ApiTimelineParams, ApiTimelineResponse,
 } from './types'
 import { limitOrZero } from './pointsLimits'
 
@@ -578,7 +579,7 @@ const AUDIT = `${VV}/admin/audit`
 function auditParams(params: object): Record<string, string | number> {
   const out: Record<string, string | number> = {}
   for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null || v === '') continue
+    if (v === undefined || v === null || v === '' || v === false) continue
     if (Array.isArray(v)) {
       if (v.length) out[k] = v.join(',')
     } else {
@@ -672,6 +673,39 @@ export const vvAuditService = {
     const { data } = await api.post<VVResponse<{ sent: boolean; email: string }>>(`${AUDIT}/alert-recipients/${encodeURIComponent(id)}/test`)
     return data.data
   },
+  // ── API logs. Lists never carry bodies; only apiLog(id) does, and VeloxVerse records that read. ──
+  async apiLogs(filters: ApiLogFilters, page: { limit?: number; cursor?: string } = {}) {
+    const { data } = await api.get<VVResponse<ApiLogListResponse>>(`${AUDIT}/api-logs`, { params: auditParams({ ...filters, ...page }) })
+    return data.data
+  },
+  async apiLog(id: string) {
+    const { data } = await api.get<VVResponse<ApiLogDetailResponse>>(`${AUDIT}/api-logs/${encodeURIComponent(id)}`)
+    return data.data
+  },
+  async apiLogTimeline(params: ApiTimelineParams) {
+    const { data } = await api.get<VVResponse<ApiTimelineResponse>>(`${AUDIT}/api-logs/timeline`, { params: auditParams(params) })
+    return data.data
+  },
+  async apiLogStats(params: { from?: string; to?: string; direction?: string[] } = {}) {
+    const { data } = await api.get<VVResponse<ApiLogStats>>(`${AUDIT}/api-logs/stats`, { params: auditParams(params) })
+    return data.data
+  },
+  /** Admin only. The proxy carries JSON only, so VeloxVerse returns the CSV text and the browser
+   * saves it. Metadata only — never bodies. */
+  async exportApiLogs(filters: ApiLogFilters): Promise<AuditExportResult> {
+    const { data } = await api.get<VVResponse<ApiLogExport>>(`${AUDIT}/api-logs/export.csv`, {
+      params: auditParams({ ...filters, format: 'json' }),
+    })
+    const { filename, csv, rows, truncated } = data.data
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    return { filename, rows, truncated }
+  },
+
   /** Streams VeloxVerse's own CSV (admin-only, formula-safe, max 10,000 rows) through the CRM
    * proxy and saves it. */
   async exportCsv(filters: AuditEventFilters): Promise<AuditExportResult> {

@@ -63,8 +63,8 @@ function StatCard({
       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tint} transition-transform group-hover:scale-110`}>
         {icon}
       </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <div className="min-w-0">
+        <p className="break-words text-2xl font-bold text-gray-900">{value}</p>
         <p className="text-xs text-gray-500">{label}</p>
         {sub && <p className="text-[11px] text-gray-400">{sub}</p>}
       </div>
@@ -95,9 +95,9 @@ function OrderStatusBars({ byStatus }: { byStatus: Record<string, number> }) {
         const color = STATUS_COLORS[status] ?? 'bg-gray-300'
         return (
           <div key={status} className="group">
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="text-gray-700 font-medium">{status.replace(/_/g, ' ')}</span>
-              <span className="text-gray-500 tabular-nums">
+            <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+              <span className="min-w-0 truncate text-gray-700 font-medium">{status.replace(/_/g, ' ')}</span>
+              <span className="shrink-0 text-gray-500 tabular-nums">
                 {count} <span className="text-gray-400 text-xs">({pct}%)</span>
               </span>
             </div>
@@ -195,12 +195,12 @@ export default function VVAnalyticsPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to dashboard
         </Link>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-lg">
               <BarChart3 className="h-6 w-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
               <p className="text-sm text-gray-500">Revenue, growth, and customer spending across all services.</p>
             </div>
@@ -208,13 +208,13 @@ export default function VVAnalyticsPage() {
 
           {/* Currency selector — converts the estimated panels (chart, spending, packages) via
               live FX rates. It never touches the real AUD card totals. */}
-          <label className="flex shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-            <Globe className="h-4 w-4 text-gray-400" />
-            <span className="text-xs font-medium text-gray-500">Show estimates in</span>
+          <label className="flex max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <Globe className="h-4 w-4 shrink-0 text-gray-400" />
+            <span className="shrink-0 text-xs font-medium text-gray-500">Show estimates in</span>
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
-              className="bg-transparent text-sm font-semibold text-gray-900 focus:outline-none"
+              className="min-w-0 bg-transparent text-sm font-semibold text-gray-900 focus:outline-none"
             >
               {ANALYTICS_CURRENCIES.map((code) => (
                 <option key={code} value={code}>
@@ -316,7 +316,7 @@ export default function VVAnalyticsPage() {
       )}
 
       {/* Period selector */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-gray-500">Period:</span>
         {PERIODS.map((p) => (
           <button
@@ -359,7 +359,7 @@ export default function VVAnalyticsPage() {
       {/* Order status breakdown — visual bars */}
       {orderStats.data && (
         <Card padding="sm">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-gray-900">Order & booking status</h2>
             <span className="text-xs text-gray-400">{orderStats.data.total} total</span>
           </div>
@@ -369,19 +369,19 @@ export default function VVAnalyticsPage() {
 
       {/* ═══════════ Customer Spending Table ═══════════ */}
       <Card padding="none">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
+          <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">Customer spending (top 20)</h2>
             <p className="text-xs text-gray-400 mt-0.5">Click a row to view customer details</p>
           </div>
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={spendingSearch}
               onChange={(e) => setSpendingSearch(e.target.value)}
               placeholder="Search customers…"
-              className="h-8 w-52 rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-colors"
+              className="h-8 w-full rounded-lg border sm:w-52 border-gray-200 bg-gray-50 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-indigo-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-colors"
             />
           </div>
         </div>
@@ -489,11 +489,11 @@ export default function VVAnalyticsPage() {
                         </span>
                         <span className="truncate text-gray-900">{p.packageName ?? p.packageCode}</span>
                       </div>
-                      <span className="shrink-0 text-gray-500 tabular-nums">
+                      <span className="shrink-0 text-right text-gray-500 tabular-nums">
                         {p.count} sold · {formatMoney(p.revenue, currency)}
                       </span>
                     </div>
-                    <div className="mt-1 ml-7 h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div className="mt-1 ml-7 h-1 overflow-hidden rounded-full bg-gray-100">
                       <div
                         className="h-full rounded-full bg-indigo-400/60 transition-all duration-500"
                         style={{ width: `${pct}%` }}
@@ -508,12 +508,12 @@ export default function VVAnalyticsPage() {
 
         {/* Recent activity */}
         <Card padding="sm">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
               <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
               <p className="mt-0.5 text-[11px] text-gray-400">Customer&rsquo;s currency, with the AUD card charge underneath</p>
             </div>
-            <TrendingUp className="h-4 w-4 text-gray-300" />
+            <TrendingUp className="h-4 w-4 shrink-0 text-gray-300" />
           </div>
           {recent.isLoading ? (
             <Skeleton className="h-40 w-full" />
@@ -538,17 +538,17 @@ export default function VVAnalyticsPage() {
                     {/* Details */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
+                        <Badge className={`shrink-0 ${ACTIVITY_TYPE_BADGE_CLASS[o.type]}`}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
                         <p className="truncate text-sm text-gray-900">{o.description}</p>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="truncate text-xs text-gray-500">{o.customer?.email ?? '—'}</p>
+                      <div className="flex min-w-0 items-center gap-2 mt-0.5">
+                        <p className="min-w-0 truncate text-xs text-gray-500">{o.customer?.email ?? '—'}</p>
                         <span className="text-gray-300">·</span>
                         <span className="shrink-0 text-[11px] text-gray-400">{timeAgo(o.createdAt)}</span>
                         {o.status && (
                           <>
                             <span className="text-gray-300">·</span>
-                            <Badge variant={statusBadgeVariant(o.status)} className="text-[10px] px-1.5 py-0">
+                            <Badge variant={statusBadgeVariant(o.status)} className="shrink-0 text-[10px] px-1.5 py-0">
                               {o.status}
                             </Badge>
                           </>

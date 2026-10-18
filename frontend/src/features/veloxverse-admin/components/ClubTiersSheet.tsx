@@ -159,7 +159,7 @@ export default function ClubTiersSheet({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-gray-900">All tiers</h2>
           <p className="text-sm text-gray-500">
             Click any value to change it. Changes stay highlighted until you save them all at once.
@@ -237,7 +237,7 @@ export default function ClubTiersSheet({
                 </span>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" size="sm" onClick={discard}>
                 <Undo2 className="mr-1.5 h-4 w-4" /> Discard
               </Button>
@@ -315,7 +315,7 @@ function TierHeaderCard({
               <div className="text-[11px] leading-snug text-gray-400">Also: {fixedPricesLine(tier)}</div>
             )}
           </div>
-          <Badge variant="neutral">v{tier.currentVersion ?? 1}</Badge>
+          <Badge variant="neutral" className="shrink-0">v{tier.currentVersion ?? 1}</Badge>
         </div>
         <div className="flex items-center gap-1 text-xs text-gray-500">
           <Users className="h-3.5 w-3.5" />

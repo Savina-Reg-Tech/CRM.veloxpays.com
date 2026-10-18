@@ -352,7 +352,7 @@ export default function VVUserDetailPage() {
                 </div>
                 <div className="min-w-0 pt-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="truncate text-xl font-bold text-gray-900">{data.user.fullName || 'Guest User'}</h1>
+                    <h1 className="max-w-full truncate text-xl font-bold text-gray-900">{data.user.fullName || 'Guest User'}</h1>
                     <Badge variant={vvRoleBadgeVariant(data.user.role)}>{vvRoleLabel(data.user.role)}</Badge>
                     {data.user.isVerified && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
@@ -365,8 +365,8 @@ export default function VVUserDetailPage() {
                       </span>
                     )}
                   </div>
-                  <p className="flex items-center gap-1.5 truncate text-sm text-gray-500">
-                    <Mail className="h-3.5 w-3.5 shrink-0" /> {data.user.email}
+                  <p className="flex min-w-0 items-center gap-1.5 text-sm text-gray-500">
+                    <Mail className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{data.user.email}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-gray-400">
                     Joined {formatDate(data.user.createdAt)}
@@ -378,7 +378,7 @@ export default function VVUserDetailPage() {
                 </div>
               </div>
               <div className="flex flex-col items-start gap-2 self-start sm:items-end sm:self-auto">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span title={accountStatus.tooltip}>
                     <Badge variant={accountStatus.variant}>{accountStatus.label}</Badge>
                   </span>
@@ -426,7 +426,7 @@ export default function VVUserDetailPage() {
           </Card>
 
           {/* ── Money ── */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
             <MoneyTile
               icon={Banknote}
               tint="bg-emerald-50 text-emerald-600"
@@ -453,7 +453,7 @@ export default function VVUserDetailPage() {
 
           {/* ── Card money: what Mint actually collected, always AUD ── */}
           <div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" title={CARD_CHARGE_TOOLTIP}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" title={CARD_CHARGE_TOOLTIP}>
               <MoneyTile
                 icon={CreditCard}
                 tint="bg-indigo-50 text-indigo-600"
@@ -492,14 +492,14 @@ export default function VVUserDetailPage() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {buckets.map((b) => (
                   <div key={b.currency} className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5">
                     <div className="flex items-center justify-between">
                       <span className="rounded bg-white px-1.5 py-0.5 text-xs font-bold text-gray-700 ring-1 ring-gray-200">{b.currency}</span>
                       <span className="text-[11px] text-gray-500">{b.orders} order{b.orders === 1 ? '' : 's'}</span>
                     </div>
-                    <p className="mt-1.5 text-base font-bold text-gray-900">{formatMoney(b.spent, b.currency)}</p>
+                    <p className="mt-1.5 break-words text-base font-bold text-gray-900">{formatMoney(b.spent, b.currency)}</p>
                     {b.refunded > 0 && (
                       <p className="text-xs text-red-600">−{formatMoney(b.refunded, b.currency)} refunded</p>
                     )}
@@ -510,7 +510,7 @@ export default function VVUserDetailPage() {
           )}
 
           {/* ── Service overview: click to jump to that service's bookings ── */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <ServiceTile icon={Wifi} tint="bg-blue-50 text-blue-600" label="eSIM orders" count={data.orders.length} active={tab === 'esim'} onClick={() => goTo('esim')} />
             <ServiceTile
               icon={Armchair}

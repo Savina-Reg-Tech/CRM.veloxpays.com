@@ -49,7 +49,7 @@ function Tooltip({ x, children }: { x: number; children: ReactNode }) {
   const pct = (x / W) * 100
   return (
     <div
-      className="pointer-events-none absolute top-0 z-10 min-w-[8rem] rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs shadow-md"
+      className="pointer-events-none absolute top-0 z-10 min-w-[8rem] max-w-[calc(100%-1rem)] rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs shadow-md"
       style={pct > 60 ? { right: `${100 - pct + 1}%` } : { left: `${pct + 1}%` }}
     >
       {children}
@@ -225,7 +225,7 @@ export function BarList({
           <>
             <span className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate text-gray-700">{i.label}</span>
-              <span className="font-semibold tabular-nums text-gray-900">{i.value.toLocaleString()}</span>
+              <span className="shrink-0 font-semibold tabular-nums text-gray-900">{i.value.toLocaleString()}</span>
             </span>
             <span className="mt-1 block h-2 overflow-hidden rounded-full bg-gray-100">
               <span className="block h-full rounded-full" style={{ width: `${(i.value / max) * 100}%`, background: i.colour ?? colour }} />
@@ -276,7 +276,7 @@ export function SegmentBar({
         {segments.map((s) => (
           <li key={s.key}>
             <button type="button" onClick={() => onSelect?.(s.key)} disabled={!s.value} className={cn('w-full rounded-lg border border-gray-100 px-2.5 py-1.5 text-left', s.value ? 'hover:border-indigo-200' : 'opacity-50')}>
-              <span className="flex items-center gap-1.5 text-xs capitalize text-gray-600"><span className="h-2 w-2 rounded-full" style={{ background: s.colour }} />{s.label}</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-xs capitalize text-gray-600"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.colour }} />{s.label}</span>
               <span className="text-base font-bold tabular-nums text-gray-900">{s.value.toLocaleString()}</span>
             </button>
           </li>
@@ -297,8 +297,8 @@ export function Funnel({ steps }: { steps: Array<{ step: string; label: string; 
         return (
           <li key={s.step}>
             <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-gray-700">{s.label}</span>
-              <span className="tabular-nums text-gray-900">
+              <span className="min-w-0 truncate text-gray-700">{s.label}</span>
+              <span className="shrink-0 tabular-nums text-gray-900">
                 <span className="font-semibold">{value.toLocaleString()}</span>
                 <span className="text-gray-500">{s.step === 'search' ? ' searches' : ' journeys'}</span>
                 {s.conversion !== null && <span className="ml-2 font-semibold text-indigo-700">{s.conversion}%</span>}

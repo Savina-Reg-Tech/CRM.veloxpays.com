@@ -25,7 +25,7 @@ function PartyCard({ title, party, note }: { title: string; party: ReferralParty
     <Card padding="sm" className="sm:p-5">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
-        {!party.isActive && <Badge variant="danger">Blocked</Badge>}
+        {!party.isActive && <Badge variant="danger" className="shrink-0">Blocked</Badge>}
       </div>
       <Link to={`/dashboard/veloxverse/users/${party.id}`} className="mt-2 block truncate text-base font-semibold text-gray-900 hover:text-indigo-600">
         {personLabel(party)}
@@ -34,7 +34,7 @@ function PartyCard({ title, party, note }: { title: string; party: ReferralParty
       <div className="mt-3 flex flex-wrap items-end justify-between gap-2 rounded-lg bg-gray-50 p-3">
         <div>
           <p className="text-xs text-gray-500">Points in force</p>
-          <p className="text-xl font-bold text-gray-900">{formatPoints(party.pointsInForce)}</p>
+          <p className="break-words text-xl font-bold text-gray-900">{formatPoints(party.pointsInForce)}</p>
         </div>
         <div className="text-right">
           <span className="rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-gray-700 ring-1 ring-gray-200">{party.currency}</span>
@@ -100,7 +100,7 @@ function Timeline({ detail }: { detail: ReferralDetail }) {
           <li key={e.id} className="relative">
             <span className={cn('absolute -left-[37px] flex h-7 w-7 items-center justify-center rounded-full ring-1', m.tone)}>{m.icon}</span>
             <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-              <p className="text-sm font-medium text-gray-900">{m.title}</p>
+              <p className="min-w-0 break-words text-sm font-medium text-gray-900">{m.title}</p>
               <time className="shrink-0 text-xs text-gray-500">{formatDateTime(e.at)}</time>
             </div>
             <p className="mt-0.5 break-words text-sm text-gray-600">{m.body}</p>
@@ -169,7 +169,7 @@ export default function VVReferralDetailPage() {
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant={status.variant}>{status.label}</Badge>
-            {r.code && <span className="font-mono text-sm text-gray-600">{r.code}</span>}
+            {r.code && <span className="break-all font-mono text-sm text-gray-600">{r.code}</span>}
             <span className="text-sm text-gray-500">· since {formatDate(r.createdAt)}</span>
           </div>
           <p className="mt-1 text-sm text-gray-500">{status.help}</p>
@@ -237,9 +237,9 @@ export default function VVReferralDetailPage() {
           {data.code && (
             <Card padding="sm" className="sm:p-5">
               <CardHeader title="Referral code" className="mb-3" />
-              <div className="flex items-center gap-2">
-                <Ticket className="h-4 w-4 text-gray-400" />
-                <span className="font-mono font-semibold text-gray-900">{data.code.code}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Ticket className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="min-w-0 break-all font-mono font-semibold text-gray-900">{data.code.code}</span>
                 <Badge variant={data.code.isActive ? 'success' : 'neutral'}>{data.code.isActive ? 'Active' : 'Inactive'}</Badge>
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">

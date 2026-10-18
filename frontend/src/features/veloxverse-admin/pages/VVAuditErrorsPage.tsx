@@ -41,7 +41,7 @@ export default function VVAuditErrorsPage() {
     <AuditPageShell title="Errors" subtitle="Every error customers hit — API, supplier, payment, webhook, browser and downtime.">
       {openAlerts > 0 && (
         <Link to={`${AUDIT}/alerts`} className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2.5 text-sm font-medium text-red-800 ring-1 ring-red-200 hover:bg-red-100">
-          <BellRing className="h-4 w-4" /> {openAlerts} open alert{openAlerts === 1 ? '' : 's'} — view
+          <BellRing className="h-4 w-4 shrink-0" /> {openAlerts} open alert{openAlerts === 1 ? '' : 's'} — view
         </Link>
       )}
 
@@ -54,12 +54,12 @@ export default function VVAuditErrorsPage() {
               setHours(r.key)
               setRange(lastHours(r.key))
             }}
-            className={cn('rounded-full px-3 py-1 text-xs font-medium', hours === r.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+            className={cn('min-h-11 rounded-full px-3 py-1 text-sm font-medium md:min-h-8 md:text-xs', hours === r.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
           >
             Last {r.label}
           </button>
         ))}
-        <div className="w-52"><MultiSelect label="Service" options={meta.data?.services ?? []} value={services} onChange={setServices} format={serviceLabel} /></div>
+        <div className="w-full sm:w-52"><MultiSelect label="Service" options={meta.data?.services ?? []} value={services} onChange={setServices} format={serviceLabel} /></div>
         {d && <span className="ml-auto text-xs text-gray-400"><AuditTime iso={d.from} /> → <AuditTime iso={d.to} /></span>}
       </div>
 
@@ -116,13 +116,14 @@ export default function VVAuditErrorsPage() {
             {d.topErrors.length === 0 ? (
               <p className="px-4 py-6 text-sm text-gray-400">No errors in this range.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50/60 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                      <th className="px-4 py-2.5">Error code</th>
-                      <th className="px-4 py-2.5">Message</th>
-                      <th className="px-4 py-2.5 text-right">Count</th>
+                      <th scope="col" className="px-4 py-2.5">Error code</th>
+                      <th scope="col" className="px-4 py-2.5">Message</th>
+                      <th scope="col" className="px-4 py-2.5 text-right">Count</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -132,7 +133,7 @@ export default function VVAuditErrorsPage() {
                         tabIndex={0}
                         onClick={() => t.errorCode && openList({ errorCode: t.errorCode })}
                         onKeyDown={(k) => k.key === 'Enter' && t.errorCode && openList({ errorCode: t.errorCode })}
-                        className={cn(t.errorCode && 'cursor-pointer hover:bg-indigo-50/40')}
+                        className={cn(t.errorCode && 'cursor-pointer hover:bg-indigo-50/40', 'focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500')}
                       >
                         <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-semibold text-red-700">{t.errorCode ?? '—'}</td>
                         <td className="px-4 py-2.5 text-gray-700"><span className="line-clamp-2 break-words">{t.message ?? '—'}</span></td>
@@ -142,6 +143,25 @@ export default function VVAuditErrorsPage() {
                   </tbody>
                 </table>
               </div>
+              <ul className="divide-y divide-gray-100 lg:hidden">
+                {d.topErrors.map((t, i) => (
+                  <li key={`${t.errorCode}-${i}`}>
+                    <button
+                      type="button"
+                      disabled={!t.errorCode}
+                      onClick={() => t.errorCode && openList({ errorCode: t.errorCode })}
+                      className="block min-h-[64px] w-full px-4 py-3 text-left hover:bg-indigo-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 disabled:cursor-default"
+                    >
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 break-all font-mono text-xs font-semibold text-red-700">{t.errorCode ?? '—'}</span>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">× {t.count.toLocaleString()}</span>
+                      </span>
+                      {t.message && <span className="mt-0.5 line-clamp-2 break-words text-sm text-gray-600">{t.message}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              </>
             )}
           </Card>
         </>

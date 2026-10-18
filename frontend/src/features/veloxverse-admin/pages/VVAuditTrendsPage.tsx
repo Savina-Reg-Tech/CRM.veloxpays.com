@@ -24,9 +24,9 @@ function ChartCard({ title, sub, children }: { title: string; sub?: ReactNode; c
 
 function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
   return (
-    <div className="rounded-lg border border-gray-100 px-3 py-2">
+    <div className="min-w-0 rounded-lg border border-gray-100 px-3 py-2">
       <p className="text-xs text-gray-500">{label}</p>
-      <p className={cn('text-lg font-bold tabular-nums text-gray-900', tone)}>{value}</p>
+      <p className={cn('break-words text-lg font-bold tabular-nums text-gray-900', tone)}>{value}</p>
     </div>
   )
 }
@@ -76,12 +76,12 @@ export default function VVAuditTrendsPage() {
             key={p}
             type="button"
             onClick={() => setDays(p)}
-            className={cn('rounded-full px-3 py-1 text-xs font-medium', days === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+            className={cn('min-h-11 rounded-full px-3 py-1 text-sm font-medium md:min-h-8 md:text-xs', days === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
           >
             {p === 365 ? '1 year' : `${p} days`}
           </button>
         ))}
-        <select value={service} onChange={(e) => setService(e.target.value)} className={cn(selectClass, 'w-56')} aria-label="Service">
+        <select value={service} onChange={(e) => setService(e.target.value)} className={cn(selectClass, 'w-full sm:w-56')} aria-label="Service">
           <option value="all">All services</option>
           {(meta.data?.services ?? []).map((s) => <option key={s} value={s}>{serviceLabel(s)}</option>)}
         </select>
@@ -188,7 +188,7 @@ export default function VVAuditTrendsPage() {
           <Card className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-900">Day detail</h2>
-              <select value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className={cn(selectClass, 'w-48')} aria-label="Day">
+              <select value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className={cn(selectClass, 'w-full sm:w-48')} aria-label="Day">
                 {[...rows].reverse().map((r) => <option key={r.date} value={r.date}>{r.date} (UTC)</option>)}
               </select>
             </div>
@@ -200,8 +200,8 @@ export default function VVAuditTrendsPage() {
                     <ul className="space-y-1.5 text-sm">
                       {day.topErrors.map((t, i) => (
                         <li key={i} className="flex items-start justify-between gap-3">
-                          <span className="min-w-0"><span className="font-mono text-xs font-semibold text-red-700">{t.errorCode ?? '—'}</span> <span className="break-words text-gray-700">{t.message}</span></span>
-                          <span className="font-semibold tabular-nums">{t.count}</span>
+                          <span className="min-w-0 break-words"><span className="break-all font-mono text-xs font-semibold text-red-700">{t.errorCode ?? '—'}</span> <span className="break-words text-gray-700">{t.message}</span></span>
+                          <span className="shrink-0 font-semibold tabular-nums">{t.count}</span>
                         </li>
                       ))}
                     </ul>
@@ -214,7 +214,7 @@ export default function VVAuditTrendsPage() {
                       {day.topFailingRoutes.map((r, i) => (
                         <li key={i} className="flex items-start justify-between gap-3">
                           <span className="min-w-0 break-all font-mono text-xs text-gray-700">{r.route} <span className="text-gray-400">· {r.httpStatus ?? '—'}</span></span>
-                          <span className="font-semibold tabular-nums">{r.count}</span>
+                          <span className="shrink-0 font-semibold tabular-nums">{r.count}</span>
                         </li>
                       ))}
                     </ul>
@@ -238,7 +238,7 @@ export default function VVAuditTrendsPage() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Payments</h3>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <Stat label="Declines" value={day.paymentFailures?.declines ?? 0} />
                     <Stat label="Paid not booked" value={day.paymentFailures?.paidNotBooked ?? 0} tone={day.paymentFailures?.paidNotBooked ? 'text-red-600' : undefined} />
                     <Stat label="Refund failures" value={day.paymentFailures?.refundFailures ?? 0} />

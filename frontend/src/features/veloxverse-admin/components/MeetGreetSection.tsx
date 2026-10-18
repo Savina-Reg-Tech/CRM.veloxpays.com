@@ -41,7 +41,7 @@ function LeadCard({ lead, onViewMore }: { lead: Lead; onViewMore: (l: Lead) => v
           <p className="truncate text-sm font-semibold text-gray-900">{lead.name || 'Unnamed request'}</p>
           <p className="truncate text-xs text-gray-500">{lead.email || '—'}</p>
         </div>
-        <Badge variant={STATUS_BADGE[lead.status] ?? 'neutral'}>{lead.status}</Badge>
+        <Badge variant={STATUS_BADGE[lead.status] ?? 'neutral'} className="shrink-0">{lead.status}</Badge>
       </div>
 
       {lead.phone && (
@@ -51,7 +51,7 @@ function LeadCard({ lead, onViewMore }: { lead: Lead; onViewMore: (l: Lead) => v
         </span>
       )}
 
-      <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-3">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
         <span className="inline-flex items-center gap-1 text-xs text-gray-400">
           <Clock className="h-3.5 w-3.5" />
           {new Date(lead.created_at).toLocaleString()}

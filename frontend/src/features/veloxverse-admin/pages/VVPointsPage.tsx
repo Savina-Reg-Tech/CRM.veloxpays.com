@@ -263,7 +263,7 @@ function AddServiceModal({
           className="text-base sm:text-sm"
         />
         <div className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 p-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-gray-900">Active now</p>
             <p className="text-xs text-gray-500">
               Active services are listed to customers in the app. A new service earns nothing until developers connect
@@ -489,7 +489,7 @@ function EarningRulesTab({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
 
       {/* Desktop */}
-      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 md:block">
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 lg:block">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -521,7 +521,7 @@ function EarningRulesTab({ onOpenSettings }: { onOpenSettings: () => void }) {
                   </td>
                   <td className="px-4 py-3"><Switch checked={row.isActive} onChange={() => toggleActive(row)} /></td>
                   <td className="px-4 py-3 text-gray-500">v{row.version}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.updatedAt)}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label={`Edit ${serviceLabel(row.serviceType)}`}><Pencil className="h-4 w-4" /></Button>
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => setDeleting(row.serviceType)} aria-label={`Delete ${serviceLabel(row.serviceType)}`}><Trash2 className="h-4 w-4" /></Button>
@@ -537,7 +537,7 @@ function EarningRulesTab({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
 
       {/* Mobile */}
-      <div className="space-y-2 md:hidden">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
         {rows.length === 0 && <p className="py-8 text-center text-sm text-gray-400">No earning rules configured for {currency} yet</p>}
         {rows.map((row) => {
           const issue = inconsistent.get(row.serviceType)
@@ -566,7 +566,7 @@ function EarningRulesTab({ onOpenSettings }: { onOpenSettings: () => void }) {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-gray-400">v{row.version} · {formatDateTime(row.updatedAt)}</span>
                 <div className="flex gap-1">
                   <Button size="sm" variant="outline" onClick={() => openEdit(row)}><Pencil className="h-4 w-4" />Edit</Button>
@@ -795,9 +795,9 @@ function GlobalSettingsTab() {
 
   return (
     <>
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
+      <Card>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-900">Global Points Settings</h3>
             <p className="text-sm text-gray-500">Version {settings.version} · Last updated {formatDateTime(settings.updatedAt)}</p>
           </div>
@@ -809,7 +809,7 @@ function GlobalSettingsTab() {
             {SETTINGS_FIELDS.map((f) => (
               <div key={f.key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input
                     type="number"
                     min={0}
@@ -840,7 +840,7 @@ function GlobalSettingsTab() {
                   return (
                     <div key={f.key}>
                       <label htmlFor={`limit-${f.key}`} className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Input
                           id={`limit-${f.key}`}
                           type="number"
@@ -930,14 +930,14 @@ function GlobalSettingsTab() {
           exchange rates are used. A currency without a rate has redemption switched off.
           {settings.pointsExpiryDays > 0 ? <> Points expire after <strong>{settings.pointsExpiryDays} days</strong>.</> : <> Points <strong>never expire</strong>.</>}
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {ANALYTICS_CURRENCIES.map((cur) => {
             const pts = current[cur] ?? null
             const draft = rates[cur] ?? ''
             const draftBad = draft.trim() !== '' && !isPosInt(draft)
             return (
               <div key={cur} className="rounded-lg border border-gray-100 p-3">
-                <div className="flex items-center justify-between mb-1">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
                   <p className="text-xs text-gray-500">Points to redeem 1 {cur}</p>
                   {pts == null && <Badge variant="warning">Redemption off</Badge>}
                 </div>
@@ -1246,13 +1246,13 @@ function UserPointsTab() {
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to list
         </Button>
 
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{u.firstName ?? ''} {u.lastName ?? ''}</h3>
-              <p className="text-sm text-gray-500">{u.email}</p>
+        <Card className="p-4 sm:p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-lg font-semibold text-gray-900">{u.firstName ?? ''} {u.lastName ?? ''}</h3>
+              <p className="break-all text-sm text-gray-500">{u.email}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => setAdjustOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" /> Adjust
               </Button>
@@ -1262,7 +1262,7 @@ function UserPointsTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             <div className="rounded-lg bg-amber-50 p-3 text-center">
               <p className="text-xs text-gray-500">Balance</p>
               <p className="text-xl font-bold text-amber-700">{fmtNum(b.balance)}</p>
@@ -1300,7 +1300,7 @@ function UserPointsTab() {
                       <td className="px-3 py-2 text-gray-600 text-xs max-w-[280px] truncate">{e.description ?? '—'}</td>
                       <td className="px-3 py-2 text-xs"><LedgerDetails entry={e} /></td>
                       <td className="px-3 py-2 text-gray-500">{fmtNum(e.balanceAfter)}</td>
-                      <td className="px-3 py-2 text-gray-400 text-xs">{formatDateTime(e.createdAt)}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-gray-400 text-xs">{formatDateTime(e.createdAt)}</td>
                     </tr>
                   )
                 })}
@@ -1431,7 +1431,7 @@ function ChangeLogTab() {
           <tbody className="divide-y divide-gray-100">
             {(data?.entries ?? []).map((e) => (
               <tr key={e.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(e.createdAt)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">{formatDateTime(e.createdAt)}</td>
                 <td className="px-4 py-3 text-gray-700">{e.adminName}{e.adminEmail ? ` (${e.adminEmail})` : ''}</td>
                 <td className="px-4 py-3"><Badge variant="neutral">{e.table.replace('points_', '')}</Badge></td>
                 <td className="px-4 py-3 text-xs text-gray-700">
@@ -1464,7 +1464,7 @@ function ChangeLogTab() {
 function DashboardTab() {
   const { data, isLoading, error } = useVVPointsDashboard()
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
+  if (isLoading) return <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
   if (error) return <ErrorBanner error={error} />
   if (!data) return null
 
@@ -1485,16 +1485,16 @@ function DashboardTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {statCards.map((s) => (
-          <Card key={s.label} className="p-4">
+          <Card key={s.label} className="min-w-0 p-4">
             <div className="flex items-center gap-3">
-              <div className={`rounded-lg p-2 ${s.color.split(' ')[1]}`}>
+              <div className={`shrink-0 rounded-lg p-2 ${s.color.split(' ')[1]}`}>
                 <s.icon className={`h-5 w-5 ${s.color.split(' ')[0]}`} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-gray-500">{s.label}</p>
-                <p className="text-lg font-semibold text-gray-900">{s.value}</p>
+                <p className="break-words text-lg font-semibold text-gray-900">{s.value}</p>
               </div>
             </div>
           </Card>
@@ -1503,7 +1503,7 @@ function DashboardTab() {
 
       {/* Ledger stats */}
       <Card className="p-4">
-        <div className="flex items-center gap-2 text-sm text-gray-600">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
           <Database className="h-4 w-4 text-gray-400" />
           Ledger: <strong>{fmtNum(data.ledgerStats.totalRows)}</strong> rows
           {data.ledgerStats.oldestEntry && <> · Oldest entry: <strong>{formatDateTime(data.ledgerStats.oldestEntry)}</strong></>}
@@ -1511,7 +1511,7 @@ function DashboardTab() {
       </Card>
 
       {/* Top users */}
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
           <Trophy className="h-4 w-4 text-amber-500" /> Top 10 Users by Lifetime Earned
         </h3>
@@ -1550,6 +1550,8 @@ function DashboardTab() {
 
 // ─────────────────────────── Main Page ─────────────────────────────
 
+const TAB_CLASS = 'shrink-0 whitespace-nowrap px-3 sm:px-4'
+
 export default function VVPointsPage() {
   const [tab, setTab] = useState('rules')
 
@@ -1578,12 +1580,12 @@ export default function VVPointsPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="rules" value={tab} onChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="rules">Earning Rules</TabsTrigger>
-          <TabsTrigger value="settings">Global Settings</TabsTrigger>
-          <TabsTrigger value="users">User Points</TabsTrigger>
-          <TabsTrigger value="log">Change Log</TabsTrigger>
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+        <TabsList className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsTrigger value="rules" className={TAB_CLASS}>Earning Rules</TabsTrigger>
+          <TabsTrigger value="settings" className={TAB_CLASS}>Global Settings</TabsTrigger>
+          <TabsTrigger value="users" className={TAB_CLASS}>User Points</TabsTrigger>
+          <TabsTrigger value="log" className={TAB_CLASS}>Change Log</TabsTrigger>
+          <TabsTrigger value="dashboard" className={TAB_CLASS}>Dashboard</TabsTrigger>
         </TabsList>
       </Tabs>
 

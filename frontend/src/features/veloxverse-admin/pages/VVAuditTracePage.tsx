@@ -25,7 +25,7 @@ function ChainStep({ icon: Icon, title, tone = 'gray', children, last = false }:
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${toneCls}`}><Icon className="h-4.5 w-4.5" /></span>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneCls}`}><Icon className="h-4.5 w-4.5" /></span>
         {!last && <ChevronDown className="my-1 h-4 w-4 text-gray-300" />}
       </div>
       <div className="min-w-0 flex-1 pb-2">
@@ -50,7 +50,7 @@ export default function VVAuditTracePage() {
       subtitle="Customer → journey → request → supplier calls → errors, then every event of the request."
       tabs={false}
       actions={
-        <Link to={AUDIT} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900">
+        <Link to={AUDIT} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-1 text-sm text-gray-500 hover:text-gray-900 md:min-h-0">
           <ArrowLeft className="h-4 w-4" /> Audit logs
         </Link>
       }
@@ -94,11 +94,11 @@ export default function VVAuditTracePage() {
                 <ul className="space-y-1.5">
                   {data.supplierCalls.map((c) => (
                     <li key={c.id}>
-                      <button type="button" onClick={() => open(c.id)} className="w-full rounded-md border border-gray-100 px-2 py-1.5 text-left text-xs hover:border-indigo-200">
+                      <button type="button" onClick={() => open(c.id)} className="min-h-11 w-full rounded-md border border-gray-100 px-2 py-1.5 text-left text-xs hover:border-indigo-200">
                         <span className="font-medium">{supplierLabel(c.supplier)}</span>
                         <span className={c.status === 'failure' ? ' text-red-600' : ' text-emerald-600'}> · {stepLabel(c.step)}</span>
                         {typeof c.metadata?.operation === 'string' && <span className="block truncate font-mono text-gray-500">{c.metadata.operation}</span>}
-                        <span className="text-gray-500">
+                        <span className="break-words text-gray-500">
                           {formatDurationMs(c.durationMs)}
                           {c.metadata?.upstreamStatus != null && ` · upstream ${String(c.metadata.upstreamStatus)}`}
                           {c.errorCode && ` · ${c.errorCode}`}
@@ -116,9 +116,9 @@ export default function VVAuditTracePage() {
                 <ul className="space-y-1.5">
                   {data.errors.map((er) => (
                     <li key={er.id}>
-                      <button type="button" onClick={() => open(er.id)} className="w-full rounded-md border border-red-100 bg-red-50/60 px-2 py-1.5 text-left text-xs hover:border-red-300">
+                      <button type="button" onClick={() => open(er.id)} className="min-h-11 w-full rounded-md border border-red-100 bg-red-50/60 px-2 py-1.5 text-left text-xs hover:border-red-300">
                         <span className="font-medium text-red-800">{stepLabel(er.step)}</span>
-                        {er.errorCode && <span className="font-mono text-red-700"> · {er.errorCode}</span>}
+                        {er.errorCode && <span className="break-all font-mono text-red-700"> · {er.errorCode}</span>}
                         {er.errorMessage && <span className="block break-words text-red-700">{er.errorMessage}</span>}
                         <AuditTime iso={er.createdAt} className="text-gray-500" />
                       </button>

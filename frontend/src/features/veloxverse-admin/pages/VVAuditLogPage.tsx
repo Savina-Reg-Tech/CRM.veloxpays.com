@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertOctagon, Download, Search, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -9,7 +9,8 @@ import { useVVAuditEvents, useVVAuditExport, useVVAuditMeta } from '../hooks/use
 import { vvAuditService } from '../vvAdminService'
 import {
   auditErrorText,
-  classifyAuditSearch,
+  routeSearch,
+  type AuditSearchTarget,
   eventTypeLabel,
   fromLocalInput,
   humanize,
@@ -28,11 +29,16 @@ import {
   DebouncedInput,
   MaskedNote,
   MultiSelect,
+  selectClass,
   useAuditViewer,
   useCustomerHref,
 } from '../components/audit/AuditUI'
 import { EventTable } from '../components/audit/EventTable'
 import { EventDrawer } from '../components/audit/EventDrawer'
+import { apiTimelineHref } from '../components/vv-audit/ApiBits'
+import { BottomSheet } from '../components/vv-audit/BottomSheet'
+import { FiltersButton, OverflowMenu } from '../components/vv-audit/ApiLogFilters'
+import { useIsTablet } from '../components/vv-audit/useMediaQuery'
 
 const AUDIT = '/dashboard/veloxverse/audit-logs'
 const LIST_KEYS = ['service', 'severity', 'eventType', 'status', 'supplier', 'step'] as const
@@ -59,6 +65,10 @@ export default function VVAuditLogPage() {
   const exportMut = useVVAuditExport()
   const [search, setSearch] = useState('')
   const [resolving, setResolving] = useState(false)
+  // A UUID can be a journey/event/payment/customer id or an API-log ref — let the user pick.
+  const [uuidChoice, setUuidChoice] = useState<string | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const isTablet = useIsTablet()
   // Default range is fixed once on mount so the query key doesn't change every render.
   const [defaultRange] = useState(() => lastHours(24))
   const retentionDays = meta.data?.retentionDays ?? 5
@@ -128,10 +138,27 @@ export default function VVAuditLogPage() {
   const refundAttentionOn =
     [...splitList(params.get('step'))].sort().join(',') === [...REFUND_ATTENTION_STEPS].sort().join(',')
 
-  // ── Global search box (handoff §4.3) ──
-  const runSearch = async (e: FormEvent) => {
-    e.preventDefault()
-    const target = classifyAuditSearch(search)
+  // ── Global search box (handoff §4.3 + API logs §4.0) ──
+  // A UUID can be a journey, an event, a payment or a customer — try each in that order.
+  const resolveUuid = async (id: string) => {
+    setUuidChoice(null)
+    setResolving(true)
+    try {
+      const journey = await vvAuditService.journey(id).catch(() => null)
+      if (journey?.events.length) return navigate(`${AUDIT}/journeys/${id}`)
+      const event = await vvAuditService.event(id).catch(() => null)
+      if (event) return patch({ event: id })
+      const trail = await vvAuditService.bookingTrail('payment', id).catch(() => null)
+      if (trail?.events.length) return navigate(`${AUDIT}/bookings/payment/${id}`)
+      const timeline = await vvAuditService.timeline('user', id, {}, { limit: 1 }).catch(() => null)
+      if (timeline?.events.length) return navigate(customerHref(id))
+      patch({ referenceId: id, range: 'all', from: undefined, to: undefined })
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  const runAuditSearch = (target: AuditSearchTarget) => {
     switch (target.kind) {
       case 'empty':
         return
@@ -143,25 +170,26 @@ export default function VVAuditLogPage() {
         return patch({ email: target.email })
       case 'reference':
         return patch({ referenceId: target.referenceId, range: 'all', from: undefined, to: undefined })
-      case 'uuid': {
-        // A UUID can be a journey, an event, a payment or a customer — try each in that order.
-        setResolving(true)
-        try {
-          const id = target.id
-          const journey = await vvAuditService.journey(id).catch(() => null)
-          if (journey?.events.length) return navigate(`${AUDIT}/journeys/${id}`)
-          const event = await vvAuditService.event(id).catch(() => null)
-          if (event) return patch({ event: id })
-          const trail = await vvAuditService.bookingTrail('payment', id).catch(() => null)
-          if (trail?.events.length) return navigate(`${AUDIT}/bookings/payment/${id}`)
-          const timeline = await vvAuditService.timeline('user', id, {}, { limit: 1 }).catch(() => null)
-          if (timeline?.events.length) return navigate(customerHref(id))
-          patch({ referenceId: id, range: 'all', from: undefined, to: undefined })
-        } finally {
-          setResolving(false)
-        }
+      case 'uuid':
+        return void resolveUuid(target.id)
+    }
+  }
+
+  const runSearch = (e: FormEvent) => {
+    e.preventDefault()
+    const target = routeSearch(search)
+    setUuidChoice(null)
+    switch (target.kind) {
+      case 'empty':
         return
-      }
+      case 'apiRequest':
+        return navigate(apiTimelineHref({ requestId: target.requestId }))
+      case 'apiRef':
+        return navigate(apiTimelineHref({ ref: target.ref }))
+      case 'uuid':
+        return setUuidChoice(target.id)
+      case 'audit':
+        return runAuditSearch(target.target)
     }
   }
 
@@ -182,6 +210,51 @@ export default function VVAuditLogPage() {
 
   const rangeKey = params.get('range') ?? (params.get('from') || params.get('to') ? 'custom' : '24h')
   const minLocal = toLocalInput(new Date(Date.now() - retentionDays * 86_400_000).toISOString())
+  const pickRange = (key: string) => {
+    if (key === '24h') return patch({ range: undefined, from: undefined, to: undefined })
+    if (key === 'all') return patch({ range: 'all', from: undefined, to: undefined })
+    if (key === 'custom') return patch({ range: undefined, from: params.get('from') ?? defaultRange.from, to: params.get('to') ?? defaultRange.to })
+    const r = RANGES.find((x) => x.key === key)
+    if (r) patch({ range: undefined, ...lastHours(r.hours) })
+  }
+
+  const dateInputs = (
+    <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-gray-500">
+      <input
+        type="datetime-local"
+        aria-label="From"
+        min={minLocal}
+        value={toLocalInput(params.get('from') ?? (rangeKey === '24h' ? defaultRange.from : undefined))}
+        onChange={(e) => patch({ range: undefined, from: fromLocalInput(e.target.value) })}
+        className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 px-2 text-base md:h-8 md:flex-none md:text-xs"
+      />
+      to
+      <input
+        type="datetime-local"
+        aria-label="To"
+        min={minLocal}
+        value={toLocalInput(params.get('to') ?? (rangeKey === '24h' ? defaultRange.to : undefined))}
+        onChange={(e) => patch({ range: undefined, to: fromLocalInput(e.target.value) })}
+        className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 px-2 text-base md:h-8 md:flex-none md:text-xs"
+      />
+    </span>
+  )
+
+  const filterFields: ReactNode = (
+    <>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4 xl:grid-cols-8">
+        <MultiSelect label="Service" options={meta.data?.services ?? []} value={splitList(params.get('service'))} onChange={(v) => patch({ service: v.join(',') || undefined })} format={serviceLabel} />
+        <MultiSelect label="Severity" options={meta.data?.severities.map((s) => s.value) ?? []} value={splitList(params.get('severity'))} onChange={(v) => patch({ severity: v.join(',') || undefined })} />
+        <MultiSelect label="Event type" options={(meta.data?.eventTypes ?? []).filter((t) => t !== 'admin_access')} value={splitList(params.get('eventType'))} onChange={(v) => patch({ eventType: v.join(',') || undefined })} format={eventTypeLabel} />
+        <MultiSelect label="Status" options={['success', 'failure', 'warning', 'info']} value={splitList(params.get('status'))} onChange={(v) => patch({ status: v.join(',') || undefined })} />
+        <MultiSelect label="Supplier" options={meta.data?.suppliers ?? []} value={splitList(params.get('supplier'))} onChange={(v) => patch({ supplier: v.join(',') || undefined })} format={supplierLabel} />
+        <MultiSelect label="Step" options={meta.data?.steps ?? []} value={splitList(params.get('step'))} onChange={(v) => patch({ step: v.join(',') || undefined })} format={stepLabel} searchable />
+        <DebouncedInput value={params.get('httpStatus') ?? ''} onChange={(v) => patch({ httpStatus: /^\d{3}$/.test(v) ? v : undefined })} placeholder="HTTP status" type="number" />
+        <DebouncedInput value={params.get('errorCode') ?? ''} onChange={(v) => patch({ errorCode: v || undefined })} placeholder="Error code" />
+      </div>
+      <DebouncedInput value={params.get('email') ?? ''} onChange={(v) => patch({ email: v || undefined })} placeholder="Customer email (exact)" type="email" className="md:max-w-sm" />
+    </>
+  )
 
   return (
     <AuditPageShell
@@ -198,7 +271,7 @@ export default function VVAuditLogPage() {
       subtitle={`What every customer and guest did, and every error they hit. Detailed logs: last ${retentionDays} days.`}
       actions={
         isAdmin && (
-          <Button variant="outline" size="sm" onClick={() => void doExport()} loading={exportMut.isPending}>
+          <Button variant="outline" size="sm" onClick={() => void doExport()} loading={exportMut.isPending} className="hidden md:inline-flex">
             <Download className="h-4 w-4" /> Export CSV
           </Button>
         )
@@ -206,74 +279,88 @@ export default function VVAuditLogPage() {
     >
       {/* Search + range */}
       <Card padding="sm" className="space-y-3">
-        <form onSubmit={(e) => void runSearch(e)} className="flex flex-col gap-2 sm:flex-row">
-          <div className="relative flex-1">
+        <form onSubmit={runSearch} className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setUuidChoice(null)
+              }}
               placeholder="Support reference, customer email, journey / payment / event id, order no. (TRF-…, N00131)…"
               aria-label="Search audit log"
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-base focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-base focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:h-10 sm:text-sm"
             />
           </div>
-          <Button type="submit" loading={resolving} disabled={!search.trim()}>
+          <Button type="submit" loading={resolving} disabled={!search.trim()} className="min-h-11 sm:min-h-10">
             Find
           </Button>
         </form>
 
+        {uuidChoice && (
+          <div role="group" aria-label="Where to look" className="flex flex-col gap-2 rounded-lg bg-indigo-50/60 p-3 ring-1 ring-indigo-100 sm:flex-row sm:items-center">
+            <p className="min-w-0 flex-1 text-sm text-gray-700">
+              <span className="break-all font-mono text-xs text-gray-900">{uuidChoice}</span> — look it up in:
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="min-h-11 flex-1 sm:min-h-9 sm:flex-none" loading={resolving} onClick={() => void resolveUuid(uuidChoice)}>
+                Journey events
+              </Button>
+              <Button type="button" variant="outline" className="min-h-11 flex-1 sm:min-h-9 sm:flex-none" onClick={() => navigate(apiTimelineHref({ ref: uuidChoice }))}>
+                API timeline
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Phones: range select + Filters (sheet) + ⋯ (export). */}
+        <div className="flex items-center gap-2 md:hidden">
+          <select aria-label="Date range" value={rangeKey} onChange={(e) => pickRange(e.target.value)} className={`${selectClass} h-11 min-w-0 flex-1`}>
+            {RANGES.map((r) => (
+              <option key={r.key} value={r.key}>{r.label}</option>
+            ))}
+            <option value="custom">Custom range</option>
+          </select>
+          <FiltersButton count={activeChips.length} expanded={filtersOpen} onClick={() => setFiltersOpen(true)} />
+          {isAdmin && (
+            <OverflowMenu
+              items={[{ key: 'export', label: <><Download className="h-4 w-4" /> {exportMut.isPending ? 'Exporting…' : 'Export CSV'}</>, onSelect: () => void doExport(), disabled: exportMut.isPending }]}
+            />
+          )}
+        </div>
+        {rangeKey === 'custom' && <div className="md:hidden">{dateInputs}</div>}
+
         <div className="flex flex-wrap items-center gap-2">
-          {RANGES.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() =>
-                r.key === '24h'
-                  ? patch({ range: undefined, from: undefined, to: undefined })
-                  : r.key === 'all'
-                    ? patch({ range: 'all', from: undefined, to: undefined })
-                    : patch({ range: undefined, ...lastHours(r.hours) })
-              }
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                rangeKey === r.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-          <span className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-            <input
-              type="datetime-local"
-              aria-label="From"
-              min={minLocal}
-              value={toLocalInput(params.get('from') ?? (rangeKey === '24h' ? defaultRange.from : undefined))}
-              onChange={(e) => patch({ range: undefined, from: fromLocalInput(e.target.value) })}
-              className="h-8 rounded-md border border-gray-300 px-2 text-xs"
-            />
-            to
-            <input
-              type="datetime-local"
-              aria-label="To"
-              min={minLocal}
-              value={toLocalInput(params.get('to') ?? (rangeKey === '24h' ? defaultRange.to : undefined))}
-              onChange={(e) => patch({ range: undefined, to: fromLocalInput(e.target.value) })}
-              className="h-8 rounded-md border border-gray-300 px-2 text-xs"
-            />
-          </span>
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => pickRange(r.key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  rangeKey === r.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+            {dateInputs}
+          </div>
           {/* Saved filter: the steps where money has to be checked by a person. */}
           <button
             type="button"
             onClick={() => patch({ step: refundAttentionOn ? undefined : REFUND_ATTENTION_STEPS.join(',') })}
             aria-pressed={refundAttentionOn}
             title="Failed refunds, charges refunded after checkout closed, and charges for the wrong amount — check these in the Mint portal"
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+            className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition md:min-h-0 ${
               refundAttentionOn ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100'
             }`}
           >
             <AlertOctagon className="h-3.5 w-3.5" />
             Refunds needing attention
           </button>
-          <label className="ml-auto inline-flex items-center gap-2 text-xs text-gray-600">
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs text-gray-600 md:ml-auto md:min-h-0">
             <input
               type="checkbox"
               checked={params.get('staff') === '1'}
@@ -284,40 +371,59 @@ export default function VVAuditLogPage() {
           </label>
         </div>
 
-        {/* Filters */}
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
-          <MultiSelect label="Service" options={meta.data?.services ?? []} value={splitList(params.get('service'))} onChange={(v) => patch({ service: v.join(',') || undefined })} format={serviceLabel} />
-          <MultiSelect label="Severity" options={meta.data?.severities.map((s) => s.value) ?? []} value={splitList(params.get('severity'))} onChange={(v) => patch({ severity: v.join(',') || undefined })} />
-          <MultiSelect label="Event type" options={(meta.data?.eventTypes ?? []).filter((t) => t !== 'admin_access')} value={splitList(params.get('eventType'))} onChange={(v) => patch({ eventType: v.join(',') || undefined })} format={eventTypeLabel} />
-          <MultiSelect label="Status" options={['success', 'failure', 'warning', 'info']} value={splitList(params.get('status'))} onChange={(v) => patch({ status: v.join(',') || undefined })} />
-          <MultiSelect label="Supplier" options={meta.data?.suppliers ?? []} value={splitList(params.get('supplier'))} onChange={(v) => patch({ supplier: v.join(',') || undefined })} format={supplierLabel} />
-          <MultiSelect label="Step" options={meta.data?.steps ?? []} value={splitList(params.get('step'))} onChange={(v) => patch({ step: v.join(',') || undefined })} format={stepLabel} searchable />
-          <DebouncedInput value={params.get('httpStatus') ?? ''} onChange={(v) => patch({ httpStatus: /^\d{3}$/.test(v) ? v : undefined })} placeholder="HTTP status" type="number" />
-          <DebouncedInput value={params.get('errorCode') ?? ''} onChange={(v) => patch({ errorCode: v || undefined })} placeholder="Error code" />
-        </div>
-        <DebouncedInput value={params.get('email') ?? ''} onChange={(v) => patch({ email: v || undefined })} placeholder="Customer email (exact)" type="email" className="md:max-w-sm" />
+        {/* Filters: inline from md, bottom sheet on phones. */}
+        {isTablet && filterFields}
 
         {activeChips.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="-mx-1 flex flex-nowrap items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible [&::-webkit-scrollbar]:hidden">
             {activeChips.map((c) => (
-              <span key={c.key} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs text-indigo-700 ring-1 ring-indigo-100">
-                {c.label}
-                <button type="button" onClick={() => removeChip(c.key)} aria-label={`Remove ${c.label}`} className="hover:text-indigo-900">
+              <span key={c.key} className="inline-flex max-w-[80vw] shrink-0 items-center gap-1 rounded-full bg-indigo-50 py-1 pl-2.5 pr-1 text-xs text-indigo-700 ring-1 ring-indigo-100 md:max-w-full md:pr-2.5">
+                <span className="min-w-0 truncate md:whitespace-normal md:break-all">{c.label}</span>
+                <button
+                  type="button"
+                  onClick={() => removeChip(c.key)}
+                  aria-label={`Remove ${c.label}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:text-indigo-900 md:h-auto md:w-auto"
+                >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             ))}
-            <button type="button" onClick={clearAll} className="text-xs text-gray-500 underline hover:text-gray-800">Clear all</button>
+            <button type="button" onClick={clearAll} className="min-h-11 shrink-0 px-1 text-xs text-gray-500 underline hover:text-gray-800 md:min-h-0">Clear all</button>
           </div>
         )}
         <MaskedNote />
       </Card>
 
+      <BottomSheet
+        open={filtersOpen && !isTablet}
+        onClose={() => setFiltersOpen(false)}
+        title="Filters"
+        footer={
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="min-h-11 flex-1" onClick={clearAll}>
+              Clear all
+            </Button>
+            <Button type="button" className="min-h-11 flex-1" onClick={() => setFiltersOpen(false)}>
+              Apply
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-gray-600">Date range</p>
+            {dateInputs}
+          </div>
+          {filterFields}
+        </div>
+      </BottomSheet>
+
       {/* Pinned critical */}
       {critical.latest.length > 0 && (
         <Card padding="none" className="overflow-hidden border-red-200">
           <div className="flex items-center gap-2 border-b border-red-100 bg-red-50 px-4 py-2.5">
-            <AlertOctagon className="h-4 w-4 text-red-600" />
+            <AlertOctagon className="h-4 w-4 shrink-0 text-red-600" />
             <h2 className="text-sm font-semibold text-red-800">
               Critical — {critical.count} in this range{critical.count > critical.latest.length ? ` (latest ${critical.latest.length})` : ''}
             </h2>
@@ -339,7 +445,7 @@ export default function VVAuditLogPage() {
         ) : (
           <>
             <EventTable events={events} highlightCritical />
-            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
               <span>{events.length.toLocaleString()} events shown</span>
               {query.hasNextPage ? (
                 <Button variant="outline" size="sm" onClick={() => void query.fetchNextPage()} loading={query.isFetchingNextPage}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ElementType, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import {
   AlertCircle,
   AlertTriangle,
@@ -25,7 +25,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { cn, formatMoney } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import {
   SEVERITY_BADGE_CLASS,
@@ -204,6 +204,15 @@ export function CopyId({ value, to, short = false }: { value: string | null | un
   )
 }
 
+/** Metadata keys staff should read as words, with how to show the value. */
+const KNOWN_KEYS: Record<string, { label: string; format?: (v: unknown, data: Record<string, unknown>) => string }> = {
+  refundWithheldCents: {
+    label: 'Flexible booking fee kept',
+    format: (v, data) =>
+      typeof v === 'number' ? formatMoney(v / 100, typeof data.currency === 'string' ? data.currency : null) : String(v),
+  },
+}
+
 /** metadata / errorDetails: small objects with varying keys. Plain text only — never HTML. */
 export function KeyValueList({ data, empty = '—' }: { data: Record<string, unknown> | null | undefined; empty?: string }) {
   const entries = Object.entries(data ?? {})
@@ -212,9 +221,13 @@ export function KeyValueList({ data, empty = '—' }: { data: Record<string, unk
     <dl className="divide-y divide-gray-100 rounded-lg border border-gray-100">
       {entries.map(([k, v]) => (
         <div key={k} className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[minmax(0,10rem)_1fr] sm:gap-3">
-          <dt className="break-words font-mono text-xs text-gray-500">{k}</dt>
+          <dt className={cn('break-words text-xs text-gray-500', !KNOWN_KEYS[k] && 'font-mono')} title={KNOWN_KEYS[k] ? k : undefined}>
+            {KNOWN_KEYS[k]?.label ?? k}
+          </dt>
           <dd className="min-w-0 text-sm text-gray-900">
-            {v !== null && typeof v === 'object' ? (
+            {KNOWN_KEYS[k]?.format && v != null ? (
+              <span className="break-words">{KNOWN_KEYS[k].format!(v, data ?? {})}</span>
+            ) : v !== null && typeof v === 'object' ? (
               <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-2 font-mono text-xs text-gray-700">
                 {JSON.stringify(v, null, 2)}
               </pre>
@@ -274,7 +287,7 @@ export function AuditErrorState({
     <div className="flex flex-col items-center gap-3 py-12 text-center">
       <AlertTriangle className="h-6 w-6 text-red-500" />
       <p className="max-w-md text-sm text-gray-700">{e.message}</p>
-      {e.requestId && <p className="font-mono text-xs text-gray-400">Ref: {e.requestId}</p>}
+      {e.requestId && <p className="break-all font-mono text-xs text-gray-400">Ref: {e.requestId}</p>}
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
           <RefreshCw className="h-4 w-4" /> Retry
@@ -302,32 +315,49 @@ const AUDIT_BASE = '/dashboard/veloxverse/audit-logs'
 
 export function AuditTabs() {
   const { isAdmin } = useAuditViewer()
+  const navRef = useRef<HTMLElement | null>(null)
+  const location = useLocation()
   const tabs = [
-    { to: AUDIT_BASE, label: 'Events', end: true },
+    { to: AUDIT_BASE, label: 'Journey events', end: true },
+    { to: `${AUDIT_BASE}/api`, label: 'API Logs' },
+    { to: `${AUDIT_BASE}/api-health`, label: 'API Health' },
     { to: `${AUDIT_BASE}/stuck`, label: 'Stuck customers' },
     { to: `${AUDIT_BASE}/errors`, label: 'Errors' },
     { to: `${AUDIT_BASE}/trends`, label: 'Daily trends' },
     { to: `${AUDIT_BASE}/alerts`, label: 'Alerts' },
     ...(isAdmin ? [{ to: `${AUDIT_BASE}/settings`, label: 'Settings' }] : []),
   ]
+  // On phones the row scrolls — bring the active tab into view on load and on navigation.
+  useEffect(() => {
+    const active = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]')
+    active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [location.pathname])
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-gray-200" aria-label="Audit log sections">
-      {tabs.map((t) => (
-        <NavLink
-          key={t.to}
-          to={t.to}
-          end={t.end}
-          className={({ isActive }) =>
-            cn(
-              '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              isActive ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-800'
-            )
-          }
-        >
-          {t.label}
-        </NavLink>
-      ))}
-    </nav>
+    <div className="relative">
+      <nav
+        ref={navRef}
+        className="flex snap-x gap-1 overflow-x-auto border-b border-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="Audit log sections"
+      >
+        {tabs.map((t) => (
+          <NavLink
+            key={t.to}
+            to={t.to}
+            end={t.end}
+            className={({ isActive }) =>
+              cn(
+                '-mb-px flex min-h-11 shrink-0 snap-start items-center whitespace-nowrap border-b-2 px-3 text-sm font-medium transition-colors md:min-h-0 md:py-2',
+                isActive ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-800'
+              )
+            }
+          >
+            {t.label}
+          </NavLink>
+        ))}
+      </nav>
+      {/* Hint that more tabs scroll in from the right (phones only). */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white md:hidden" />
+    </div>
   )
 }
 
@@ -348,10 +378,10 @@ export function AuditPageShell({
     <div className="max-w-full space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+          <h1 className="text-xl font-bold text-gray-900 wrap-anywhere">{title}</h1>
           {subtitle && <div className="mt-0.5 text-sm text-gray-500">{subtitle}</div>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {tabs && <AuditTabs />}
       {children}

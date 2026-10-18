@@ -16,8 +16,8 @@ interface CardHeaderProps {
 const paddingClasses = {
   none: '',
   sm: 'p-4',
-  md: 'p-6',
-  lg: 'p-8',
+  md: 'p-4 sm:p-6',
+  lg: 'p-5 sm:p-8',
 }
 
 export function Card({ children, className, padding = 'md' }: CardProps) {
@@ -36,14 +36,14 @@ export function Card({ children, className, padding = 'md' }: CardProps) {
 
 export function CardHeader({ title, description, action, className }: CardHeaderProps) {
   return (
-    <div className={cn('flex items-start justify-between mb-6', className)}>
-      <div>
+    <div className={cn('flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mb-6', className)}>
+      <div className="min-w-0">
         <h3 className="text-base font-semibold text-gray-900">{title}</h3>
         {description && (
           <p className="text-sm text-gray-500 mt-0.5">{description}</p>
         )}
       </div>
-      {action && <div className="ml-4 shrink-0">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   )
 }

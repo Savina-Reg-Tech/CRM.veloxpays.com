@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 import { vvAuditService } from '../vvAdminService'
-import type { AlertRecipientInput, AuditEventFilters, AuditSettingsUpdate, AuditTimelineFilters } from '../types'
+import type { AlertRecipientInput, ApiLogFilters, ApiTimelineParams, AuditEventFilters, AuditSettingsUpdate, AuditTimelineFilters } from '../types'
 
 // Every key starts ['vv-audit', <viewer role>, …] — VeloxVerse masks data for support viewers, so
 // an admin's cached (unmasked) responses must never be served to a support login in the same tab.
@@ -99,6 +99,63 @@ export function useVVAuditSummaries(params: { from?: string; to?: string; servic
 export function useVVAuditAlerts(params: { status?: 'open' | 'resolved' | 'all'; type?: string; from?: string; to?: string; limit?: number }) {
   const key = useAuditKey()
   return useQuery({ queryKey: key('alerts', params), queryFn: () => vvAuditService.alerts(params), staleTime: LIST_STALE, placeholderData: keepPreviousData })
+}
+
+// ── API logs ─────────────────────────────────────────────────────────
+
+export function useApiLogs(filters: ApiLogFilters, options: { enabled?: boolean; limit?: number } = {}) {
+  const key = useAuditKey()
+  const limit = options.limit ?? 50
+  return useInfiniteQuery({
+    queryKey: key('api-logs', filters, limit),
+    queryFn: ({ pageParam }) => vvAuditService.apiLogs(filters, { limit, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (p) => p.nextCursor ?? undefined,
+    placeholderData: keepPreviousData,
+    staleTime: LIST_STALE,
+    enabled: options.enabled ?? true,
+  })
+}
+
+/** The only read that returns bodies. Fetched when the drawer opens — never prefetched — and
+ * dropped from memory 5 minutes after the drawer closes. Never persisted anywhere else. */
+export function useApiLog(id: string | null | undefined) {
+  const key = useAuditKey()
+  return useQuery({
+    queryKey: key('api-log', id),
+    queryFn: () => vvAuditService.apiLog(id!),
+    enabled: Boolean(id),
+    staleTime: LIST_STALE,
+    gcTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+export function useApiLogTimeline(params: ApiTimelineParams, options: { enabled?: boolean } = {}) {
+  const key = useAuditKey()
+  const hasTarget = Boolean(params.ref || params.requestId || params.journeyId)
+  return useQuery({
+    queryKey: key('api-timeline', params),
+    queryFn: () => vvAuditService.apiLogTimeline(params),
+    enabled: hasTarget && (options.enabled ?? true),
+    staleTime: LIST_STALE,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useApiLogStats(params: { from?: string; to?: string; direction?: string[] }, options: { enabled?: boolean } = {}) {
+  const key = useAuditKey()
+  return useQuery({
+    queryKey: key('api-stats', params),
+    queryFn: () => vvAuditService.apiLogStats(params),
+    staleTime: LIST_STALE,
+    placeholderData: keepPreviousData,
+    enabled: options.enabled ?? true,
+  })
+}
+
+export function useExportApiLogs() {
+  return useMutation({ mutationFn: (filters: ApiLogFilters) => vvAuditService.exportApiLogs(filters) })
 }
 
 // ── Admin only ───────────────────────────────────────────────────────

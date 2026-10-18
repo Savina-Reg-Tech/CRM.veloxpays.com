@@ -30,6 +30,7 @@ import {
   formatCentsIn,
   formatInZone,
   formatStamp,
+  formatStampWithZone,
   formatVisitDate,
   isWalkIn,
   partyLabel,
@@ -37,13 +38,17 @@ import {
   paymentNeedsReview,
   paymentStatusLabel,
   paymentStatusVariant,
+  refundStatusChip,
   serviceLabel,
   visitStatusLabel,
   visitStatusVariant,
 } from '../loungeUtils'
-import type { LoungeVisitDetail, LoungeVoucher } from '../types'
+import type { LoungePayment, LoungeVisitDetail, LoungeVoucher } from '../types'
 import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
 import { EventDrawer } from '../components/audit/EventDrawer'
+import { ApiLogDrawer } from '../components/vv-audit/ApiLogDrawer'
+import { ApiTimelineSection } from '../components/vv-audit/ApiTimeline'
+import { apiTimelineHref } from '../components/vv-audit/ApiBits'
 
 /* ─────────── small building blocks ─────────── */
 
@@ -68,9 +73,9 @@ function Section({
 }) {
   return (
     <Card padding="none" className={className}>
-      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-gray-400" />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-gray-100 px-5 py-3.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon className="h-4 w-4 shrink-0 text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
         </div>
         {badge}
@@ -99,21 +104,21 @@ function Fields({ rows, cols = 2 }: { rows: [string, Val][]; cols?: 2 | 3 }) {
 }
 
 function Mono({ children }: { children: ReactNode }) {
-  return <span className="font-mono text-[13px]">{children}</span>
+  return <span className="break-all font-mono text-[13px]">{children}</span>
 }
 
 function CopyValue({ value }: { value: string }) {
   const { showToast } = useToast()
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <Mono>{value}</Mono>
+    <span className="inline-flex max-w-full items-center gap-1.5">
+      <span className="min-w-0"><Mono>{value}</Mono></span>
       <button
         type="button"
         title="Copy"
         onClick={() =>
           navigator.clipboard.writeText(value).then(() => showToast({ type: 'success', title: 'Copied' }))
         }
-        className="text-gray-400 transition-colors hover:text-gray-700"
+        className="shrink-0 text-gray-400 transition-colors hover:text-gray-700"
       >
         <Copy className="h-3.5 w-3.5" />
       </button>
@@ -191,7 +196,7 @@ function VoucherCard({ voucher, index }: { voucher: LoungeVoucher; index: number
   // Partner-supplied: never let a javascript: (or data:) URL become a clickable link.
   const voucherHref = safeLinkUrl(voucher.url)
   return (
-    <div className="flex gap-4 rounded-lg border border-gray-200 p-3">
+    <div className="flex flex-col gap-4 rounded-lg border border-gray-200 p-3 sm:flex-row">
       {showQr && code && <QrBlock value={voucher.url && /^https?:/.test(voucher.url) ? voucher.url : code} />}
       <div className="min-w-0 flex-1 space-y-1 text-sm">
         <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -314,9 +319,9 @@ function BookingSection({ v }: { v: LoungeVisitDetail }) {
           <p className="mb-1.5 text-xs text-gray-500">Passengers</p>
           <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 text-sm">
             {v.passengers.map((p, i) => (
-              <li key={i} className="flex justify-between px-3 py-1.5">
-                <span className="text-gray-900">{p.name}</span>
-                <span className="text-xs capitalize text-gray-500">{p.type?.toLowerCase()}</span>
+              <li key={i} className="flex justify-between gap-3 px-3 py-1.5">
+                <span className="min-w-0 break-words text-gray-900">{p.name}</span>
+                <span className="shrink-0 text-xs capitalize text-gray-500">{p.type?.toLowerCase()}</span>
               </li>
             ))}
           </ul>
@@ -344,7 +349,7 @@ function WalkinPassSection({ v }: { v: LoungeVisitDetail }) {
     >
       <div className="flex flex-col gap-5 md:flex-row">
         {qrValue && <QrBlock value={qrValue} label={w.ePassId ?? undefined} />}
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <Fields
             rows={[
               ['ePass ID', w.ePassId && <CopyValue value={w.ePassId} />],
@@ -360,6 +365,7 @@ function WalkinPassSection({ v }: { v: LoungeVisitDetail }) {
       <div className="mt-4">
         <p className="mb-1.5 text-xs text-gray-500">Desk scans</p>
         {w.scans?.length ? (
+          <div className="overflow-x-auto">
           <table className="w-full rounded-md border border-gray-200 text-sm">
             <thead className="bg-gray-50 text-left text-xs text-gray-500">
               <tr>
@@ -386,6 +392,7 @@ function WalkinPassSection({ v }: { v: LoungeVisitDetail }) {
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           <p className="text-sm text-gray-400">Not scanned yet.</p>
         )}
@@ -442,6 +449,42 @@ function DragonpassSection({ v }: { v: LoungeVisitDetail }) {
         </div>
       )}
     </Section>
+  )
+}
+
+/** Card refund from Mint. `amountCents` is in the refund's own currency (AUD), which may differ
+ * from the booking's; the Flexible fee kept is in the payment's currency. `refund.amount` is
+ * Mint's raw dollar figure and is deliberately not shown. */
+function RefundCard({ refund, paymentCurrency }: { refund: NonNullable<LoungePayment['refund']>; paymentCurrency: string }) {
+  const chip = refundStatusChip(refund.status)
+  const feeKept = refund.feeWithheldCents ?? 0
+  return (
+    <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-sky-700">Refund</p>
+        {chip && <Badge variant={chip.variant}>{chip.label}</Badge>}
+      </div>
+      <Fields
+        rows={[
+          [
+            'Amount',
+            refund.amountCents != null ? (
+              <>
+                <span className="font-semibold">{formatCentsIn(refund.amountCents, refund.currency ?? 'AUD')}</span>
+                {feeKept > 0 && (
+                  <span className="block text-xs text-gray-500">
+                    Flexible booking fee kept (non-refundable): {formatCentsIn(feeKept, paymentCurrency)}
+                  </span>
+                )}
+              </>
+            ) : null,
+          ],
+          ['Mint status', refund.status],
+          ['Reference', refund.reference && <CopyValue value={refund.reference} />],
+          ['Refunded at', formatStampWithZone(refund.at)],
+        ]}
+      />
+    </div>
   )
 }
 
@@ -529,20 +572,14 @@ function PaymentSection({ v }: { v: LoungeVisitDetail }) {
               />
             </div>
           )}
-          {p.refund && (
-            <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-sky-700">Refund</p>
-              <Fields
-                rows={[
-                  // Refund amount is reported in its own currency (may differ from the booking's).
-                  ['Amount', p.refund.amount != null ? formatCentsIn(p.refund.amount, p.refund.currency ?? cur) : null],
-                  ['Status', p.refund.status],
-                  ['Reference', p.refund.reference && <CopyValue value={p.refund.reference} />],
-                  ['Refunded at', formatStamp(p.refund.at)],
-                ]}
-              />
-            </div>
-          )}
+          {p.refund && <RefundCard refund={p.refund} paymentCurrency={cur} />}
+          <Link
+            to={apiTimelineHref({ ref: p.id })}
+            className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+          >
+            <HistoryIcon className="h-4 w-4" aria-hidden="true" />
+            API timeline for this payment
+          </Link>
         </>
       ) : (
         <Fields
@@ -586,9 +623,9 @@ function PricingSection({ v }: { v: LoungeVisitDetail }) {
   if (!b) return null
   const row = (label: string, cents: number, sign = '', tone = 'text-gray-900') =>
     cents ? (
-      <div className="flex justify-between">
+      <div className="flex justify-between gap-3">
         <span className="text-gray-600">{label}</span>
-        <span className={tone}>
+        <span className={`shrink-0 ${tone}`}>
           {sign}
           {formatCentsIn(cents, b.currency)}
         </span>
@@ -724,12 +761,12 @@ function RawRecordSection({ v }: { v: LoungeVisitDetail }) {
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left"
       >
-        <span className="flex items-center gap-2">
-          <FileJson className="h-4 w-4 text-gray-400" />
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <FileJson className="h-4 w-4 shrink-0 text-gray-400" />
           <span className="text-sm font-semibold text-gray-900">Raw record</span>
           <span className="text-xs text-gray-400">stored booking metadata (DragonPass tokens removed)</span>
         </span>
-        {open ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+        {open ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
       </button>
       {open && (
         <div className="border-t border-gray-100 px-5 py-4">
@@ -802,12 +839,12 @@ export default function VVLoungeBookingDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">{visit.loungeName ?? 'Unknown venue'}</h1>
+              <h1 className="break-words text-xl font-bold text-gray-900">{visit.loungeName ?? 'Unknown venue'}</h1>
               <Badge variant={visitStatusVariant(visit)}>{visitStatusLabel(visit)}</Badge>
               <Badge variant="neutral">{serviceLabel(visit)}</Badge>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              <span className="font-mono">{visit.orderId ?? visit.id}</span>
+            <p className="mt-1 break-words text-sm text-gray-500">
+              <span className="break-all font-mono">{visit.orderId ?? visit.id}</span>
               {visit.airportCode && ` · ${visit.airportCode}`}
               {' · '}
               {formatVisitDate(visit.visitDate)}
@@ -816,7 +853,7 @@ export default function VVLoungeBookingDetailPage() {
               {partyLabel(visit)}
             </p>
             {(visit.customer || visit.contactName) && (
-              <p className="mt-1 text-sm text-gray-700">
+              <p className="mt-1 break-words text-sm text-gray-700">
                 {visit.customer?.name ?? visit.contactName}
                 {(visit.customer?.email ?? visit.contactEmail) && (
                   <span className="text-gray-500"> · {visit.customer?.email ?? visit.contactEmail}</span>
@@ -865,8 +902,12 @@ export default function VVLoungeBookingDetailPage() {
         )}
       </Section>
 
+      {/* Every API call / supplier exchange behind this visit (fetched only when opened). */}
+      <ApiTimelineSection refValue={visitId ?? visit.id} />
+
       <RawRecordSection v={visit} />
       <EventDrawer />
+      <ApiLogDrawer />
     </div>
   )
 }

@@ -53,6 +53,9 @@ import VVAuditTrendsPage from '@/features/veloxverse-admin/pages/VVAuditTrendsPa
 import VVAuditAlertsPage from '@/features/veloxverse-admin/pages/VVAuditAlertsPage'
 import VVAuditSettingsPage from '@/features/veloxverse-admin/pages/VVAuditSettingsPage'
 import VVAuditCustomerPage from '@/features/veloxverse-admin/pages/VVAuditCustomerPage'
+import VVApiLogsPage from '@/features/veloxverse-admin/pages/VVApiLogsPage'
+import VVApiTimelinePage from '@/features/veloxverse-admin/pages/VVApiTimelinePage'
+import VVApiHealthPage from '@/features/veloxverse-admin/pages/VVApiHealthPage'
 
 const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
@@ -135,6 +138,9 @@ const router = createBrowserRouter([
             element: <RoleGuard allowedRoles={['super_admin', 'admin', 'support']} />,
             children: [
               { path: '/dashboard/veloxverse/audit-logs',                                       element: <VVAuditLogPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/api',                                   element: <VVApiLogsPage /> },
+              { path: '/dashboard/veloxverse/audit-logs/api/timeline',                          element: <VVApiTimelinePage /> },
+              { path: '/dashboard/veloxverse/audit-logs/api-health',                            element: <VVApiHealthPage /> },
               { path: '/dashboard/veloxverse/audit-logs/trace/:requestId',                      element: <VVAuditTracePage /> },
               { path: '/dashboard/veloxverse/audit-logs/journeys/:journeyId',                   element: <VVAuditJourneyPage /> },
               { path: '/dashboard/veloxverse/audit-logs/customers/:userId',                     element: <VVAuditCustomerPage /> },

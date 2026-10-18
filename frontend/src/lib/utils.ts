@@ -98,3 +98,17 @@ export function getInitials(name: string): string {
     .toUpperCase()
     .slice(0, 2)
 }
+
+/** A named zone like "IST" where the platform has one; en-GB alone gives "GMT+5:30" for India. */
+export function zoneAbbr(d: Date): string {
+  let fallback = ''
+  for (const locale of ['en-GB', 'en-IN', 'en-US']) {
+    const name = new Intl.DateTimeFormat(locale, { timeZoneName: 'short' })
+      .formatToParts(d)
+      .find((p) => p.type === 'timeZoneName')?.value
+    if (!name) continue
+    if (!/^(GMT|UTC)[+-]/.test(name)) return name
+    fallback ||= name
+  }
+  return fallback
+}

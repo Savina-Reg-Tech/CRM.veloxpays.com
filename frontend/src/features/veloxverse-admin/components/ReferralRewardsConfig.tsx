@@ -121,7 +121,7 @@ export default function ReferralRewardsConfig() {
       ) : (
         <>
           {/* Desktop */}
-          <div className="hidden overflow-x-auto rounded-xl border border-gray-200 md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-gray-200 lg:block">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
@@ -162,7 +162,7 @@ export default function ReferralRewardsConfig() {
           </div>
 
           {/* Mobile */}
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:hidden">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:hidden">
             {rows.map((row) => (
               <div key={row.id} className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -187,7 +187,7 @@ export default function ReferralRewardsConfig() {
                     <WorthLabel points={row.refereePoints} currency={row.currency} rate={rateFor(row.currency)} />
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                   <span>
                     v{row.version} · {formatDateTime(row.updatedAt)}
                   </span>

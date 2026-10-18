@@ -175,6 +175,8 @@ export interface AuditMeta {
   alertTypes: string[]
   severities: Array<{ value: Severity; colour: string }>
   stuckRules: AuditStuckRule[]
+  /** Absent on VeloxVerse builds without API logs. */
+  apiLogs?: ApiLogMeta
 }
 
 export interface AuditErrorsSummary {
@@ -284,6 +286,8 @@ export interface AuditSettings {
   minRetentionDays: number
   updatedBy: string | null
   updatedAt: string
+  /** Absent on VeloxVerse builds without API logs. */
+  apiLogs?: ApiLogSettings
 }
 
 export interface AuditSettingsUpdate {
@@ -291,6 +295,8 @@ export interface AuditSettingsUpdate {
   summaryRetentionDays?: number
   alertsEnabled?: boolean
   thresholds?: Partial<AuditThresholds>
+  /** Send only the keys that changed. */
+  apiLogs?: Partial<Pick<ApiLogSettings, 'enabled' | 'capture' | 'bodies' | 'retentionDays'>>
 }
 
 export interface AlertRecipient {
@@ -345,4 +351,202 @@ export interface AuditExportResult {
   filename: string
   rows: number
   truncated: boolean
+}
+
+// ── API logs (every HTTP exchange: inbound, supplier calls, webhooks) ──
+
+export type ApiLogDirection = 'inbound' | 'outbound' | 'webhook'
+export type ApiLogOutcome = 'success' | 'failure' | 'error' | 'timeout' | 'unknown'
+export type ApiLogStatusClass = '2xx' | '3xx' | '4xx' | '5xx' | 'none'
+export type ApiLogCapture = 'all' | 'errors_only'
+
+/** Row in lists, timelines and "other attempts" — never headers or bodies. */
+export interface ApiLogSummary {
+  id: string
+  createdAt: string
+  direction: ApiLogDirection
+  service: string
+  /** dragonpass | mint | esim | travelfusion | viatovia | email | s3 */
+  supplier: string | null
+  /** Outbound: 'POST /v2/orders/:id/cancel', 'sendMail:otp', 'StartBooking' */
+  operation: string | null
+  /** GET POST PUT PATCH DELETE SMTP S3 */
+  method: string | null
+  /** Query values already redacted. */
+  url: string | null
+  /** Pattern, e.g. '/api/v1/lounge/visits/:id/cancel' */
+  route: string | null
+  /** null = no answer (timeout / network). */
+  statusCode: number | null
+  outcome: ApiLogOutcome
+  /** outcome is unknown or timeout */
+  needsAttention: boolean
+  /** payment / refund / charge / top-up / flight booking */
+  isMoneyCall: boolean
+  durationMs: number | null
+  /** 1, 2… (supplier retry after a network failure) */
+  attempt: number | null
+  /** DragonPass / eSIM request id, or 'fp:…' Mint token fingerprint */
+  idempotencyKey: string | null
+  errorCode: string | null
+  errorMessage: string | null
+  actor: 'customer' | 'guest' | 'admin' | 'support' | 'system'
+  /** Background job name, e.g. 'dragonpassReconciliation' */
+  jobName: string | null
+  /** Our request id = the support reference; 'job-…' for job runs. */
+  requestId: string | null
+  journeyId: string | null
+  userId: string | null
+  /** Booking / payment / supplier ids found in this exchange. */
+  refs: string[]
+  hasBodies: boolean
+  /** A body was > 16 KB — only a preview is stored. */
+  bodyTruncated: boolean
+  /** Something was removed or masked. */
+  isSensitiveMasked: boolean
+  /** Support viewers get '203.0.113.0/24'. */
+  ip: string | null
+  /** Support viewers get 'Chrome on macOS'. */
+  userAgent: string | null
+  /** Masked for support viewers. */
+  customer: AuditCustomer | null
+}
+
+/** A body over 16 KB, as stored. */
+export interface ApiLogTruncatedBody {
+  _truncated: true
+  _bytes: number
+  preview: string
+}
+
+export interface ApiLogDetail extends ApiLogSummary {
+  anonId: string | null
+  referenceType: string | null
+  referenceId: string | null
+  /** Allow-listed headers only. */
+  requestHeaders: Record<string, string> | null
+  /** JSON, { text } for a non-JSON body, or ApiLogTruncatedBody. */
+  requestBody: unknown | null
+  responseBody: unknown | null
+  requestBytes: number | null
+  responseBytes: number | null
+}
+
+export interface ApiLogDetailResponse {
+  log: ApiLogDetail
+  /** Same idempotency key (retries of the same call). */
+  otherAttempts: ApiLogSummary[]
+  sameRequestLogs: number
+  sameRequestAuditEvents: number
+}
+
+export interface ApiLogListResponse {
+  logs: ApiLogSummary[]
+  nextCursor: string | null
+}
+
+export interface ApiTimelineAuditEvent {
+  id: string
+  createdAt: string
+  service: string
+  eventType: string
+  step: string
+  status: string
+  severity: string
+  requestId: string | null
+  journeyId: string | null
+  referenceType: string | null
+  referenceId: string | null
+  errorCode: string | null
+  errorMessage: string | null
+  supplier: string | null
+}
+
+export type ApiTimelineItem =
+  | { kind: 'api_log'; at: string; log: ApiLogSummary }
+  | { kind: 'audit_event'; at: string; event: ApiTimelineAuditEvent }
+
+export interface ApiTimelineResponse {
+  query: { ref: string | null; requestId: string | null; journeyId: string | null; from: string; to: string }
+  /** Request ids the story spans. */
+  requests: string[]
+  customer: AuditCustomer | null
+  counts: { apiLogs: number; auditEvents: number; failures: number; needsAttention: number }
+  /** > 1000 API logs — narrow the range. */
+  truncated: boolean
+  /** Oldest first. */
+  items: ApiTimelineItem[]
+}
+
+export interface ApiLogStats {
+  from: string
+  to: string
+  total: number
+  byOutcome: Partial<Record<ApiLogOutcome, number>>
+  byStatusClass: Partial<Record<ApiLogStatusClass | '1xx', number>>
+  byDirection: Partial<Record<ApiLogDirection, number>>
+  suppliers: Array<{ supplier: string; calls: number; failed: number; needsAttention: number; failureRatePercent: number; p95Ms: number | null }>
+  slowest: Array<{ operation: string; method: string | null; calls: number; p95Ms: number | null; maxMs: number | null }>
+  topErrors: Array<{ error: string; count: number; message: string | null }>
+  /** Latest 20 unknown / timeout. */
+  needsAttention: ApiLogSummary[]
+}
+
+export interface ApiLogExport {
+  filename: string
+  csv: string
+  rows: number
+  truncated: boolean
+}
+
+export interface ApiLogSettings {
+  enabled: boolean
+  capture: ApiLogCapture
+  bodies: boolean
+  retentionDays: number
+  minRetentionDays: number
+  maxRetentionDays: number
+}
+
+/** GET /meta → data.apiLogs */
+export interface ApiLogMeta {
+  directions: ApiLogDirection[]
+  outcomes: Array<{ value: ApiLogOutcome; colour: string; needsAttention: boolean }>
+  statusClasses: ApiLogStatusClass[]
+  methods: string[]
+  captureModes: ApiLogCapture[]
+  defaultRetentionDays: number
+  retentionDays: number
+}
+
+/** GET /api-logs query (lists are sent as "a,b"). */
+export interface ApiLogFilters {
+  from?: string
+  to?: string
+  direction?: string[]
+  outcome?: string[]
+  statusClass?: string[]
+  statusCode?: number
+  method?: string[]
+  service?: string[]
+  supplier?: string[]
+  route?: string
+  ref?: string
+  requestId?: string
+  journeyId?: string
+  userId?: string
+  email?: string
+  jobName?: string
+  errorsOnly?: boolean
+  moneyOnly?: boolean
+  minDurationMs?: number
+}
+
+/** Exactly one of ref / requestId / journeyId. */
+export interface ApiTimelineParams {
+  ref?: string
+  requestId?: string
+  journeyId?: string
+  from?: string
+  to?: string
 }

@@ -15,6 +15,8 @@ import { formatDateTime, statusBadgeVariant } from '../utils'
 import type { VVSupportMessage, VVSupportPriority, VVSupportStatus } from '../types'
 import { ReferenceEvents } from '../components/audit/BookingAuditTrail'
 import { EventDrawer } from '../components/audit/EventDrawer'
+import { ApiLogDrawer } from '../components/vv-audit/ApiLogDrawer'
+import { ApiTimelineSection } from '../components/vv-audit/ApiTimeline'
 
 const STATUSES: VVSupportStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
 
@@ -64,14 +66,14 @@ function AdminMessageThread({ messages }: { messages: VVSupportMessage[] }) {
                   : 'rounded-tr-sm bg-indigo-50 text-gray-900'
               }`}
             >
-              <div className="mb-1.5 flex items-center gap-2 text-[11px] text-gray-500">
+              <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
                 <span className="font-semibold">{isAdmin ? 'Admin' : 'Customer'}</span>
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatDateTime(m.createdAt)}
                 </span>
               </div>
-              <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{m.message}</p>
             </div>
           </div>
         )
@@ -164,9 +166,9 @@ export default function VVSupportDetailPage() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {ticket.caseId && (
-                  <p className="mb-1 font-mono text-xs text-indigo-600">{ticket.caseId}</p>
+                  <p className="mb-1 break-all font-mono text-xs text-indigo-600">{ticket.caseId}</p>
                 )}
-                <h1 className="text-lg font-semibold text-gray-900">{ticket.subject}</h1>
+                <h1 className="break-words text-lg font-semibold text-gray-900">{ticket.subject}</h1>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Badge variant={priorityBadgeVariant(ticket.priority)}>{ticket.priority}</Badge>
@@ -182,7 +184,7 @@ export default function VVSupportDetailPage() {
                 <UserIcon className="h-3 w-3" />
                 {ticket.customer?.name ?? 'Unknown'}
               </span>
-              <span>{ticket.customer?.email ?? '—'}</span>
+              <span className="min-w-0 break-all">{ticket.customer?.email ?? '—'}</span>
               <span className="capitalize">{ticket.category.toLowerCase()}</span>
               <span>Opened {formatDateTime(ticket.createdAt)}</span>
             </div>
@@ -236,11 +238,11 @@ export default function VVSupportDetailPage() {
               placeholder="Write your response to the customer..."
               className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[11px] text-gray-500">
                 Your reply will be visible to the customer and will send them a notification.
               </p>
-              <div className="flex gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
                 {ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && message.trim() && (
                   <Button
                     variant="outline"
@@ -266,9 +268,12 @@ export default function VVSupportDetailPage() {
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Audit trail</h2>
             <ReferenceEvents referenceId={ticket.caseId ?? ticket.id} />
           </Card>
+
+          <ApiTimelineSection refValue={ticket.caseId ?? ticket.id} />
         </div>
       )}
       <EventDrawer />
+      <ApiLogDrawer />
     </div>
   )
 }

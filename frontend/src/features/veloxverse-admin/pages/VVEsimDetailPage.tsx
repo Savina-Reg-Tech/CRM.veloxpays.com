@@ -34,6 +34,8 @@ import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
 import RefundOutcomeNotice from '../components/RefundOutcomeNotice'
 import { describeRefundOutcome, type RefundOutcome } from '../refundOutcome'
 import { EventDrawer } from '../components/audit/EventDrawer'
+import { ApiLogDrawer } from '../components/vv-audit/ApiLogDrawer'
+import { ApiTimelineSection } from '../components/vv-audit/ApiTimeline'
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return '—'
@@ -88,11 +90,11 @@ function DetailRow({
 }) {
   if (value == null) return null
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex min-w-0 items-center gap-3 py-2">
       <Icon className="h-4 w-4 shrink-0 text-gray-400" />
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm text-gray-900">{String(value)}</p>
+        <p className="break-words text-sm text-gray-900">{String(value)}</p>
       </div>
     </div>
   )
@@ -256,7 +258,7 @@ export default function VVEsimDetailPage() {
           Back to orders
         </button>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <h1 className="min-w-0 break-words text-2xl font-bold text-gray-900">{title}</h1>
           <Badge variant={statusBadgeVariant(order.status)}>{order.status}</Badge>
           {unpaid && (
             <span title={unpaidOrderNote(order)} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
@@ -267,7 +269,7 @@ export default function VVEsimDetailPage() {
             <Badge variant="neutral">{order.esimStatus}</Badge>
           )}
         </div>
-        <p className="font-mono text-sm text-gray-500">Order #{order.orderNo}</p>
+        <p className="break-all font-mono text-sm text-gray-500">Order #{order.orderNo}</p>
       </div>
 
       {refundOutcome && (
@@ -406,7 +408,7 @@ export default function VVEsimDetailPage() {
                 <UsageBar percent={order.dataUsagePercent} />
               </div>
             )}
-            <div className="mt-2 grid grid-cols-2 gap-4">
+            <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 icon={Clock}
                 label="Activated"
@@ -422,7 +424,7 @@ export default function VVEsimDetailPage() {
 
           <Card>
             <CardHeader title="Customer" />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow icon={User} label="Name" value={customerName} />
               <DetailRow icon={User} label="Email" value={customerEmail} />
               <DetailRow
@@ -446,7 +448,7 @@ export default function VVEsimDetailPage() {
                 Not paid. {unpaidOrderNote(order)} There is no cost, sale or profit for this order.
               </p>
             )}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
               <DetailRow
                 icon={CreditCard}
                 label="Cost"
@@ -590,7 +592,9 @@ export default function VVEsimDetailPage() {
         <CardHeader title="Audit trail" description="Every step of this order from the customer journey audit log." />
         <BookingAuditTrail referenceType="esim_order" referenceId={order.orderNo} />
       </Card>
+      <ApiTimelineSection refValue={order.orderNo} />
       <EventDrawer />
+      <ApiLogDrawer />
 
       <Modal
         open={showSuspendModal}

@@ -21,6 +21,7 @@ import {
 import { alertTypeLabel, auditError, auditErrorText, humanize, serviceLabel } from '../audit'
 import type { AlertRecipient, AlertRecipientInput, AuditSettings, AuditThresholds } from '../auditTypes'
 import { AuditEmpty, AuditErrorState, AuditPageShell, AuditTime, MultiSelect, selectClass, useAuditViewer } from '../components/audit/AuditUI'
+import ApiLogSettingsCard from '../components/vv-audit/ApiLogSettingsCard'
 
 const DEFAULT_THRESHOLDS: AuditThresholds = {
   spikeCount: 10,
@@ -435,7 +436,7 @@ export default function VVAuditSettingsPage() {
   const settings = useVVAuditSettings(isAdmin)
 
   return (
-    <AuditPageShell title="Audit log settings" subtitle="Retention, alert emails and who receives them.">
+    <AuditPageShell title="Audit log settings" subtitle="Retention, API logs, alert emails and who receives them.">
       {!isAdmin ? (
         <Card>
           <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -452,6 +453,7 @@ export default function VVAuditSettingsPage() {
           ) : (
             <SettingsForm settings={settings.data} />
           )}
+          <ApiLogSettingsCard />
           <Recipients />
         </>
       )}

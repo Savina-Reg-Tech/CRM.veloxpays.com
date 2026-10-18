@@ -238,9 +238,9 @@ function TiersTab({ edits, onEditsChange }: { edits: Edits; onEditsChange: (next
         <div ref={historyRef}>
         <Card className="p-0 sm:p-6">
           <div className="p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold">Benefit History — {tiers?.find((t: ClubTierRow) => t.id === selectedTierId)?.name}</h3>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedTierId(null)}>Close</Button>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <h3 className="min-w-0 break-words text-lg font-semibold">Benefit History — {tiers?.find((t: ClubTierRow) => t.id === selectedTierId)?.name}</h3>
+              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setSelectedTierId(null)}>Close</Button>
             </div>
             {!versions ? (
               <Skeleton className="h-24" />
@@ -277,7 +277,7 @@ function TiersTab({ edits, onEditsChange }: { edits: Edits; onEditsChange: (next
                         return null
                       })}
                     </div>
-                    <div className="mt-2 text-xs text-gray-400">
+                    <div className="mt-2 break-words text-xs text-gray-400">
                       {v.changedBy ? `By ${v.changedBy.name} (${v.changedBy.email})` : 'System (seed)'}
                     </div>
                   </div>
@@ -633,13 +633,13 @@ function AnalyticsTab() {
   const { data, isLoading, error } = useVVClubAnalytics()
 
   if (error) return <ErrorBanner error={error} />
-  if (isLoading) return <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+  if (isLoading) return <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
   if (!data) return null
 
   return (
     <div className="space-y-6">
       {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Active Members" value={data.activeMembers} icon={<Users className="h-5 w-5 text-blue-500" />} />
         <StatCard label="Churn Rate" value={`${(data.churnRate * 100).toFixed(1)}%`} icon={<RefreshCw className="h-5 w-5 text-red-500" />} />
         <StatCard label="Renewal Success" value={`${(data.renewalSuccessRate * 100).toFixed(1)}%`} icon={<TrendingUp className="h-5 w-5 text-emerald-500" />} />
@@ -654,7 +654,7 @@ function AnalyticsTab() {
           <div className="space-y-2">
             {data.byTier.map((t) => (
               <div key={t.slug} className="flex flex-col gap-1 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLORS[t.slug] ?? 'bg-gray-100'}`}>{t.name}</span>
                   <span className="text-sm font-medium">{t.count} members</span>
                 </div>
@@ -672,7 +672,7 @@ function AnalyticsTab() {
       </Card>
 
       {/* Benefit utilization & promo usage side by side */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-0 sm:p-6">
           <div className="p-4">
             <h3 className="text-lg font-semibold mb-3">Benefit Utilization</h3>
@@ -681,9 +681,9 @@ function AnalyticsTab() {
             ) : (
               <div className="space-y-2">
                 {data.benefitUtilization.map((b) => (
-                  <div key={b.benefitKey} className="flex items-center justify-between text-sm">
-                    <span>{BENEFIT_LABELS[b.benefitKey] ?? b.benefitKey}</span>
-                    <span className="font-medium">{b.count} uses</span>
+                  <div key={b.benefitKey} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 break-words">{BENEFIT_LABELS[b.benefitKey] ?? b.benefitKey}</span>
+                    <span className="shrink-0 font-medium">{b.count} uses</span>
                   </div>
                 ))}
               </div>
@@ -701,9 +701,9 @@ function AnalyticsTab() {
             ) : (
               <div className="space-y-2">
                 {data.promoUsage.map((p) => (
-                  <div key={p.code} className="flex items-center justify-between text-sm">
-                    <span className="font-mono">{p.code}</span>
-                    <span className="font-medium">{p.count} uses</span>
+                  <div key={p.code} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 break-all font-mono">{p.code}</span>
+                    <span className="shrink-0 font-medium">{p.count} uses</span>
                   </div>
                 ))}
               </div>
@@ -722,7 +722,7 @@ function StatCard({ label, value, icon }: { label: string; value: ReactNode; ico
         <span className="shrink-0">{icon}</span>
         <div className="min-w-0">
           <div className="text-xs text-gray-500">{label}</div>
-          <div className="text-lg font-bold">{value}</div>
+          <div className="break-words text-lg font-bold">{value}</div>
         </div>
       </div>
     </Card>

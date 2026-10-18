@@ -71,8 +71,8 @@ function CaseSearch() {
 
   return (
     <Card className="space-y-3">
-      <div className="flex gap-2">
-        <div className="flex-1">
+      <div className="flex flex-wrap gap-2">
+        <div className="min-w-[12rem] flex-1">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -104,13 +104,13 @@ function CaseSearch() {
               const row = (
                 <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_TINT[r.type]}`}
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${TYPE_TINT[r.type]}`}
                       >
                         {TYPE_LABEL[r.type]}
                       </span>
-                      <span className="truncate font-mono text-xs text-indigo-600">
+                      <span className="min-w-0 truncate font-mono text-xs text-indigo-600">
                         {r.caseId ?? '—'}
                       </span>
                     </div>
@@ -165,7 +165,7 @@ export default function VVSupportListPage() {
         <p className="text-sm text-gray-500">Manage customer tickets and respond.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Total" value={stats?.total ?? 0} tint="text-gray-900" />
         <StatCard label="Open" value={stats?.open ?? 0} tint="text-amber-600" />
         <StatCard label="In progress" value={stats?.inProgress ?? 0} tint="text-indigo-600" />
@@ -250,7 +250,7 @@ export default function VVSupportListPage() {
                     <td className="px-4 py-3.5">
                       <Badge variant={statusBadgeVariant(t.status)}>{t.status.replace('_', ' ')}</Badge>
                     </td>
-                    <td className="px-4 py-3.5 text-gray-500">{formatDateTime(t.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3.5 text-gray-500">{formatDateTime(t.updatedAt)}</td>
                     <td className="px-4 py-3.5 text-right">
                       <Link to={`/dashboard/veloxverse/support/${t.id}`}>
                         <Button variant="ghost" size="sm">

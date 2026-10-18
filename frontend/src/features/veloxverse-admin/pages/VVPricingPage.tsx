@@ -354,12 +354,12 @@ function RuleForm({ existing, onClose }: { existing: PricingRule | null; onClose
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
-        <div>
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5">
+        <div className="min-w-0">
           <p className="text-sm font-medium text-gray-700">Active</p>
           <p className="text-xs text-gray-500">Inactive rules are ignored by the pricing engine.</p>
         </div>
-        <Switch checked={isActive} onChange={setIsActive} />
+        <Switch checked={isActive} onChange={setIsActive} className="shrink-0" />
       </div>
 
       <div className="space-y-1.5">
@@ -405,11 +405,11 @@ function AuditDialog({ ruleId, onClose }: { ruleId: string; onClose: () => void 
         <ul className="space-y-3">
           {audits.map((a) => (
             <li key={a.id} className="rounded-md border border-gray-200 p-3 text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-x-2">
                 <span className="font-medium text-gray-900">{a.action}</span>
                 <span className="text-xs text-gray-500">{formatDateTime(a.createdAt)}</span>
               </div>
-              <p className="text-xs text-gray-500">{a.changedByEmail ?? a.changedById ?? '—'}</p>
+              <p className="break-all text-xs text-gray-500">{a.changedByEmail ?? a.changedById ?? '—'}</p>
               {(a.oldStatus || a.newStatus) && (
                 <p className="text-xs text-gray-500">
                   Status: {a.oldStatus ?? '—'} → {a.newStatus ?? '—'}
@@ -509,8 +509,8 @@ export default function VVPricingPage() {
 
   return (
     <div className="max-w-full space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <Link
             to="/dashboard/veloxverse/analytics"
             className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
@@ -524,15 +524,15 @@ export default function VVPricingPage() {
             Margin, surge, and refund-protection rules applied across all bookable services.
           </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} className="w-full shrink-0 sm:w-auto">
           <Plus className="h-4 w-4" /> Create Rule
         </Button>
       </div>
 
       <Tabs defaultValue="ALL" value={tab} onChange={setTab}>
-        <TabsList>
+        <TabsList className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           {STATUS_TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
+            <TabsTrigger key={t.value} value={t.value} className="shrink-0 whitespace-nowrap px-3 sm:px-4">
               {t.label}
             </TabsTrigger>
           ))}
@@ -569,7 +569,7 @@ export default function VVPricingPage() {
                 Effective: {fmtDate(rule.effectiveFrom)} → {fmtDate(rule.effectiveTo)}
               </p>
               {(rule.updatedByEmail || rule.createdByEmail) && (
-                <p className="text-xs text-gray-500">
+                <p className="break-words text-xs text-gray-500">
                   Last updated by {rule.updatedByEmail ?? rule.createdByEmail} ·{' '}
                   {fmtDate(rule.updatedAt)}
                 </p>
@@ -633,7 +633,7 @@ export default function VVPricingPage() {
             {audit.slice(0, 15).map((a) => (
               <li key={a.id} className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
                 <span className="text-gray-900">{formatDateTime(a.createdAt)}</span>
-                <span>{a.changedByEmail ?? a.changedById ?? '—'}</span>
+                <span className="min-w-0 break-all">{a.changedByEmail ?? a.changedById ?? '—'}</span>
                 <Badge variant="neutral">{a.action}</Badge>
                 {a.changeReason && <span className="italic">“{a.changeReason}”</span>}
               </li>

@@ -426,11 +426,19 @@ export interface LoungePayment {
   chargeAttemptedAt: string | null
   chargeResponse: { code: string | number | null; message: string | null } | null
   refund: {
+    /** Mint's raw figure in DOLLARS, not cents — do not display; kept for old VeloxVerse builds. */
     amount: number | null
+    /** Refunded to the card, in cents of `currency`. Absent on older VeloxVerse builds. */
+    amountCents?: number | null
+    /** Card refunds are always AUD. */
     currency: string | null
+    /** 'APPROVED' | 'DECLINED' | 'FAILED' */
     status: string | null
     reference: string | null
+    /** ISO 8601 UTC. Older builds sent Mint's UTC time with no zone. */
     at: string | null
+    /** Flexible booking fee kept (never refunded), in cents of payment.currency; 0 if none. */
+    feeWithheldCents?: number
   } | null
   createdAt: string
   updatedAt: string

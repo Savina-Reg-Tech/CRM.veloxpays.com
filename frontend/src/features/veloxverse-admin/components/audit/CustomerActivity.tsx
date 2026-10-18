@@ -38,16 +38,16 @@ export function CustomerActivity({ kind, id }: { kind: 'user' | 'guest'; id: str
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
-          <Activity className="h-5 w-5 text-indigo-500" />
+        <div className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 p-3">
+          <Activity className="h-5 w-5 shrink-0 text-indigo-500" />
           <div><p className="text-lg font-bold text-gray-900">{events.length}{more}</p><p className="text-xs text-gray-500">Events (last {retentionDays} days)</p></div>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
-          <Globe className="h-5 w-5 text-emerald-500" />
+        <div className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 p-3">
+          <Globe className="h-5 w-5 shrink-0 text-emerald-500" />
           <div><p className="text-lg font-bold text-gray-900">{journeys.length}{more}</p><p className="text-xs text-gray-500">Booking attempts</p></div>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
-          <AlertTriangle className={`h-5 w-5 ${errorCount ? 'text-red-500' : 'text-gray-300'}`} />
+        <div className="flex min-w-0 items-center gap-3 rounded-lg border border-gray-100 p-3">
+          <AlertTriangle className={`h-5 w-5 shrink-0 ${errorCount ? 'text-red-500' : 'text-gray-300'}`} />
           <div><p className={`text-lg font-bold ${errorCount ? 'text-red-600' : 'text-gray-900'}`}>{errorCount}{more}</p><p className="text-xs text-gray-500">Errors hit</p></div>
         </div>
       </div>
@@ -70,12 +70,12 @@ export function CustomerActivity({ kind, id }: { kind: 'user' | 'guest'; id: str
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-44"><MultiSelect label="Service" options={meta.data?.services ?? []} value={filters.service ?? []} onChange={(v) => setFilters((f) => ({ ...f, service: v }))} format={serviceLabel} /></div>
-        <div className="w-40"><MultiSelect label="Severity" options={meta.data?.severities.map((s) => s.value) ?? []} value={filters.severity ?? []} onChange={(v) => setFilters((f) => ({ ...f, severity: v }))} /></div>
-        <input type="datetime-local" aria-label="From" value={toLocalInput(filters.from)} onChange={(e) => setFilters((f) => ({ ...f, from: fromLocalInput(e.target.value) }))} className="h-10 rounded-lg border border-gray-300 px-2 text-sm" />
-        <input type="datetime-local" aria-label="To" value={toLocalInput(filters.to)} onChange={(e) => setFilters((f) => ({ ...f, to: fromLocalInput(e.target.value) }))} className="h-10 rounded-lg border border-gray-300 px-2 text-sm" />
-        {kind === 'guest' && id && <span className="text-xs text-gray-500">Browser id <CopyId value={id} /></span>}
-        <span className="ml-auto"><MaskedNote /></span>
+        <div className="w-full sm:w-44"><MultiSelect label="Service" options={meta.data?.services ?? []} value={filters.service ?? []} onChange={(v) => setFilters((f) => ({ ...f, service: v }))} format={serviceLabel} /></div>
+        <div className="w-full sm:w-40"><MultiSelect label="Severity" options={meta.data?.severities.map((s) => s.value) ?? []} value={filters.severity ?? []} onChange={(v) => setFilters((f) => ({ ...f, severity: v }))} /></div>
+        <input type="datetime-local" aria-label="From" value={toLocalInput(filters.from)} onChange={(e) => setFilters((f) => ({ ...f, from: fromLocalInput(e.target.value) }))} className="h-10 w-full rounded-lg border border-gray-300 px-2 text-sm sm:w-auto" />
+        <input type="datetime-local" aria-label="To" value={toLocalInput(filters.to)} onChange={(e) => setFilters((f) => ({ ...f, to: fromLocalInput(e.target.value) }))} className="h-10 w-full rounded-lg border border-gray-300 px-2 text-sm sm:w-auto" />
+        {kind === 'guest' && id && <span className="inline-flex min-w-0 max-w-full items-center gap-1 text-xs text-gray-500">Browser id <CopyId value={id} /></span>}
+        <span className="max-w-full sm:ml-auto"><MaskedNote /></span>
       </div>
 
       {query.isLoading ? (

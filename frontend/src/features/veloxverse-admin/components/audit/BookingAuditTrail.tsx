@@ -32,7 +32,7 @@ export function BookingAuditTrail({ referenceType, referenceId }: { referenceTyp
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
         <span>{data.events.length} events</span>
         {data.journeys.map((j) => (
-          <span key={j} className="inline-flex items-center gap-1">
+          <span key={j} className="inline-flex min-w-0 max-w-full items-center gap-1">
             Journey <CopyId value={j} short to={`${AUDIT}/journeys/${j}`} />
           </span>
         ))}

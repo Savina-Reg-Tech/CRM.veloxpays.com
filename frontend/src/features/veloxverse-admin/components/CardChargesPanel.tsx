@@ -50,7 +50,7 @@ function Tile({
       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tint}`}>{icon}</div>
       <div className="min-w-0">
         <p className="text-xs text-gray-500">{label}</p>
-        <p className={`truncate font-bold tabular-nums ${prominent ? 'text-2xl text-emerald-700' : 'text-xl text-gray-900'}`}>
+        <p className={`break-words font-bold tabular-nums ${prominent ? 'text-2xl text-emerald-700' : 'text-xl text-gray-900'}`}>
           {value}
         </p>
         {sub && <p className="text-[11px] text-gray-400">{sub}</p>}
@@ -72,7 +72,7 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-gray-900">Card money collected (AUD)</h2>
           <p className="text-xs text-gray-500">Actual card money collected through Mint, in AUD.</p>
         </div>
@@ -95,7 +95,7 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
       ) : isError || !data ? (
@@ -104,7 +104,7 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
         </p>
       ) : (
         <div className={`space-y-3 transition-opacity ${isFetching ? 'opacity-60' : ''}`}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Tile
               icon={<Landmark className="h-5 w-5 text-emerald-600" />}
               tint="bg-white ring-1 ring-emerald-200"

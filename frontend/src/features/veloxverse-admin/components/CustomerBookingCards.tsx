@@ -111,17 +111,17 @@ function ExpandableCard({
             <p className="min-w-0 truncate font-semibold text-gray-900">{title}</p>
             {status}
           </div>
-          {subtitle && <div className="mt-0.5 text-xs text-gray-500">{subtitle}</div>}
+          {subtitle && <div className="mt-0.5 break-words text-xs text-gray-500">{subtitle}</div>}
         </div>
-        <div className="flex shrink-0 items-start gap-2">
+        <div className="flex min-w-0 max-w-[45%] shrink-0 items-start gap-2 sm:max-w-none">
           {amount !== undefined && (
-            <div className="text-right">
+            <div className="min-w-0 break-words text-right">
               <p className="text-sm font-bold text-gray-900">{amount}</p>
               {amountSub && <p className="text-[11px] text-gray-500">{amountSub}</p>}
             </div>
           )}
           <ChevronDown
-            className={`mt-0.5 h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180 text-indigo-500' : ''}`}
+            className={`mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180 text-indigo-500' : ''}`}
           />
         </div>
       </button>
@@ -255,7 +255,7 @@ export function EsimOrderCard({
       status={<Badge variant={statusBadgeVariant(order.status)}>{order.status}</Badge>}
       subtitle={
         <span className="flex flex-wrap gap-x-3">
-          <span className="font-mono">{order.orderNo}</span>
+          <span className="break-all font-mono">{order.orderNo}</span>
           {payment && <span>Ordered {formatDateTime(payment.date)}</span>}
         </span>
       }
@@ -477,7 +477,7 @@ export function TransferCard({ t, cardCharge }: { t: AdminTransferBooking; cardC
       status={<Badge variant={statusBadgeVariant(t.status)}>{t.status}</Badge>}
       subtitle={
         <span className="flex flex-wrap gap-x-3">
-          <span className="font-mono">{t.orderNo}</span>
+          <span className="break-all font-mono">{t.orderNo}</span>
           {t.flightArrival && <span>{formatDateTime(t.flightArrival)}</span>}
           <span>{travellers} traveller{travellers === 1 ? '' : 's'}</span>
           {t.flightNumber && <span>✈ {t.flightNumber}</span>}
@@ -633,7 +633,7 @@ export function PaymentRow({ li }: { li: AdminBillingLineItem }) {
       tint={isCredit ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}
       title={li.description}
       status={<span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-gray-600">{li.service}</span>}
-      subtitle={<span>{formatDateTime(li.date)} · <span className="font-mono">{li.orderNo}</span></span>}
+      subtitle={<span>{formatDateTime(li.date)} · <span className="break-all font-mono">{li.orderNo}</span></span>}
       amount={
         li.clubRedeemed && li.amountUsd === 0 ? (
           <span className="text-emerald-600">VeloxClub</span>
