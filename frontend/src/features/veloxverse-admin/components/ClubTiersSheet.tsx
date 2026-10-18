@@ -33,8 +33,10 @@ import {
   collectChanges,
   collectErrors,
   formatChangeValue,
-  formatUsd,
+  fixedPricesLine,
+  formatHomePrice,
   formatValue,
+  HOME_CURRENCY,
   inputValue,
   isExplorer,
   noneEdits,
@@ -149,7 +151,8 @@ export default function ClubTiersSheet({
     setReviewOpen(true)
   }
 
-  const columns = `minmax(190px, 1.1fr) repeat(${tiers.length}, minmax(150px, 1fr))`
+  // Narrow screens scroll the tier columns sideways; the row labels stay pinned on the left.
+  const columns = `minmax(132px, 1.1fr) repeat(${tiers.length}, minmax(140px, 1fr))`
   const hasPending = changes.length > 0 || errors.length > 0
 
   return (
@@ -179,7 +182,7 @@ export default function ClubTiersSheet({
         <div className="min-w-max space-y-4">
           {/* Tier header cards — aligned with the columns below */}
           <div className="grid gap-3" style={{ gridTemplateColumns: columns }}>
-            <div />
+            <div className="sticky left-0 z-10 bg-gray-50" />
             {tiers.map((tier) => (
               <TierHeaderCard
                 key={tier.id}
@@ -306,8 +309,11 @@ function TierHeaderCard({
           <div className="min-w-0">
             <div className={cn('truncate text-base font-semibold', accent.text)}>{tier.name}</div>
             <div className="text-sm font-medium text-gray-900">
-              {free ? 'Free' : `${formatUsd(tier.annualFeeCents / 100)} / year`}
+              {free ? 'Free' : `${formatHomePrice(tier.annualFeeCents / 100)} / year`}
             </div>
+            {!free && fixedPricesLine(tier) && (
+              <div className="text-[11px] leading-snug text-gray-400">Also: {fixedPricesLine(tier)}</div>
+            )}
           </div>
           <Badge variant="neutral">v{tier.currentVersion ?? 1}</Badge>
         </div>
@@ -385,14 +391,14 @@ function GroupCard({ group, tiers, columns, edits, changed, errorAt, showErrors,
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-xl border bg-white shadow-sm transition',
+        'overflow-clip rounded-xl border bg-white shadow-sm transition',
         groupChanged ? 'border-amber-300' : 'border-gray-200'
       )}
       aria-label={group.title}
     >
       {/* Card header: benefit name + quick "None" per tier */}
-      <div className="grid items-center gap-3 border-b border-gray-100 bg-gray-50/70 px-3 py-2" style={{ gridTemplateColumns: columns }}>
-        <div className="flex items-center gap-2">
+      <div className="grid items-center gap-3 border-b border-gray-100 bg-gray-50 px-3 py-2" style={{ gridTemplateColumns: columns }}>
+        <div className="sticky left-0 z-10 -my-2 -ml-3 flex items-center gap-2 self-stretch bg-gray-50 py-2 pl-3">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-indigo-600 shadow-sm ring-1 ring-gray-200">
             <Icon className="h-4 w-4" />
           </span>
@@ -418,7 +424,7 @@ function GroupCard({ group, tiers, columns, edits, changed, errorAt, showErrors,
       <div className="divide-y divide-gray-100">
         {group.fields.map((field) => (
           <div key={field.id} className="grid items-stretch gap-3 px-3 py-1.5" style={{ gridTemplateColumns: columns }}>
-            <div className="flex items-center text-sm text-gray-600">{field.label}</div>
+            <div className="sticky left-0 z-10 -my-1.5 -ml-3 flex items-center bg-white py-1.5 pl-3 text-sm text-gray-600">{field.label}</div>
             {tiers.map((tier) => {
               const key = cellKey(tier.id, field.id)
               const hidden = field.shownWhen ? !current(tier, fieldByPath(group, field.shownWhen)) : false
@@ -575,7 +581,7 @@ function SheetCell({ tier, field, raw, change, error, showError, hidden, editing
     )
   } else {
     const unlimited = field.kind === 'count' && String(value).trim() === '-1'
-    const prefix = field.kind === 'money' ? '$' : field.kind === 'multiplier' ? '×' : null
+    const prefix = field.kind === 'money' ? HOME_CURRENCY : field.kind === 'multiplier' ? '×' : null
     const suffix = field.kind === 'pct' ? '%' : field.kind === 'gb' ? 'GB' : null
     control = (
       <div className="space-y-1">
@@ -661,7 +667,7 @@ function ReviewDialog({ open, tiers, changes, onClose, onSaved }: ReviewDialogPr
         setSaving(plan.tier.name)
         try {
           if (plan.annualFeeCents !== undefined) {
-            await vvClubService.updateTier(plan.tier.id, { annualFeeCents: plan.annualFeeCents })
+            await vvClubService.updateTier(plan.tier.id, { annualFeeCents: plan.annualFeeCents, changeNote })
             parts.price = true
           }
           if (plan.benefits) {
@@ -731,7 +737,7 @@ function ReviewDialog({ open, tiers, changes, onClose, onSaved }: ReviewDialogPr
 
         <div className="space-y-1">
           <label htmlFor="club-change-note" className="text-xs font-medium text-gray-600">
-            Change note (optional — saved with every tier's new version)
+            Change note (optional — saved with every new price and benefits version)
           </label>
           <input
             id="club-change-note"

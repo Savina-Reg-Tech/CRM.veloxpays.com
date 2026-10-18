@@ -4,14 +4,15 @@
  * The client manages VeloxClub as one comparison sheet: benefits as rows, tiers as columns. This
  * module knows every row (where its value lives in a tier, how to show it in plain words, how to
  * validate an edit) and turns a set of edited cells into the API calls VeloxVerse expects:
- *   PUT /admin/club/tiers/:id           { annualFeeCents }        — one per tier whose price changed
+ *   PUT /admin/club/tiers/:id           { annualFeeCents, changeNote } — AUD price, one per tier whose price changed
  *   PUT /admin/club/tiers/:id/benefits  { benefits, changeNote }  — the COMPLETE benefits object
  */
+import { formatMoney } from '@/lib/utils'
 import type { ClubBenefits, ClubTierRow } from './types'
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 
-/** `count`: whole number, -1 = unlimited · `pct`: 0–100 · `gb`: decimals · `money`: USD. */
+/** `count`: whole number, -1 = unlimited · `pct`: 0–100 · `gb`: decimals · `money`: AUD (the tier price). */
 export type FieldKind = 'money' | 'count' | 'familyMax' | 'pct' | 'gb' | 'toggle' | 'support' | 'multiplier'
 
 /** Benefits with a "free allowance + discount" pair — the ones a quick "None" can clear. */
@@ -48,7 +49,7 @@ const f = (id: string, kind: FieldKind, label: string, changeLabel: string, extr
 })
 
 export const SHEET_GROUPS: SheetGroup[] = [
-  { id: 'price', title: 'Price', fields: [f('price', 'money', 'Yearly price (USD)', 'price')] },
+  { id: 'price', title: 'Price', fields: [f('price', 'money', 'Yearly price (AUD)', 'price')] },
   {
     id: 'lounge',
     title: 'Lounge',
@@ -165,7 +166,7 @@ export function savedValue(tier: ClubTierRow, field: SheetField): CellValue {
 export function formatValue(field: SheetField, value: CellValue): string {
   switch (field.kind) {
     case 'money':
-      return formatUsd(num(value))
+      return formatHomePrice(num(value))
     case 'count': {
       const n = num(value)
       if (n === -1) return 'Unlimited'
@@ -195,9 +196,19 @@ export function formatChangeValue(field: SheetField, value: CellValue): string {
   return formatValue(field, value)
 }
 
-/** "$499", "$499.50". */
-export function formatUsd(amount: number): string {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`
+/** VeloxClub's home currency: the tier price (`annualFeeCents`) is in AUD. */
+export const HOME_CURRENCY = 'AUD'
+
+/** "AUD 499.00". */
+export function formatHomePrice(amount: number): string {
+  return formatMoney(amount, HOME_CURRENCY)
+}
+
+/** A tier's fixed prices in other currencies: "GBP 259.00 · USD 329.00", or null when it has none. */
+export function fixedPricesLine(tier: Pick<ClubTierRow, 'pricesByCurrency'>): string | null {
+  const entries = Object.entries(tier.pricesByCurrency ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  if (entries.length === 0) return null
+  return entries.map(([currency, cents]) => formatMoney(cents / 100, currency)).join(' · ')
 }
 
 export function formatGb(gb: number): string {
@@ -356,7 +367,7 @@ export function buildBenefits(tier: ClubTierRow, changes: CellChange[]): ClubBen
 
 export interface TierSave {
   tier: ClubTierRow
-  /** New yearly price in USD cents, when it changed (never for Explorer). */
+  /** New yearly price in AUD cents, when it changed (never for Explorer). */
   annualFeeCents?: number
   /** The complete benefits object, when any benefit changed. */
   benefits?: ClubBenefits

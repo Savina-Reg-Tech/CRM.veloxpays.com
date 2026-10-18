@@ -17,7 +17,7 @@ import type {
   ReferralCodePatch, AdminReferralCode,
   PointsAuditPage, PointsDashboard,
   ClubTierRow, ClubBenefitVersion, ClubBenefits, ClubMembersPage, ClubMemberDetail,
-  ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType,
+  ClubPromoRow, ClubAnalytics, ClubChangeLogPage, ClubPromoDiscountType, ClubPriceLists, ClubPriceHistoryPage,
   AdminBillingActivity,
   AuditMeta, AuditEventPage, AuditEventDetail, AuditTrace, AuditJourney, AuditTimelinePage, AuditBookingTrail,
   AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
@@ -461,12 +461,30 @@ export const vvClubService = {
     const { data } = await api.get<VVResponse<ClubBenefitVersion[]>>(`${VV}/admin/club/tiers/${tierId}/benefits`)
     return data.data
   },
-  async updateTier(tierId: string, patch: { annualFeeCents?: number; isActive?: boolean }) {
-    const { data } = await api.put<VVResponse<{ id: string; slug: string; annualFeeCents: number; isActive: boolean }>>(`${VV}/admin/club/tiers/${tierId}`, patch)
+  /** `annualFeeCents` is the AUD home price. */
+  async updateTier(tierId: string, patch: { annualFeeCents?: number; isActive?: boolean; changeNote?: string }) {
+    const { data } = await api.put<VVResponse<{ id: string; slug: string; annualFeeCents: number; isActive: boolean; homeCurrency?: string }>>(`${VV}/admin/club/tiers/${tierId}`, patch)
     return data.data
   },
   async updateTierBenefits(tierId: string, benefits: ClubBenefits, changeNote?: string) {
     const { data } = await api.put<VVResponse<{ id: string; version: number; benefits: ClubBenefits; tierSlug: string }>>(`${VV}/admin/club/tiers/${tierId}/benefits`, { benefits, changeNote })
+    return data.data
+  },
+  // Prices by country (fixed prices per currency; AUD is edited with updateTier)
+  async getPriceLists() {
+    const { data } = await api.get<VVResponse<ClubPriceLists>>(`${VV}/admin/club/prices`)
+    return data.data
+  },
+  async setPriceList(currency: string, prices: Record<string, number>, changeNote?: string) {
+    const { data } = await api.put<VVResponse<ClubPriceLists>>(`${VV}/admin/club/prices/${encodeURIComponent(currency)}`, { prices, changeNote })
+    return data.data
+  },
+  async removePriceList(currency: string, changeNote?: string) {
+    const { data } = await api.delete<VVResponse<ClubPriceLists>>(`${VV}/admin/club/prices/${encodeURIComponent(currency)}`, { data: { changeNote } })
+    return data.data
+  },
+  async getPriceHistory(page = 1, limit = 30) {
+    const { data } = await api.get<VVResponse<ClubPriceHistoryPage>>(`${VV}/admin/club/prices/history`, { params: { page, limit } })
     return data.data
   },
   // Members

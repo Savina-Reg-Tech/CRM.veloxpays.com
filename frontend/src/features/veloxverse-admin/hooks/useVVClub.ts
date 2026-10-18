@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { vvClubService } from '../vvAdminService'
-import type { ClubBenefits, ClubPromoDiscountType } from '../types'
+import type { ClubBenefits, ClubPriceLists, ClubPromoDiscountType } from '../types'
 
 // ── Tiers & Benefits ──────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ export function useVVClubTierBenefits(tierId: string | undefined) {
 export function useVVUpdateClubTier() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ tierId, patch }: { tierId: string; patch: { annualFeeCents?: number; isActive?: boolean } }) =>
+    mutationFn: ({ tierId, patch }: { tierId: string; patch: { annualFeeCents?: number; isActive?: boolean; changeNote?: string } }) =>
       vvClubService.updateTier(tierId, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-club'] }),
   })
@@ -34,6 +34,53 @@ export function useVVUpdateClubTierBenefits() {
     mutationFn: ({ tierId, benefits, changeNote }: { tierId: string; benefits: ClubBenefits; changeNote?: string }) =>
       vvClubService.updateTierBenefits(tierId, benefits, changeNote),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vv-club'] }),
+  })
+}
+
+// ── Prices by country ─────────────────────────────────────────────
+
+export function useVVClubPriceLists() {
+  return useQuery({
+    queryKey: ['vv-club', 'prices'],
+    queryFn: () => vvClubService.getPriceLists(),
+  })
+}
+
+export function useVVClubPriceHistory(page: number, limit = 30) {
+  return useQuery({
+    queryKey: ['vv-club', 'prices-history', page, limit],
+    queryFn: () => vvClubService.getPriceHistory(page, limit),
+    placeholderData: (prev) => prev,
+  })
+}
+
+/** After a set/remove: show VeloxVerse's fresh panel straight away, then re-sync history and tiers
+ * (a tier's "Also: …" line lists its fixed prices). */
+function usePriceListSaved() {
+  const qc = useQueryClient()
+  return (lists: ClubPriceLists) => {
+    qc.setQueryData(['vv-club', 'prices'], lists)
+    qc.invalidateQueries({ queryKey: ['vv-club', 'prices'] })
+    qc.invalidateQueries({ queryKey: ['vv-club', 'prices-history'] })
+    qc.invalidateQueries({ queryKey: ['vv-club', 'tiers'] })
+  }
+}
+
+export function useVVSetClubPriceList() {
+  const onSaved = usePriceListSaved()
+  return useMutation({
+    mutationFn: ({ currency, prices, changeNote }: { currency: string; prices: Record<string, number>; changeNote?: string }) =>
+      vvClubService.setPriceList(currency, prices, changeNote),
+    onSuccess: onSaved,
+  })
+}
+
+export function useVVRemoveClubPriceList() {
+  const onSaved = usePriceListSaved()
+  return useMutation({
+    mutationFn: ({ currency, changeNote }: { currency: string; changeNote?: string }) =>
+      vvClubService.removePriceList(currency, changeNote),
+    onSuccess: onSaved,
   })
 }
 

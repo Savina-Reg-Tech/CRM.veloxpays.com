@@ -91,7 +91,8 @@ describe('sheet values', () => {
     expect(formatValue(field('lounge.visits'), 0)).toBe('None')
     expect(formatValue(field('dining.discount_pct'), 10)).toBe('10% off')
     expect(formatValue(field('esim.gb'), 0.5)).toBe('0.5 GB / year')
-    expect(formatValue(field('price'), 499)).toBe('$499')
+    expect(formatValue(field('price'), 499).replace(/\s/g, ' ')).toBe('AUD 499.00')
+    expect(field('price').label).toBe('Yearly price (AUD)')
     expect(formatValue(field('point_multiplier'), 1.5)).toBe('×1.5')
   })
 
@@ -224,7 +225,7 @@ describe('VeloxClub "All tiers" sheet', () => {
     await screen.findByRole('region', { name: 'Fast Track' })
 
     await typeInto(user, 'Silver', 'Discount', 'Fast Track', '10')
-    await typeInto(user, 'Platinum', 'Yearly price (USD)', 'Price', '499')
+    await typeInto(user, 'Platinum', 'Yearly price (AUD)', 'Price', '499')
     expect(screen.getByText('2 unsaved changes in 2 tiers')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -238,7 +239,7 @@ describe('VeloxClub "All tiers" sheet', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Save 2 changes' }))
 
     await screen.findByText('VeloxClub updated (2 tiers)')
-    expect(pricePuts()).toEqual([['/vv-admin/admin/club/tiers/t-platinum', { annualFeeCents: 49900 }]])
+    expect(pricePuts()).toEqual([['/vv-admin/admin/club/tiers/t-platinum', { annualFeeCents: 49900, changeNote: 'Client sheet' }]])
     expect(benefitPuts()).toHaveLength(1)
     const [url, body] = benefitPuts()[0]
     expect(url).toBe('/vv-admin/admin/club/tiers/t-silver/benefits')
@@ -331,6 +332,16 @@ describe('VeloxClub "All tiers" sheet', () => {
     const select = within(screen.getByRole('region', { name: 'Perks' })).getByRole('combobox', { name: 'Platinum Customer support' })
     const enabled = within(select).getAllByRole('option').filter((o) => !(o as HTMLOptionElement).disabled).map((o) => o.textContent)
     expect(enabled).toEqual(['Standard', 'Priority', 'Dedicated'])
+  })
+
+  it('shows the tier price in AUD, with its fixed prices underneath', async () => {
+    serverTiers[4].homeCurrency = 'AUD'
+    serverTiers[4].pricesByCurrency = { USD: 32900, GBP: 25900 }
+    renderPage()
+    expect(await screen.findByText('AUD 499.00 / year')).toBeInTheDocument()
+    expect(screen.getByText('Also: GBP 259.00 · USD 329.00')).toBeInTheDocument()
+    expect(screen.getAllByText(/^Also:/)).toHaveLength(1)
+    expect(cell('Elite', 'Yearly price \\(AUD\\)', 'Price')).toHaveTextContent('AUD 499.00')
   })
 
   it('"Set none" clears a benefit for one tier', async () => {

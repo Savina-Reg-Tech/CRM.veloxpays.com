@@ -11,8 +11,8 @@ import {
   Plus,
   AlertCircle,
   TrendingUp,
-  Award,
   RefreshCw,
+  Globe2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -37,6 +37,7 @@ import {
   useVVClubChangeLog,
 } from '../hooks/useVVClub'
 import ClubTiersSheet from '../components/ClubTiersSheet'
+import ClubPricesPanel from '../components/ClubPricesPanel'
 import { formatGb, gymVisits, supportLabel, type Edits } from '../clubSheet'
 import DualAmount from '@/components/ui/DualAmount'
 import { useVVAdminBillingActivity } from '../hooks/useVVBilling'
@@ -57,6 +58,8 @@ import type {
 // ─────────────────────────── Constants ────────────────────────────
 
 const PAGE_SIZE = 20
+
+const TAB_CLASS = 'flex shrink-0 items-center whitespace-nowrap px-3 sm:px-4'
 
 const STATUS_OPTIONS: ClubMembershipStatus[] = ['ACTIVE', 'PAST_DUE', 'EXPIRED', 'CANCELLED']
 
@@ -141,10 +144,10 @@ function ExplorerUsageBlock({ detail }: { detail: ClubMemberDetail }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// VVClubPage — 5 tabs
+// VVClubPage — 6 tabs
 // ═══════════════════════════════════════════════════════════════════
 
-type TabKey = 'tiers' | 'members' | 'promos' | 'analytics' | 'changelog'
+type TabKey = 'tiers' | 'prices' | 'members' | 'promos' | 'analytics' | 'changelog'
 
 export default function VVClubPage() {
   const [tab, setTab] = useState<TabKey>('tiers')
@@ -153,30 +156,32 @@ export default function VVClubPage() {
   const hasUnsaved = Object.keys(sheetEdits).length > 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Crown className="h-6 w-6 text-amber-500" />
-          <h1 className="text-2xl font-bold">VeloxClub</h1>
+          <h1 className="text-xl font-bold sm:text-2xl">VeloxClub</h1>
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — scroll sideways on a phone instead of wrapping */}
       <Tabs defaultValue="tiers" value={tab} onChange={(v: string) => setTab(v as TabKey)}>
-        <TabsList>
-          <TabsTrigger value="tiers">
+        <TabsList className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsTrigger value="tiers" className={TAB_CLASS}>
             <Crown className="mr-1.5 h-4 w-4" />Tiers & Benefits
             {hasUnsaved && <span className="ml-1.5 h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" />}
           </TabsTrigger>
-          <TabsTrigger value="members"><Users className="mr-1.5 h-4 w-4" />Members</TabsTrigger>
-          <TabsTrigger value="promos"><Tag className="mr-1.5 h-4 w-4" />Promo Codes</TabsTrigger>
-          <TabsTrigger value="analytics"><BarChart3 className="mr-1.5 h-4 w-4" />Analytics</TabsTrigger>
-          <TabsTrigger value="changelog"><History className="mr-1.5 h-4 w-4" />Change Log</TabsTrigger>
+          <TabsTrigger value="prices" className={TAB_CLASS}><Globe2 className="mr-1.5 h-4 w-4" />Prices by country</TabsTrigger>
+          <TabsTrigger value="members" className={TAB_CLASS}><Users className="mr-1.5 h-4 w-4" />Members</TabsTrigger>
+          <TabsTrigger value="promos" className={TAB_CLASS}><Tag className="mr-1.5 h-4 w-4" />Promo Codes</TabsTrigger>
+          <TabsTrigger value="analytics" className={TAB_CLASS}><BarChart3 className="mr-1.5 h-4 w-4" />Analytics</TabsTrigger>
+          <TabsTrigger value="changelog" className={TAB_CLASS}><History className="mr-1.5 h-4 w-4" />Change Log</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === 'tiers' && <TiersTab edits={sheetEdits} onEditsChange={setSheetEdits} />}
+      {tab === 'prices' && <ClubPricesPanel onEditHomePrices={() => setTab('tiers')} />}
       {tab === 'members' && <MembersTab />}
       {tab === 'promos' && <PromosTab />}
       {tab === 'analytics' && <AnalyticsTab />}
@@ -231,7 +236,7 @@ function TiersTab({ edits, onEditsChange }: { edits: Edits; onEditsChange: (next
       {/* Benefit versions for selected tier */}
       {selectedTierId && (
         <div ref={historyRef}>
-        <Card>
+        <Card className="p-0 sm:p-6">
           <div className="p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold">Benefit History — {tiers?.find((t: ClubTierRow) => t.id === selectedTierId)?.name}</h3>
@@ -245,7 +250,7 @@ function TiersTab({ edits, onEditsChange }: { edits: Edits; onEditsChange: (next
               <div className="space-y-3">
                 {versions.map((v: ClubBenefitVersion) => (
                   <div key={v.id} className={`rounded-lg border p-3 text-sm ${v.isCurrent ? 'border-primary bg-primary/5' : 'border-gray-200'}`}>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">Version {v.version}</span>
                         {v.isCurrent && <Badge variant="success">Current</Badge>}
@@ -328,28 +333,28 @@ function MembersTab() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative flex-1 sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search by name or email…" className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} />
         </div>
-        <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" value={tierFilter} onChange={(e) => { setTierFilter(e.target.value); setPage(1) }}>
+        <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm sm:w-auto" value={tierFilter} onChange={(e) => { setTierFilter(e.target.value); setPage(1) }}>
           <option value="">All Tiers</option>
           <option value="silver">Silver</option>
           <option value="gold">Gold</option>
           <option value="platinum">Platinum</option>
           <option value="elite">Elite</option>
         </select>
-        <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}>
+        <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm sm:w-auto" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}>
           <option value="">All Status</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <Card>
+      <Card className="p-0 sm:p-6">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b text-left text-gray-500">
                 <th className="px-4 py-3 font-medium">Member</th>
@@ -416,7 +421,7 @@ function MembersTab() {
         {memberDetail && (
           <div className="space-y-4">
             {memberDetail.user && (
-              <div className="text-sm">
+              <div className="break-words text-sm">
                 <span className="font-medium">{memberDetail.user.name}</span> — {memberDetail.user.email}
               </div>
             )}
@@ -426,15 +431,15 @@ function MembersTab() {
               const chargeLabel = cardChargeLabel(ms.currency, charge?.amount, charge?.currency)
               return (
               <div key={ms.id} className="rounded-lg border p-3 text-sm space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIER_COLORS[ms.tierSlug] ?? 'bg-gray-100'}`}>{ms.tier}</span>
                     <Badge variant={statusBadgeVariant(ms.status)}>{ms.status}</Badge>
                     {ms.loyaltyDiscountApplied && <Badge variant="info">Loyalty</Badge>}
                   </div>
                   <span className="text-xs text-gray-500">v{ms.benefitVersion}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs text-gray-600 sm:grid-cols-2">
                   <div>
                     Paid: <span className="font-medium text-gray-900">{formatMoney(ms.purchasePriceCents / 100, ms.currency)}</span>
                     {chargeLabel && <span className="block text-[11px] text-gray-500" title={CARD_CHARGE_TOOLTIP}>{chargeLabel}</span>}
@@ -477,7 +482,7 @@ function MembersTab() {
         <div className="space-y-4">
           <p className="text-sm text-gray-600">This will immediately cancel the member's active membership. Benefits stop now.</p>
           <Input placeholder="Reason for cancellation…" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => { setCancelUserId(null); setCancelReason('') }}>Cancel</Button>
             <Button variant="danger" onClick={handleCancel} loading={forceCancel.isPending} disabled={!cancelReason.trim()}>Force Cancel</Button>
           </div>
@@ -537,12 +542,12 @@ function PromosTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setShowCreate(true)}><Plus className="mr-1.5 h-4 w-4" />Create Promo</Button>
+        <Button variant="primary" className="w-full sm:w-auto" onClick={() => setShowCreate(true)}><Plus className="mr-1.5 h-4 w-4" />Create Promo</Button>
       </div>
 
-      <Card>
+      <Card className="p-0 sm:p-6">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b text-left text-gray-500">
                 <th className="px-4 py-3 font-medium">Code</th>
@@ -565,11 +570,12 @@ function PromosTab() {
                 promos.map((p: ClubPromoRow) => (
                   <tr key={p.id} className="border-b hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono font-medium">{p.code}</td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {/* Fixed and max discounts are AUD; VeloxVerse converts them for other currencies. */}
                       {p.discountType === 'PERCENTAGE'
                         ? `${(p.discountValue / 100).toFixed(0)}%`
-                        : formatCentsIn(p.discountValue, 'USD')}
-                      {p.maxDiscountCents ? ` (max ${formatCentsIn(p.maxDiscountCents, 'USD')})` : ''}
+                        : formatCentsIn(p.discountValue, 'AUD')}
+                      {p.maxDiscountCents ? ` (max ${formatCentsIn(p.maxDiscountCents, 'AUD')})` : ''}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -601,15 +607,15 @@ function PromosTab() {
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Club Promo Code">
         <div className="space-y-4">
           <Input placeholder="Code (e.g. GOLD2026)" value={code} onChange={(e) => setCode(e.target.value)} />
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <select className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm flex-1" value={discountType} onChange={(e) => setDiscountType(e.target.value as 'PERCENTAGE' | 'FIXED')}>
               <option value="PERCENTAGE">Percentage (basis points)</option>
-              <option value="FIXED">Fixed (cents)</option>
+              <option value="FIXED">Fixed (AUD cents)</option>
             </select>
-            <Input className="flex-1" placeholder={discountType === 'PERCENTAGE' ? 'e.g. 5000 = 50%' : 'e.g. 5000 = $50'} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} type="number" />
+            <Input className="flex-1" placeholder={discountType === 'PERCENTAGE' ? 'e.g. 5000 = 50%' : 'e.g. 5000 = AUD 50'} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} type="number" />
           </div>
           <Input placeholder="Max uses (blank = unlimited)" value={maxUses} onChange={(e) => setMaxUses(e.target.value)} type="number" />
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button variant="primary" onClick={handleCreate} loading={createPromo.isPending} disabled={!code.trim() || !discountValue}>Create</Button>
           </div>
@@ -627,48 +633,32 @@ function AnalyticsTab() {
   const { data, isLoading, error } = useVVClubAnalytics()
 
   if (error) return <ErrorBanner error={error} />
-  if (isLoading) return <div className="grid grid-cols-1 gap-4 md:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+  if (isLoading) return <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
   if (!data) return null
-
-  // One line per currency members actually paid in — never a cross-currency sum. Falls back to the
-  // legacy single figure (labelled USD) only when VeloxVerse doesn't send the breakdown yet.
-  const byCurrency = (key: 'mrrCents' | 'totalRevenueCents' | 'avgLifetimeValueCents', legacyCents: number): ReactNode => {
-    const rows = data.revenueByCurrency
-    if (!rows) return formatCentsIn(legacyCents, 'USD')
-    if (rows.length === 0) return formatCentsIn(0, 'USD')
-    return (
-      <span className="flex flex-col">
-        {rows.map((r) => <span key={r.currency}>{formatCentsIn(r[key], r.currency)}</span>)}
-      </span>
-    )
-  }
 
   return (
     <div className="space-y-6">
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Active Members" value={data.activeMembers} icon={<Users className="h-5 w-5 text-blue-500" />} />
-        <StatCard label="MRR" value={byCurrency('mrrCents', data.mrrCents)} icon={<TrendingUp className="h-5 w-5 text-green-500" />} />
-        <StatCard label="Total Revenue" value={byCurrency('totalRevenueCents', data.totalRevenueCents)} icon={<Award className="h-5 w-5 text-amber-500" />} />
         <StatCard label="Churn Rate" value={`${(data.churnRate * 100).toFixed(1)}%`} icon={<RefreshCw className="h-5 w-5 text-red-500" />} />
         <StatCard label="Renewal Success" value={`${(data.renewalSuccessRate * 100).toFixed(1)}%`} icon={<TrendingUp className="h-5 w-5 text-emerald-500" />} />
-        <StatCard label="Avg Lifetime Value" value={byCurrency('avgLifetimeValueCents', data.avgLifetimeValueCents)} icon={<Award className="h-5 w-5 text-violet-500" />} />
         <StatCard label="Total Memberships" value={data.totalMemberships} icon={<Users className="h-5 w-5 text-gray-500" />} />
         <StatCard label="Upgrades" value={data.upgrades} icon={<TrendingUp className="h-5 w-5 text-blue-500" />} />
       </div>
 
       {/* By tier */}
-      <Card>
+      <Card className="p-0 sm:p-6">
         <div className="p-4">
           <h3 className="text-lg font-semibold mb-3">Members by Tier</h3>
           <div className="space-y-2">
             {data.byTier.map((t) => (
-              <div key={t.slug} className="flex items-center justify-between rounded-lg border p-3">
+              <div key={t.slug} className="flex flex-col gap-1 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_COLORS[t.slug] ?? 'bg-gray-100'}`}>{t.name}</span>
                   <span className="text-sm font-medium">{t.count} members</span>
                 </div>
-                <span className="text-right text-sm font-medium text-green-600">
+                <span className="text-sm font-medium text-green-600 sm:text-right">
                   {t.revenueByCurrency
                     ? t.revenueByCurrency.map((r) => formatCentsIn(r.cents, r.currency)).join(' + ') || formatCentsIn(0, 'USD')
                     : formatCentsIn(t.revenueCents, 'USD')}{' '}
@@ -683,7 +673,7 @@ function AnalyticsTab() {
 
       {/* Benefit utilization & promo usage side by side */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="p-0 sm:p-6">
           <div className="p-4">
             <h3 className="text-lg font-semibold mb-3">Benefit Utilization</h3>
             {data.benefitUtilization.length === 0 ? (
@@ -703,7 +693,7 @@ function AnalyticsTab() {
             )}
           </div>
         </Card>
-        <Card>
+        <Card className="p-0 sm:p-6">
           <div className="p-4">
             <h3 className="text-lg font-semibold mb-3">Promo Code Usage</h3>
             {data.promoUsage.length === 0 ? (
@@ -727,10 +717,10 @@ function AnalyticsTab() {
 
 function StatCard({ label, value, icon }: { label: string; value: ReactNode; icon: React.ReactNode }) {
   return (
-    <Card>
+    <Card className="p-0 sm:p-6">
       <div className="flex items-center gap-3 p-4">
-        {icon}
-        <div>
+        <span className="shrink-0">{icon}</span>
+        <div className="min-w-0">
           <div className="text-xs text-gray-500">{label}</div>
           <div className="text-lg font-bold">{value}</div>
         </div>
@@ -750,9 +740,9 @@ function ChangeLogTab() {
   if (error) return <ErrorBanner error={error} />
 
   return (
-    <Card>
+    <Card className="p-0 sm:p-6">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b text-left text-gray-500">
               <th className="px-4 py-3 font-medium">Tier</th>

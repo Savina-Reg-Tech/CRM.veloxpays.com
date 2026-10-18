@@ -1061,7 +1061,12 @@ export interface ClubTierRow {
   id: string
   slug: string
   name: string
+  /** Yearly price in the home currency (AUD) cents. Was USD before 18 Oct 2026; the numbers were kept. */
   annualFeeCents: number
+  /** Always "AUD" — missing on a VeloxVerse older than the AUD switch. */
+  homeCurrency?: string
+  /** Fixed prices in other currencies, e.g. { GBP: 25900 }. `{}` when none. */
+  pricesByCurrency?: Record<string, number>
   sortOrder: number
   philosophy: string | null
   isPurchasable: boolean
@@ -1214,6 +1219,84 @@ export interface ClubChangeLogEntry {
 
 export interface ClubChangeLogPage {
   changes: ClubChangeLogEntry[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+}
+
+// ── VeloxClub prices by country ─────────────────────────────────────
+// A currency with a fixed price list is shown and charged exactly that price; any other currency
+// sees the AUD home price converted at today's rate. VeloxVerse works out every figure — the CRM
+// never converts.
+
+export interface ClubPriceCountry {
+  code: string
+  name: string
+  currency: string
+}
+
+export interface ClubHomePrice {
+  tierId: string
+  slug: string
+  name: string
+  isActive: boolean
+  /** AUD cents. */
+  priceCents: number
+}
+
+export interface ClubPriceListTier {
+  tierId: string
+  slug: string
+  name: string
+  /** Fixed price in the list's currency; null when this tier is missing from the list. */
+  priceCents: number | null
+  /** AUD home price. */
+  homePriceCents: number
+  /** What the fixed price is worth in AUD today; null when there is no rate. */
+  audValueCents: number | null
+  /** (audValue − home) / home × 100, 1 dp; null when there is no rate. */
+  driftPct: number | null
+  /** |driftPct| > driftWarnPct. */
+  driftWarning: boolean
+}
+
+export interface ClubPriceList {
+  currency: string
+  countries: ClubPriceCountry[]
+  /** Every purchasable tier has a price. */
+  complete: boolean
+  /** false → today's AUD value / drift could not be worked out. */
+  fxAvailable: boolean
+  tiers: ClubPriceListTier[]
+}
+
+export interface ClubPriceLists {
+  homeCurrency: string
+  driftWarnPct: number
+  /** Currencies that can have a fixed list. */
+  currencies: string[]
+  countries: ClubPriceCountry[]
+  /** Purchasable tiers only. */
+  homePrices: ClubHomePrice[]
+  /** Only currencies that have prices. */
+  priceLists: ClubPriceList[]
+}
+
+export interface ClubPriceChange {
+  id: string
+  tier: string
+  tierSlug: string
+  /** "AUD" for home-price changes. */
+  currency: string
+  /** null = price added. */
+  oldPriceCents: number | null
+  /** null = price removed. */
+  newPriceCents: number | null
+  changeNote: string | null
+  changedAt: string
+  changedBy: { name: string; email: string } | null
+}
+
+export interface ClubPriceHistoryPage {
+  changes: ClubPriceChange[]
   pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
