@@ -60,7 +60,11 @@ export interface PopularPackagesResult {
 }
 
 export type ActivityDirection = 'credit' | 'debit'
-export type ActivityType = 'ESIM' | 'LOUNGE' | 'BENEFIT' | 'TRANSFER' | 'REFUND'
+/** Known recent-activity types. VeloxVerse may add more — render an unknown one as its raw string
+ * (see activityTypeLabel), never assume this list is complete. */
+export type KnownActivityType = 'ESIM' | 'ESIM_TOPUP' | 'CLUB' | 'LOUNGE' | 'BENEFIT' | 'TRANSFER' | 'REFUND'
+// `string & {}` keeps autocomplete for the known values while still admitting new ones.
+export type ActivityType = KnownActivityType | (string & {})
 
 export interface RecentActivity {
   orderNo: string
@@ -78,6 +82,13 @@ export interface RecentActivity {
    * AUD refunded. `null` = no AUD amount (credit / points / VeloxClub, or before AUD charging). */
   cardChargeAmount?: number | null
   cardChargeCurrency?: string | null
+}
+
+/** One page of the recent-activity feed, newest first. Pass `nextBefore` back verbatim as `before`
+ * for the next (older) page; `null` = no older entries. A page's length says nothing about the end. */
+export interface RecentActivityPage {
+  orders: RecentActivity[]
+  nextBefore: string | null
 }
 
 export interface OrderStats {

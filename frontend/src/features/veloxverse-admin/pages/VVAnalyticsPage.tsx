@@ -9,20 +9,22 @@ import {
   Info,
   PlaneTakeoff,
   Search,
-  TrendingUp,
   Users,
   Utensils,
   Wifi,
 } from 'lucide-react'
 import Skeleton from '@/components/ui/Skeleton'
 import Badge from '@/components/ui/Badge'
+import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import DualAmount from '@/components/ui/DualAmount'
 import { formatMoney } from '@/lib/utils'
 import { LineChart, BarChart } from '../components/Charts'
 import CardChargesPanel from '../components/CardChargesPanel'
 import {
-  ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
+  ACTIVITY_TYPE_LABEL,
+  activityTypeBadgeClass,
+  activityTypeLabel,
   activityDirection,
   formatNativeSpend,
   timeAgo,
@@ -36,7 +38,7 @@ import {
   useVVRevenue,
   useVVGrowth,
   useVVPopularPackages,
-  useVVRecentOrders,
+  useVVRecentOrdersFeed,
   useVVOrderStats,
   useVVCustomerSpending,
 } from '../hooks/useVVAnalytics'
@@ -150,9 +152,20 @@ export default function VVAnalyticsPage() {
   const revenue = useVVRevenue(period, currency)
   const growth = useVVGrowth(period)
   const popular = useVVPopularPackages(10, currency)
-  const recent = useVVRecentOrders(15)
+  const recent = useVVRecentOrdersFeed(50)
+  const [activityType, setActivityType] = useState('')
   const orderStats = useVVOrderStats()
   const spending = useVVCustomerSpending(20, currency)
+
+  // Every loaded page, oldest last. Rows are never deduped by order number — a refund row carries
+  // its own REFUND-… number, and VeloxVerse never repeats a row across pages.
+  const recentRows = useMemo(() => recent.data?.pages.flatMap((p) => p.orders) ?? [], [recent.data])
+  // The filter covers the known types plus any new one VeloxVerse has started sending.
+  const activityTypeOptions = useMemo(
+    () => [...new Set([...Object.keys(ACTIVITY_TYPE_LABEL), ...recentRows.map((o) => o.type)])],
+    [recentRows]
+  )
+  const visibleRecent = activityType ? recentRows.filter((o) => o.type === activityType) : recentRows
 
   const spendingCustomers = spending.data?.customers ?? []
   const packages = popular.data?.packages ?? []
@@ -513,22 +526,34 @@ export default function VVAnalyticsPage() {
               <h2 className="text-sm font-semibold text-gray-900">Recent activity</h2>
               <p className="mt-0.5 text-[11px] text-gray-400">Customer&rsquo;s currency, with the AUD card charge underneath</p>
             </div>
-            <TrendingUp className="h-4 w-4 shrink-0 text-gray-300" />
+            <select
+              aria-label="Activity type"
+              value={activityType}
+              onChange={(e) => setActivityType(e.target.value)}
+              className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            >
+              <option value="">All types</option>
+              {activityTypeOptions.map((t) => (
+                <option key={t} value={t}>{activityTypeLabel(t)}</option>
+              ))}
+            </select>
           </div>
           {recent.isLoading ? (
             <Skeleton className="h-40 w-full" />
-          ) : (recent.data ?? []).length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-500">No activity yet.</p>
+          ) : visibleRecent.length === 0 ? (
+            <p className="py-6 text-center text-sm text-gray-500">
+              {!activityType ? 'No activity yet.' : recent.hasNextPage ? 'None of this type loaded yet.' : 'No activity of this type.'}
+            </p>
           ) : (
-            <ul className="space-y-1">
-              {recent.data!.map((o: RecentActivity) => {
+            <ul className="max-h-[36rem] space-y-1 overflow-y-auto">
+              {visibleRecent.map((o: RecentActivity) => {
                 const direction = activityDirection(o)
                 const isCredit = direction === 'credit'
                 const initials = getInitials(o.customer?.name ?? o.customer?.email)
                 const colorClass = avatarColor(o.customer?.name ?? o.customer?.email ?? o.orderNo)
                 return (
                   <li
-                    key={o.orderNo}
+                    key={`${o.type}:${o.orderNo}`}
                     className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-gray-50"
                   >
                     {/* Avatar */}
@@ -538,7 +563,7 @@ export default function VVAnalyticsPage() {
                     {/* Details */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge className={`shrink-0 ${ACTIVITY_TYPE_BADGE_CLASS[o.type]}`}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
+                        <Badge className={`shrink-0 ${activityTypeBadgeClass(o.type)}`}>{activityTypeLabel(o.type)}</Badge>
                         <p className="truncate text-sm text-gray-900">{o.description}</p>
                       </div>
                       <div className="flex min-w-0 items-center gap-2 mt-0.5">
@@ -569,6 +594,14 @@ export default function VVAnalyticsPage() {
                 )
               })}
             </ul>
+          )}
+          {/* Shown until VeloxVerse says there's nothing older (nextBefore: null) — a short page isn't the end. */}
+          {recent.hasNextPage && (
+            <div className="mt-2 flex justify-center">
+              <Button variant="outline" size="sm" onClick={() => void recent.fetchNextPage()} loading={recent.isFetchingNextPage}>
+                Load more
+              </Button>
+            </div>
           )}
         </Card>
       </div>

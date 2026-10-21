@@ -1,6 +1,6 @@
 import type { BadgeVariant } from '@/components/ui/Badge'
 import { centsToMajorOrNull, formatMoney } from '@/lib/utils'
-import type { ActivityDirection, ActivityType, AdminBillingLineItem, RecentActivity } from './types'
+import type { ActivityDirection, ActivityType, AdminBillingLineItem, KnownActivityType, RecentActivity } from './types'
 
 /**
  * Maps a status string (any service) to a CRM Badge variant.
@@ -35,8 +35,10 @@ export const ANALYTICS_CURRENCY_NAMES: Record<string, string> = {
 }
 
 /** Badge colors for recent-activity type labels (independent of amount sign). */
-export const ACTIVITY_TYPE_BADGE_CLASS: Record<ActivityType, string> = {
+export const ACTIVITY_TYPE_BADGE_CLASS: Record<KnownActivityType, string> = {
   ESIM: 'bg-blue-50 text-blue-700 ring-blue-200',
+  ESIM_TOPUP: 'bg-sky-50 text-sky-700 ring-sky-200',
+  CLUB: 'bg-yellow-50 text-yellow-800 ring-yellow-200',
   LOUNGE: 'bg-violet-50 text-violet-700 ring-violet-200',
   BENEFIT: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   TRANSFER: 'bg-amber-50 text-amber-700 ring-amber-200',
@@ -44,12 +46,28 @@ export const ACTIVITY_TYPE_BADGE_CLASS: Record<ActivityType, string> = {
 }
 
 /** Display labels for recent-activity types. */
-export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
+export const ACTIVITY_TYPE_LABEL: Record<KnownActivityType, string> = {
   ESIM: 'ESIM',
+  ESIM_TOPUP: 'ESIM TOP-UP',
+  CLUB: 'VELOXCLUB',
   LOUNGE: 'LOUNGE',
   BENEFIT: 'BENEFIT',
   TRANSFER: 'PICK & DROP',
   REFUND: 'REFUND',
+}
+
+function isKnownActivityType(type: string): type is KnownActivityType {
+  return Object.prototype.hasOwnProperty.call(ACTIVITY_TYPE_LABEL, type)
+}
+
+/** Badge label for an activity type — a type this CRM doesn't know yet shows as sent. */
+export function activityTypeLabel(type: ActivityType): string {
+  return isKnownActivityType(type) ? ACTIVITY_TYPE_LABEL[type] : String(type ?? '—')
+}
+
+/** Badge color for an activity type — neutral gray for one this CRM doesn't know yet. */
+export function activityTypeBadgeClass(type: ActivityType): string {
+  return isKnownActivityType(type) ? ACTIVITY_TYPE_BADGE_CLASS[type] : 'bg-gray-50 text-gray-700 ring-gray-200'
 }
 
 /** Resolve credit/debit from API `direction`, with fallback for older payloads. */

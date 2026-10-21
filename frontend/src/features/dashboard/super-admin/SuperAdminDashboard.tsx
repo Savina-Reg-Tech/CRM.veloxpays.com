@@ -22,7 +22,7 @@ import {
   useVVCustomerSpending,
 } from '@/features/veloxverse-admin/hooks/useVVAnalytics'
 import {
-  ACTIVITY_TYPE_BADGE_CLASS, ACTIVITY_TYPE_LABEL,
+  activityTypeBadgeClass, activityTypeLabel,
   activityDirection,
   formatNativeSpend,
   timeAgo,
@@ -315,7 +315,7 @@ export default function SuperAdminDashboard() {
                 const colorClass = avatarColor(o.customer?.name ?? o.customer?.email ?? o.orderNo)
                 return (
                   <li
-                    key={o.orderNo}
+                    key={`${o.type}:${o.orderNo}`}
                     className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-gray-50"
                   >
                     <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}>
@@ -323,7 +323,7 @@ export default function SuperAdminDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <Badge className={ACTIVITY_TYPE_BADGE_CLASS[o.type]}>{ACTIVITY_TYPE_LABEL[o.type]}</Badge>
+                        <Badge className={activityTypeBadgeClass(o.type)}>{activityTypeLabel(o.type)}</Badge>
                         <p className="truncate text-sm text-gray-900">{o.description}</p>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">

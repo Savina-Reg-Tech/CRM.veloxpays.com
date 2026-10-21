@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { vvAnalyticsService } from '../vvAdminService'
 import type { CardChargePeriod } from '../types'
 import { cardChargesByOrderNo, type CardCharge } from '../utils'
@@ -36,6 +36,17 @@ export function useVVRecentOrders(limit = 10) {
   return useQuery({
     queryKey: ['vv-analytics', 'recent-orders', limit],
     queryFn: () => vvAnalyticsService.getRecentOrders(limit),
+  })
+}
+
+/** The recent-activity feed, paged by time ("Load more" = fetchNextPage). Refetching or a new
+ * `limit` starts again from the newest page. */
+export function useVVRecentOrdersFeed(limit = 50) {
+  return useInfiniteQuery({
+    queryKey: ['vv-analytics', 'recent-orders-feed', limit],
+    queryFn: ({ pageParam }) => vvAnalyticsService.getRecentOrdersPage(limit, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (p) => p.nextBefore ?? undefined,
   })
 }
 

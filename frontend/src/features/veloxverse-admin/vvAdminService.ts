@@ -1,7 +1,7 @@
 import api from '@/lib/axios'
 import type {
   AnalyticsOverview, RevenueSeries, GrowthSeries, PopularPackagesResult,
-  RecentActivity, OrderStats, CustomerSpendingResult, CardCharges, CardChargePeriod,
+  RecentActivity, RecentActivityPage, OrderStats, CustomerSpendingResult, CardCharges, CardChargePeriod,
   AdminOrderRow, AdminOrderDetail, VVPagination, EsimCancelResult,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
   LoungeBookingTypeFilter, LoungeResourceType,
@@ -69,6 +69,15 @@ export const vvAnalyticsService = {
   async getRecentOrders(limit = 10) {
     const { data } = await api.get<VVResponse<{ orders: RecentActivity[] }>>(`${VV}/admin/analytics/recent-orders`, { params: { limit } })
     return data.data.orders
+  },
+  /** One page of the feed, paged by time: `before` = the previous page's `nextBefore`. */
+  async getRecentOrdersPage(limit = 50, before?: string): Promise<RecentActivityPage> {
+    const { data } = await api.get<VVResponse<{ orders: RecentActivity[]; nextBefore?: string | null }>>(
+      `${VV}/admin/analytics/recent-orders`,
+      { params: { limit, ...(before ? { before } : {}) } }
+    )
+    // An older VeloxVerse doesn't page — no `nextBefore` means there is nothing more to load.
+    return { orders: data.data.orders, nextBefore: data.data.nextBefore ?? null }
   },
   async getOrderStats() {
     const { data } = await api.get<VVResponse<{ stats: OrderStats }>>(`${VV}/admin/analytics/order-stats`)
