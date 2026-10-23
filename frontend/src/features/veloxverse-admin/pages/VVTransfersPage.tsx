@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -48,6 +48,7 @@ import { BookingAuditTrail } from '../components/audit/BookingAuditTrail'
 import { EventDrawer } from '../components/audit/EventDrawer'
 import { ApiLogDrawer } from '../components/vv-audit/ApiLogDrawer'
 import { ApiTimelineSection } from '../components/vv-audit/ApiTimeline'
+import BookingEmailsCard from '../components/pickdrop-emails/BookingEmailsCard'
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   STRIPE: 'Card (Stripe)',
@@ -280,7 +281,22 @@ export default function VVTransfersPage() {
   const [detailBooking, setDetailBooking] = useState<AdminTransferBooking | null>(null)
   // The audit drawers (?event= / ?log=) sit outside the detail modal, whose focus trap would
   // swallow their clicks — so the modal steps aside while one is open and comes back on close.
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  // ?orderNo=<no> opens that booking (links from Pick & Drop customer emails).
+  const deepOrderNo = searchParams.get('orderNo')
+  useEffect(() => {
+    if (!deepOrderNo || !bookings) return
+    const match = bookings.find((b) => b.orderNo === deepOrderNo)
+    if (match) setDetailBooking(match)
+  }, [deepOrderNo, bookings])
+  const closeDetail = () => {
+    setDetailBooking(null)
+    if (deepOrderNo) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('orderNo')
+      setSearchParams(next, { replace: true })
+    }
+  }
   const auditDrawerOpen = searchParams.has('event') || searchParams.has('log')
   // Order no. whose "API timeline" section is expanded (survives the modal stepping aside).
   const [apiTimelineFor, setApiTimelineFor] = useState<string | null>(null)
@@ -562,7 +578,7 @@ export default function VVTransfersPage() {
       {/* ── Detail modal ── */}
       <Modal
         open={!!detailBooking && !auditDrawerOpen}
-        onClose={() => setDetailBooking(null)}
+        onClose={closeDetail}
         title="Booking details"
         description={detailBooking?.orderNo}
         size="xl"
@@ -828,6 +844,10 @@ export default function VVTransfersPage() {
                   Not yet assigned — ViaTovia typically assigns a driver once the booking is approved.
                 </p>
               )}
+            </SectionCard>
+
+            <SectionCard icon={<Mail className="h-3.5 w-3.5" />} title="Customer emails">
+              <BookingEmailsCard orderNo={detailBooking.orderNo} />
             </SectionCard>
 
             <SectionCard icon={<HistoryIcon className="h-3.5 w-3.5" />} title="Audit trail">

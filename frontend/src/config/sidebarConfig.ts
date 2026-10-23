@@ -18,6 +18,7 @@ import {
   Star,
   Crown,
   Gift,
+  MailCheck,
 } from 'lucide-react'
 import type { NavItem, UserRole } from '@/types'
 
@@ -34,6 +35,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV eSIM Orders', path: '/dashboard/veloxverse/esim-orders',  icon: Smartphone },
     { label: 'VV Lounge',      path: '/dashboard/veloxverse/lounge',       icon: Armchair },
     { label: 'VV Assist',    path: '/dashboard/veloxverse/transfers',    icon: Car },
+    { label: 'VV Customer emails', path: '/dashboard/veloxverse/pickdrop/emails', icon: MailCheck, badge: 'pickdropEmails' },
     { label: 'VV Promo Codes', path: '/dashboard/veloxverse/promo-codes',  icon: Tag },
     { label: 'VV Pricing',     path: '/dashboard/veloxverse/pricing',      icon: DollarSign },
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },
@@ -56,6 +58,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavItem[]> = {
     { label: 'VV eSIM Orders', path: '/dashboard/veloxverse/esim-orders',  icon: Smartphone },
     { label: 'VV Lounge',      path: '/dashboard/veloxverse/lounge',       icon: Armchair },
     { label: 'VV Assist',    path: '/dashboard/veloxverse/transfers',    icon: Car },
+    { label: 'VV Customer emails', path: '/dashboard/veloxverse/pickdrop/emails', icon: MailCheck, badge: 'pickdropEmails' },
     { label: 'VV Promo Codes', path: '/dashboard/veloxverse/promo-codes',  icon: Tag },
     { label: 'VV Pricing',     path: '/dashboard/veloxverse/pricing',      icon: DollarSign },
     { label: 'VV Users',       path: '/dashboard/veloxverse/users',        icon: Users },

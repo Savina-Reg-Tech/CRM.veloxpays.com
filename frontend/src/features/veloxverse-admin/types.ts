@@ -1571,3 +1571,265 @@ export interface ReferralCodePatch {
 
 // ── Audit logs ─────────────────────────────────────────────────────────
 export * from './auditTypes'
+
+// ── Pick & Drop emails (ViaTovia inbox → VeloxVerse customer emails) ─────────
+export type DraftStatus = 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED' | 'DISCARDED'
+/** EMAIL = from a ViaTovia email · DRIVER_SEEN = ViaTovia status showed a driver · ADMIN = made by hand */
+export type DraftTrigger = 'EMAIL' | 'DRIVER_SEEN' | 'ADMIN'
+export type InboundType = 'RECEIVED' | 'CONFIRMATION' | 'DRIVER_ASSIGNED' | 'CHANGED' | 'CANCELLED' | 'REMINDER' | 'OTHER'
+export type InboundStatus = 'NEW' | 'MATCHED' | 'UNMATCHED' | 'DRAFTED' | 'IGNORED'
+export type MatchMethod = 'ORDER_TAG' | 'RESERVATION_NO' | 'ADMIN'
+export type TemplateKey =
+  | 'transfer_ride_approved'
+  | 'transfer_driver_details'
+  | 'transfer_driver_changed'
+  | 'transfer_booking_changed'
+  | 'transfer_pickup_reminder'
+  | 'transfer_general_message'
+
+export type PickdropBookingStatus = 'PENDING' | 'CONFIRMED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
+
+export interface Mismatch {
+  field: 'reservationNo' | 'pickupDateTime' | 'flightNumber' | 'driverName' | 'driverPhone' | 'vehiclePlate'
+  email: string
+  ours: string
+}
+
+export interface DraftSummary {
+  id: string
+  orderNo: string
+  templateKey: TemplateKey | string
+  /** "Driver details" */
+  templateName: string
+  trigger: DraftTrigger
+  status: DraftStatus
+  /** WITH placeholders, e.g. "Your driver for {{pickupDateTime}} ({{orderNo}})" */
+  subject: string
+  /** Placeholder keys still without a value — Send is refused while non-empty. */
+  missing: string[]
+  attachVoucher: boolean
+  sourceEmailId: string | null
+  /** ISO instant of the pickup (countdown only — show pickupLocal as the time). */
+  pickupAt: string | null
+  bookingStatus: PickdropBookingStatus | null
+  updatedNote: string | null
+  createdAt: string
+  editedBy: string | null
+  editedAt: string | null
+  /** Set when a send (or resend) starts. */
+  sendingStartedAt: string | null
+  sentBy: string | null
+  sentAt: string | null
+  sentTo: string | null
+  sendCount: number
+  discardedBy: string | null
+  discardedAt: string | null
+  discardReason: string | null
+  /** Last send failure (status FAILED). */
+  error: string | null
+}
+
+export interface BookingSummary {
+  orderNo: string
+  reservationNo: string | null
+  status: PickdropBookingStatus | null
+  /** ViaTovia's own status, e.g. PENDING_APPROVAL, APPROVED */
+  upstreamStatus: string | null
+  pickupAt: string
+  /** "2026-10-31 23:29" — local time at the pickup. Show this, not pickupAt. */
+  pickupLocal: string | null
+  pickupName: string | null
+  dropoffName: string | null
+  flightNumber: string | null
+  driverName: string | null
+  driverPhone: string | null
+  vehiclePlate: string | null
+  lastSyncedAt: string | null
+}
+
+/** What VeloxVerse read from the ViaTovia email. */
+export interface Extracted {
+  reservationNo?: string | null
+  pickupDateTime?: string | null
+  pickupPlace?: string | null
+  dropoffPlace?: string | null
+  vehicle?: string | null
+  passengers?: string | null
+  flightNumber?: string | null
+  luggage?: string | null
+  /** Transport company ("Operated by") */
+  operator?: string | null
+  /** The CUSTOMER as ViaTovia holds them — never a driver detail. */
+  passengerName?: string | null
+  passengerPhone?: string | null
+  driverName?: string | null
+  driverPhone?: string | null
+  vehiclePlate?: string | null
+  meetingPoint?: string | null
+  /** ViaTovia's "Download Voucher" link */
+  voucherUrl?: string | null
+  /** Gmail's SPF/DKIM/DMARC check passed for the sender. */
+  senderVerified?: boolean
+  /** Order no. from info+<orderNo>@ */
+  orderTag?: string | null
+  skippedAttachments?: string[]
+}
+
+export interface InboxSummary {
+  id: string
+  receivedAt: string
+  from: string | null
+  subject: string | null
+  detectedType: InboundType
+  status: InboundStatus
+  orderNo: string | null
+  reservationNo: string | null
+  matchMethod: MatchMethod | null
+  senderVerified: boolean
+  mismatches: Mismatch[]
+  attachmentCount: number
+  error: string | null
+  handledNote: string | null
+  handledBy: string | null
+  handledAt: string | null
+}
+
+export interface InboxAttachment {
+  id: string
+  filename: string
+  mimeType: string
+  sizeBytes: number
+}
+
+export type CandidateBooking = BookingSummary & { customerName: string | null }
+
+export interface InboxDetail extends InboxSummary {
+  to: string | null
+  bodyHtml: string | null
+  bodyText: string | null
+  extracted: Extracted | null
+  attachments: InboxAttachment[]
+  drafts: DraftSummary[]
+  /** Only for NEW / UNMATCHED */
+  candidates: CandidateBooking[]
+}
+
+export interface DraftPreview {
+  to: string | null
+  subject: string
+  html: string
+  text: string
+  missing: string[]
+  voucher: { filename: string; sizeBytes: number } | null
+}
+
+export interface DraftDetail extends DraftSummary {
+  /** WITH placeholders */
+  bodyHtml: string
+  /** Filled automatically (booking / ViaTovia / email). */
+  values: Record<string, string>
+  /** Typed by admins — win over `values`. */
+  adminValues: Record<string, string>
+  requiredFields: string[]
+  placeholders: { key: string; label: string }[]
+  preview: DraftPreview
+  sourceEmail: (InboxSummary & { bodyHtml: string | null; extracted: Extracted | null }) | null
+  booking: BookingSummary | null
+}
+
+/** PATCH body — STRICT: unknown keys → 400 (there is no "to"). */
+export interface DraftEdit {
+  subject?: string
+  bodyHtml?: string
+  /** Admin values; "" clears one. */
+  values?: Record<string, string>
+  attachVoucher?: boolean
+}
+
+export interface EmailTemplate {
+  id: string
+  key: TemplateKey | string
+  service: 'assist_transfer'
+  name: string
+  description: string | null
+  subject: string
+  bodyHtml: string
+  requiredFields: string[]
+  enabled: boolean
+  version: number
+  /** Admin email (null = default) */
+  updatedByUserId: string | null
+  updatedAt: string
+}
+
+export interface EmailTemplateVersion {
+  version: number
+  subject: string
+  bodyHtml: string
+  requiredFields: string[]
+  enabled: boolean
+  changedByUserId: string | null
+  changeNote: string | null
+  createdAt: string
+}
+
+export interface Placeholder {
+  key: string
+  label: string
+  sample: string
+}
+
+export interface TemplatePreview {
+  subject: string
+  html: string
+  bodyHtml: string
+  text: string
+  missing: string[]
+  problems: string[]
+}
+
+export interface TemplateUpdate {
+  subject?: string
+  bodyHtml?: string
+  requiredFields?: string[]
+  enabled?: boolean
+  changeNote?: string
+}
+
+export type TimelineItem =
+  | { type: 'EMAIL_TO_CUSTOMER'; at: string; status: 'SENT' | 'FAILED'; kind: string; subject: string | null; to: string | null; by: string; error: string | null }
+  | { type: 'IN_APP_NOTIFICATION'; at: string; title: string; message: string }
+  | { type: 'VIATOVIA_EMAIL'; at: string; id: string; subject: string | null; detectedType: InboundType; status: InboundStatus }
+  | { type: 'DRAFT'; at: string; id: string; templateKey: string; status: DraftStatus; discardReason: string | null }
+
+export interface InboxPollSummary {
+  dryRun: boolean
+  listed: number
+  stored: number
+  alreadyStored: number
+  notFromSupplier: number
+  failed: number
+  matching: { matched: number; unmatched: number; waiting: number; failed: number } | null
+}
+
+export interface PickdropList<T> {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface DraftListParams {
+  open?: boolean
+  status?: DraftStatus
+  orderNo?: string
+  page?: number
+  limit?: number
+}
+
+export interface InboxListParams {
+  status?: InboundStatus
+  orderNo?: string
+  page?: number
+  limit?: number
+}

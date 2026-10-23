@@ -27,6 +27,8 @@ export interface NavItem {
   label: string
   path: string
   icon: LucideIcon
+  /** A live count shown next to the label (hidden at 0). */
+  badge?: 'pickdropEmails'
 }
 
 // ── Employees ────────────────────────────────────────────────────

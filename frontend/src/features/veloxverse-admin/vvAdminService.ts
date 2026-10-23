@@ -23,6 +23,9 @@ import type {
   AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
   AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult,
   ApiLogDetailResponse, ApiLogExport, ApiLogFilters, ApiLogListResponse, ApiLogStats, ApiTimelineParams, ApiTimelineResponse,
+  DraftSummary, DraftDetail, DraftEdit, DraftListParams, InboxSummary, InboxDetail, InboxListParams, InboxAttachment,
+  InboxPollSummary, PickdropList, BookingSummary, TimelineItem, EmailTemplate, EmailTemplateVersion, Placeholder,
+  TemplatePreview, TemplateUpdate,
 } from './types'
 import { limitOrZero } from './pointsLimits'
 
@@ -747,5 +750,134 @@ export const vvAuditService = {
       rows: Number(res.headers['x-export-rows'] ?? 0),
       truncated: String(res.headers['x-export-truncated']) === 'true',
     }
+  },
+}
+
+// ── Pick & Drop customer emails (ViaTovia inbox → VeloxVerse email drafts) ──
+const PD = `${VV}/admin/assist/transfer`
+const enc = encodeURIComponent
+
+export const pickdropEmailsService = {
+  async listDrafts(params: DraftListParams) {
+    const { data } = await api.get<VVResponse<PickdropList<DraftSummary>>>(`${PD}/drafts`, { params })
+    return data.data
+  },
+  async getDraft(id: string) {
+    const { data } = await api.get<VVResponse<DraftDetail>>(`${PD}/drafts/${enc(id)}`)
+    return data.data
+  },
+  async editDraft(id: string, edit: DraftEdit) {
+    const { data } = await api.patch<VVResponse<DraftDetail>>(`${PD}/drafts/${enc(id)}`, edit)
+    return data.data
+  },
+  async sendDraft(id: string, opts: { confirmCancelled?: boolean } = {}) {
+    const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/drafts/${enc(id)}/send`, opts)
+    return data.data
+  },
+  async resendDraft(id: string, opts: { confirmCancelled?: boolean } = {}) {
+    const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/drafts/${enc(id)}/resend`, opts)
+    return data.data
+  },
+  async discardDraft(id: string, reason: string) {
+    const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/drafts/${enc(id)}/discard`, { reason })
+    return data.data
+  },
+  async listInbox(params: InboxListParams) {
+    const { data } = await api.get<VVResponse<PickdropList<InboxSummary>>>(`${PD}/inbox`, { params })
+    return data.data
+  },
+  async getInbox(id: string) {
+    const { data } = await api.get<VVResponse<InboxDetail>>(`${PD}/inbox/${enc(id)}`)
+    return data.data
+  },
+  async linkInbox(id: string, orderNo: string) {
+    const { data } = await api.post<VVResponse<InboxDetail>>(`${PD}/inbox/${enc(id)}/link`, { orderNo })
+    return data.data
+  },
+  async ignoreInbox(id: string, note?: string) {
+    const { data } = await api.post<VVResponse<InboxDetail>>(`${PD}/inbox/${enc(id)}/ignore`, note ? { note } : {})
+    return data.data
+  },
+  /** Saves a ViaTovia PDF. Always a download (never opened inline) — it is untrusted content. */
+  async downloadAttachment(inboxId: string, attachment: InboxAttachment) {
+    let res
+    try {
+      res = await api.get<Blob>(`${PD}/inbox/${enc(inboxId)}/attachments/${enc(attachment.id)}`, { responseType: 'blob' })
+    } catch (err) {
+      // With responseType 'blob' the JSON error body arrives as a Blob — decode it for the toast.
+      const r = (err as { response?: { data?: unknown } }).response
+      if (r?.data instanceof Blob) {
+        try {
+          r.data = JSON.parse(await r.data.text())
+        } catch {
+          /* leave as-is */
+        }
+      }
+      throw err
+    }
+    // Served as an opaque download so the browser never renders it in this origin.
+    const url = URL.createObjectURL(new Blob([res.data], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = attachment.filename || 'voucher.pdf'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
+  async syncInbox() {
+    const { data } = await api.post<VVResponse<InboxPollSummary>>(`${PD}/inbox/sync-now`)
+    return data.data
+  },
+  async createBookingDraft(orderNo: string, templateKey: string) {
+    const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/bookings/${enc(orderNo)}/drafts`, { templateKey })
+    return data.data
+  },
+  async refreshBooking(orderNo: string) {
+    const { data } = await api.post<VVResponse<{ booking: BookingSummary; draftsRefreshed: number }>>(
+      `${PD}/bookings/${enc(orderNo)}/refresh`
+    )
+    return data.data
+  },
+  async bookingTimeline(orderNo: string) {
+    const { data } = await api.get<VVResponse<{ orderNo: string; items: TimelineItem[] }>>(
+      `${PD}/bookings/${enc(orderNo)}/communications`
+    )
+    return data.data
+  },
+}
+
+// ── Email templates (Settings → Email templates) ─────────────────────
+const TPL = `${VV}/admin/email-templates`
+
+export const emailTemplatesService = {
+  async list() {
+    const { data } = await api.get<VVResponse<{ templates: EmailTemplate[]; placeholders: Placeholder[] }>>(`${TPL}`)
+    return data.data
+  },
+  async get(key: string) {
+    const { data } = await api.get<VVResponse<EmailTemplate>>(`${TPL}/${enc(key)}`)
+    return data.data
+  },
+  async update(key: string, body: TemplateUpdate) {
+    const { data } = await api.put<VVResponse<EmailTemplate>>(`${TPL}/${enc(key)}`, body)
+    return data.data
+  },
+  async preview(key: string, body: { orderNo?: string; subject?: string; bodyHtml?: string }) {
+    const { data } = await api.post<VVResponse<TemplatePreview>>(`${TPL}/${enc(key)}/preview`, body)
+    return data.data
+  },
+  async test(key: string, body: { orderNo?: string; subject?: string; bodyHtml?: string }) {
+    const { data } = await api.post<VVResponse<{ sentTo: string; subject: string }>>(`${TPL}/${enc(key)}/test`, body)
+    return data.data
+  },
+  async versions(key: string) {
+    const { data } = await api.get<VVResponse<EmailTemplateVersion[]>>(`${TPL}/${enc(key)}/versions`)
+    return data.data
+  },
+  async restore(key: string, version: number) {
+    const { data } = await api.post<VVResponse<EmailTemplate>>(`${TPL}/${enc(key)}/restore`, { version })
+    return data.data
   },
 }

@@ -56,6 +56,10 @@ import VVAuditCustomerPage from '@/features/veloxverse-admin/pages/VVAuditCustom
 import VVApiLogsPage from '@/features/veloxverse-admin/pages/VVApiLogsPage'
 import VVApiTimelinePage from '@/features/veloxverse-admin/pages/VVApiTimelinePage'
 import VVApiHealthPage from '@/features/veloxverse-admin/pages/VVApiHealthPage'
+import VVPickdropEmailsPage from '@/features/veloxverse-admin/pages/VVPickdropEmailsPage'
+import VVDraftReviewPage from '@/features/veloxverse-admin/pages/VVDraftReviewPage'
+import VVEmailTemplatesPage from '@/features/veloxverse-admin/pages/VVEmailTemplatesPage'
+import VVEmailTemplateEditorPage from '@/features/veloxverse-admin/pages/VVEmailTemplateEditorPage'
 
 const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
@@ -115,6 +119,14 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/lounge',                 element: <VVLoungePage /> },
               { path: '/dashboard/veloxverse/lounge-bookings/:visitId', element: <VVLoungeBookingDetailPage /> },
               { path: '/dashboard/veloxverse/transfers',              element: <VVTransfersPage /> },
+              // ── Pick & Drop customer emails (ViaTovia inbox → VeloxVerse emails) ──
+              { path: '/dashboard/veloxverse/pickdrop/emails',            element: <VVPickdropEmailsPage tab="review" /> },
+              { path: '/dashboard/veloxverse/pickdrop/emails/unmatched',  element: <VVPickdropEmailsPage tab="unmatched" /> },
+              { path: '/dashboard/veloxverse/pickdrop/emails/history',    element: <VVPickdropEmailsPage tab="history" /> },
+              { path: '/dashboard/veloxverse/pickdrop/emails/inbox',      element: <VVPickdropEmailsPage tab="inbox" /> },
+              { path: '/dashboard/veloxverse/pickdrop/emails/drafts/:id', element: <VVDraftReviewPage /> },
+              { path: '/dashboard/veloxverse/settings/email-templates',      element: <VVEmailTemplatesPage /> },
+              { path: '/dashboard/veloxverse/settings/email-templates/:key', element: <VVEmailTemplateEditorPage /> },
               { path: '/dashboard/veloxverse/promo-codes',            element: <VVPromoCodesPage /> },
               { path: '/dashboard/veloxverse/promo-codes/:id',        element: <VVPromoCodeDetailPage /> },
               { path: '/dashboard/veloxverse/pricing',                element: <VVPricingPage /> },

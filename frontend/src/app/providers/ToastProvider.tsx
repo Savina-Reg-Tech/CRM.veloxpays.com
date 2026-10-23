@@ -6,10 +6,10 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { CheckCircle2, AlertCircle, X } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type ToastType = 'success' | 'error'
+type ToastType = 'success' | 'error' | 'info'
 
 interface ToastItem {
   id: string
@@ -45,12 +45,16 @@ function ToastView({
         'w-full rounded-xl border shadow-lg px-4 py-3 flex items-start gap-3 bg-white',
         toast.type === 'success'
           ? 'border-emerald-200'
-          : 'border-red-200'
+          : toast.type === 'info'
+            ? 'border-sky-200'
+            : 'border-red-200'
       )}
     >
       <div className="shrink-0 pt-0.5">
         {toast.type === 'success' ? (
           <CheckCircle2 size={18} className="text-emerald-600" />
+        ) : toast.type === 'info' ? (
+          <Info size={18} className="text-sky-600" />
         ) : (
           <AlertCircle size={18} className="text-red-600" />
         )}

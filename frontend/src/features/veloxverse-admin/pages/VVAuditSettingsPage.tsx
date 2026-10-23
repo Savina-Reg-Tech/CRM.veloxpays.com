@@ -240,7 +240,7 @@ function RecipientModal({ open, onClose, recipient }: { open: boolean; onClose: 
     )
   }, [open, recipient])
 
-  const types = meta.data?.alertTypes ?? ['critical', 'spike', 'supplier_down', 'payment_issue', 'downtime', 'daily_digest']
+  const types = meta.data?.alertTypes ?? ['critical', 'spike', 'supplier_down', 'payment_issue', 'downtime', 'action_needed', 'daily_digest']
   const toggleType = (t: string) =>
     setForm((f) => ({ ...f, alertTypes: f.alertTypes?.includes(t) ? f.alertTypes.filter((x) => x !== t) : [...(f.alertTypes ?? []), t] }))
 
@@ -396,7 +396,7 @@ function Recipients() {
                   </td>
                   <td className="max-w-[16rem] px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {r.alertTypes.length === 0 ? <Badge variant="neutral">All immediate</Badge> : r.alertTypes.map((t) => <Badge key={t} variant={t === 'daily_digest' ? 'info' : 'neutral'}>{alertTypeLabel(t)}</Badge>)}
+                      {r.alertTypes.length === 0 ? <Badge variant="neutral">All immediate</Badge> : r.alertTypes.map((t) => <Badge key={t} variant={t === 'daily_digest' ? 'info' : t === 'action_needed' ? 'warning' : 'neutral'}>{alertTypeLabel(t)}</Badge>)}
                     </div>
                   </td>
                   <td className="px-4 py-3 capitalize">{r.minSeverity}</td>

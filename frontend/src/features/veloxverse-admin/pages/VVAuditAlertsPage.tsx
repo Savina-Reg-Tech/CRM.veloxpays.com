@@ -109,7 +109,7 @@ export default function VVAuditAlertsPage() {
                     <td className="px-3 py-2.5 align-top"><SeverityBadge severity={a.severity} /></td>
                     <td className="max-w-[18rem] px-3 py-2.5 align-top">
                       <p className="font-medium text-gray-900">{a.subject}</p>
-                      <p className="text-xs text-gray-500">{alertTypeLabel(a.type)}</p>
+                      <p className={a.type === 'action_needed' ? 'text-xs font-medium text-amber-700' : 'text-xs text-gray-500'}>{alertTypeLabel(a.type)}</p>
                     </td>
                     <td className="px-3 py-2.5 align-top text-xs text-gray-700">
                       {a.service && <p>{serviceLabel(a.service)}</p>}
@@ -167,7 +167,7 @@ export default function VVAuditAlertsPage() {
                     <p className="min-w-0 break-words font-medium text-gray-900">{a.subject}</p>
                     <SeverityBadge severity={a.severity} className="shrink-0" />
                   </div>
-                  <p className="mt-0.5 break-words text-xs text-gray-500">
+                  <p className={a.type === 'action_needed' ? 'mt-0.5 break-words text-xs font-medium text-amber-700' : 'mt-0.5 break-words text-xs text-gray-500'}>
                     {alertTypeLabel(a.type)}
                     {a.service && ` · ${serviceLabel(a.service)}`}
                     {a.supplier && ` · ${supplierLabel(a.supplier)}`}

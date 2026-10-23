@@ -111,6 +111,17 @@ export default function SettingsPage() {
       {/* The CRM's own document storage — independent of the VeloxVerse settings below. */}
       <StorageStatusCard />
 
+      <Link
+        to="/dashboard/veloxverse/settings/email-templates"
+        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:border-indigo-300 sm:p-6"
+      >
+        <span className="min-w-0">
+          <span className="block text-base font-semibold text-gray-900">Email templates</span>
+          <span className="mt-0.5 block text-sm text-gray-500">The wording of Pick &amp; Drop customer emails — edit, preview, test and restore versions.</span>
+        </span>
+        <span className="shrink-0 text-sm font-medium text-indigo-600">Open →</span>
+      </Link>
+
       {isLoading || !settings ? (
         <div className="space-y-4">
           {Array.from({ length: 5 }).map((_, i) => (

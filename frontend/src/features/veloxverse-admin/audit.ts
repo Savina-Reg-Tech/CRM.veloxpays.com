@@ -101,6 +101,7 @@ export const ALERT_TYPE_LABEL: Record<string, string> = {
   payment_issue: 'Payment issue',
   downtime: 'Downtime',
   daily_digest: 'Daily digest',
+  action_needed: 'Action needed (Pick & Drop)',
 }
 
 /** Wording for steps whose raw name doesn't read well humanised. Anything not listed falls back

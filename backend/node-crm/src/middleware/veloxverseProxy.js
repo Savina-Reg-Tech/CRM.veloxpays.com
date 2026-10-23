@@ -100,6 +100,19 @@ export function decodeProxyPath(rawPath) {
 }
 
 /**
+ * Whether the upstream answers this path with a file rather than JSON:
+ *  - a CSV export (…/export.csv);
+ *  - a ViaTovia email attachment (/admin/assist/transfer/inbox/:id/attachments/:attachmentId).
+ *
+ * @param {string} path — req.path (no query string)
+ * @returns {boolean}
+ */
+export function isFileDownloadPath(path) {
+  if (typeof path !== "string") return false;
+  return path.endsWith(".csv") || /^\/admin\/assist\/transfer\/inbox\/[^/]+\/attachments\/[^/]+$/.test(path);
+}
+
+/**
  * Forward any request from /api/vv-admin/* to the VeloxVerse backend.
  *
  * The path is forwarded as-is (minus the /api/vv-admin prefix, which is
@@ -126,9 +139,9 @@ export default async function veloxverseProxy(req, res) {
   // Use req.originalUrl to get the path after the mount point, but req.url
   // is already stripped by Express when mounted at /api/vv-admin.
   const targetUrl = `${VV_BASE}${req.url}`;
-  // File downloads (e.g. the audit log's /admin/audit/export.csv) are passed through as raw bytes
-  // with their download headers; everything else is JSON.
-  const isFile = req.path.endsWith(".csv");
+  // File downloads (the audit log's export.csv, Pick & Drop email PDFs) are passed through as raw
+  // bytes with their download headers; everything else is JSON.
+  const isFile = isFileDownloadPath(req.path);
 
   try {
     // One call to VeloxVerse with a freshly signed token. The acting email travels inside the
@@ -162,7 +175,7 @@ export default async function veloxverseProxy(req, res) {
     // passed, so an upstream 401 is an integration/config issue (bridge off, secret mismatch),
     // not a reason to log the user out of the CRM. (403 is handled further down.)
     if (isFile && response.status < 400) {
-      for (const h of ["content-type", "content-disposition", "x-export-rows", "x-export-truncated", "x-request-id"]) {
+      for (const h of ["content-type", "content-disposition", "content-length", "x-export-rows", "x-export-truncated", "x-request-id"]) {
         if (response.headers[h] !== undefined) res.set(h, response.headers[h]);
       }
       return res.status(response.status).send(Buffer.from(response.data));
