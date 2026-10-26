@@ -1586,6 +1586,8 @@ export type TemplateKey =
   | 'transfer_booking_changed'
   | 'transfer_pickup_reminder'
   | 'transfer_general_message'
+  /** ViaTovia's own email, rebranded — only made from an inbox email (POST /inbox/:id/drafts). */
+  | 'transfer_supplier_copy'
 
 export type PickdropBookingStatus = 'PENDING' | 'CONFIRMED' | 'APPROVED' | 'COMPLETED' | 'CANCELLED' | 'FAILED'
 

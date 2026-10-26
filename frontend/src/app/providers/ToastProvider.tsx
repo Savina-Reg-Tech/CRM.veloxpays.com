@@ -11,17 +11,25 @@ import { cn } from '@/lib/utils'
 
 type ToastType = 'success' | 'error' | 'info'
 
+interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface ToastItem {
   id: string
   type: ToastType
   title: string
   message?: string
+  action?: ToastAction
 }
 
 interface ToastInput {
   type: ToastType
   title: string
   message?: string
+  /** A button in the toast (e.g. "Open it"); clicking it also closes the toast. */
+  action?: ToastAction
 }
 
 interface ToastContextValue {
@@ -31,6 +39,8 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null)
 
 const TOAST_DURATION_MS = 4000
+/** Toasts with an action stay longer so there's time to use it. */
+const ACTION_TOAST_DURATION_MS = 8000
 
 function ToastView({
   toast,
@@ -64,6 +74,18 @@ function ToastView({
         {toast.message && (
           <p className="text-xs text-gray-600 mt-0.5">{toast.message}</p>
         )}
+        {toast.action && (
+          <button
+            type="button"
+            onClick={() => {
+              toast.action?.onClick()
+              onClose(toast.id)
+            }}
+            className="mt-1.5 text-xs font-semibold text-indigo-600 underline-offset-2 hover:underline"
+          >
+            {toast.action.label}
+          </button>
+        )}
       </div>
       <button
         type="button"
@@ -87,7 +109,7 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((toast: ToastInput) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     setToasts((prev) => [...prev, { ...toast, id }])
-    window.setTimeout(() => removeToast(id), TOAST_DURATION_MS)
+    window.setTimeout(() => removeToast(id), toast.action ? ACTION_TOAST_DURATION_MS : TOAST_DURATION_MS)
   }, [removeToast])
 
   const value = useMemo(() => ({ showToast }), [showToast])

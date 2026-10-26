@@ -830,6 +830,12 @@ export const pickdropEmailsService = {
     const { data } = await api.post<VVResponse<InboxPollSummary>>(`${PD}/inbox/sync-now`)
     return data.data
   },
+  /** A customer email from this ViaTovia email: `transfer_supplier_copy` = the email itself,
+   * rebranded; any other key = that template filled from it. Same draft back on a repeat. */
+  async createDraftFromInbox(id: string, templateKey: string) {
+    const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/inbox/${enc(id)}/drafts`, { templateKey })
+    return data.data
+  },
   async createBookingDraft(orderNo: string, templateKey: string) {
     const { data } = await api.post<VVResponse<DraftDetail>>(`${PD}/bookings/${enc(orderNo)}/drafts`, { templateKey })
     return data.data

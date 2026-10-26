@@ -1,5 +1,6 @@
-// The send confirmation, shared by the Review screen and the queue's quick Send. Handles the
-// second "ride is cancelled — send anyway?" confirmation and every send error VeloxVerse gives.
+// The send confirmation, shared by the Review screen and the queue's quick Send. Shows the email
+// exactly as the customer will get it (VeloxVerse's rendered preview), handles the second
+// "ride is cancelled — send anyway?" confirmation and every send error VeloxVerse gives.
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Bell, Lock, Paperclip, Send } from 'lucide-react'
 import Button from '@/components/ui/Button'
@@ -7,7 +8,9 @@ import Skeleton from '@/components/ui/Skeleton'
 import { useToast } from '@/app/providers/ToastProvider'
 import { useDraft, useSendDraft } from '../../hooks/usePickdropEmails'
 import {
+  SUPPLIER_COPY_EMOJI,
   isConflict,
+  isSupplierCopy,
   isTestModeError,
   isVoucherError,
   missingFromError,
@@ -17,6 +20,7 @@ import {
 } from '../../pickdropEmails'
 import type { DraftDetail } from '../../types'
 import { Kbd, ResponsiveDialog, modKey } from './PdUI'
+import { SafeHtmlFrame } from './SafeHtmlFrame'
 
 export interface SendOutcomeHandlers {
   onSent: (detail: DraftDetail) => void
@@ -166,6 +170,7 @@ export default function SendFlow({
       open={open}
       onClose={onClose}
       title={resend ? 'Send this email again?' : 'Send this email?'}
+      size="xl"
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={busy}>
@@ -186,22 +191,38 @@ export default function SendFlow({
         </div>
       ) : (
         <div className="space-y-4 text-sm">
-          <p className="text-gray-700">
-            Send to{' '}
-            <span className="inline-flex items-center gap-1 break-all font-semibold text-gray-900">
-              <Lock className="h-3.5 w-3.5 text-gray-400" />
-              {to ?? 'no email address'}
-            </span>
-            ?
-          </p>
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Subject</p>
-            <p className="mt-0.5 break-words font-medium text-gray-900">{draft.preview?.subject}</p>
+          {/* The email as it lands in the customer's inbox. */}
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-1.5 border-b border-gray-200 bg-gray-50 px-3 py-2.5">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">To</dt>
+              <dd className="flex min-w-0 items-center gap-1 break-all font-semibold text-gray-900">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+                {to ?? 'no email address'}
+              </dd>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Subject</dt>
+              <dd className="break-words font-medium text-gray-900">{draft.preview?.subject}</dd>
+              {draft.attachVoucher && (
+                <>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Attached</dt>
+                  <dd className="flex min-w-0 items-center gap-1.5 text-gray-700">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+                    <span className="truncate">{draft.preview?.voucher?.filename ?? 'voucher.pdf'}</span>
+                  </dd>
+                </>
+              )}
+            </dl>
+            <SafeHtmlFrame
+              html={draft.preview?.html ?? ''}
+              title="Email preview — what the customer gets"
+              deviceToggle
+              heightClass="h-[min(52vh,520px)] min-h-[240px]"
+              className="rounded-none border-0"
+            />
           </div>
-          {draft.attachVoucher && (
-            <p className="flex items-center gap-2 text-gray-700">
-              <Paperclip className="h-4 w-4 text-gray-400" />
-              Attachment: {draft.preview?.voucher?.filename ?? 'voucher.pdf'}
+          {isSupplierCopy(draft) && (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sky-900">
+              <span aria-hidden>{SUPPLIER_COPY_EMOJI} </span>
+              Copied from ViaTovia&apos;s email and rebranded — check it reads well and shows no ViaTovia details.
             </p>
           )}
           <p className="flex items-center gap-2 text-gray-600">

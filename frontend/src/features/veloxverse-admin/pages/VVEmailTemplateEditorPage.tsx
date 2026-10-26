@@ -22,7 +22,7 @@ import {
   useTemplateVersions,
   useTemplates,
 } from '../hooks/useEmailTemplates'
-import { closestPlaceholder, pdErrorText, placeholderLabel, problemsFromError, shortDateTime, unknownPlaceholdersIn } from '../pickdropEmails'
+import { SUPPLIER_COPY_KEY, closestPlaceholder, pdErrorText, placeholderLabel, problemsFromError, shortDateTime, unknownPlaceholdersIn } from '../pickdropEmails'
 import type { EmailTemplateVersion } from '../types'
 import EmailEditor from '../components/pickdrop-emails/EmailEditor'
 import PlaceholderSubjectInput from '../components/pickdrop-emails/PlaceholderSubjectInput'
@@ -337,6 +337,12 @@ export default function VVEmailTemplateEditorPage() {
               {!tpl.enabled && ' · switched off'}
               {dirty && <span className="ml-2 font-medium text-amber-700">Unsaved changes</span>}
             </p>
+            {tpl.key === SUPPLIER_COPY_KEY && (
+              <p className="mt-1 max-w-2xl text-sm text-sky-800">
+                Only the closing added under every rebranded ViaTovia email is written here — the main text comes from ViaTovia&apos;s email.
+                Switching it off removes “Send to customer (rebranded)” from the ViaTovia inbox.
+              </p>
+            )}
           </div>
           <div className="hidden gap-2 lg:flex">
             <Button variant="outline" onClick={() => setVersionsOpen(true)} className="min-h-10">

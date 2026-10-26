@@ -1,7 +1,7 @@
 // "Customer email": who it goes to (read-only), the details still to fill in, every value, the
 // subject and body (with fields as chips), the live preview and the voucher switch.
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ChevronDown, Eye, Lock, Paperclip, PencilLine, RotateCcw, SplitSquareVertical } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Eye, Info, Lock, Paperclip, PencilLine, RotateCcw, SplitSquareVertical } from 'lucide-react'
 import Switch from '@/components/ui/Switch'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '../vv-audit/useMediaQuery'
@@ -12,6 +12,7 @@ import {
   effectiveValue,
   formatBytes,
   isAdminValue,
+  isSupplierCopy,
   placeholderLabel,
   placeholdersIn,
   unknownPlaceholdersIn,
@@ -129,7 +130,10 @@ export default function CustomerEmailPanel({
   disabled = false,
 }: CustomerEmailPanelProps) {
   const wide = useMediaQuery('(min-width: 1536px)')
-  const [view, setView] = useState<BodyView>(wide ? 'split' : 'edit')
+  const rebranded = isSupplierCopy(draft)
+  // A rebranded ViaTovia email is checked rather than written: the preview (with our logo header
+  // and footer) is what the customer gets, so it opens first.
+  const [view, setView] = useState<BodyView>(rebranded ? 'preview' : wide ? 'split' : 'edit')
   const [allOpen, setAllOpen] = useState(false)
   const missing = useMemo(() => new Set(draft.preview?.missing ?? draft.missing ?? []), [draft.preview?.missing, draft.missing])
 
@@ -289,6 +293,12 @@ export default function CustomerEmailPanel({
           filled={filled}
           invalid={problems.some((p) => /subject/i.test(p))}
         />
+        {rebranded && (
+          <p className="flex items-start gap-1.5 text-xs text-sky-800">
+            <Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+            Copied from ViaTovia&apos;s email. ViaTovia&apos;s name, contacts and links were replaced with VeloxVerse&apos;s — read it through before sending.
+          </p>
+        )}
       </div>
 
       {/* 5. Body */}
@@ -371,7 +381,7 @@ export default function CustomerEmailPanel({
               </span>
               {saving && <span className="text-indigo-600">Updating after save…</span>}
             </div>
-            <SafeHtmlFrame html={draft.preview?.html ?? ''} title="Customer email preview" />
+            <SafeHtmlFrame html={draft.preview?.html ?? ''} title="Customer email preview" deviceToggle />
           </div>
         )}
       </div>

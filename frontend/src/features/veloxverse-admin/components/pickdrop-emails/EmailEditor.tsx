@@ -1,10 +1,16 @@
 // Rich-text editor for customer emails and templates. TipTap with only what VeloxVerse keeps
-// (bold/italic/underline, H2/H3, lists, links, rule) plus placeholder chips: {{key}} in the stored
-// HTML shows as a non-editable chip with the field's label — red while it has no value.
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+// (bold/italic/underline, H2/H3, lists, links, rule, detail tables) plus placeholder chips: {{key}}
+// in the stored HTML shows as a non-editable chip with the field's label — red while it has no
+// value. Tables come from rebranded ViaTovia emails: their cells are editable and a row can be
+// deleted, but there is no way to insert one.
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEditorState, type ReactNodeViewProps } from '@tiptap/react'
 import { Node, mergeAttributes, nodePasteRule, nodeInputRule } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
 import {
   Bold,
   Braces,
@@ -17,12 +23,13 @@ import {
   Minus,
   Redo2,
   Search,
+  Trash2,
   Underline as UnderlineIcon,
   Undo2,
   Unlink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { chipsToPlaceholders, isAllowedEmailLink, placeholderLabel, placeholdersToChips } from '../../pickdropEmails'
+import { editorHtmlToStored, isAllowedEmailLink, placeholderLabel, placeholdersToChips } from '../../pickdropEmails'
 
 // ── Chip state shared with the node views ───────────────────────────
 interface ChipMeta {
@@ -317,6 +324,8 @@ export default function EmailEditor({
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkError, setLinkError] = useState('')
+  /** Right-click on a table row: where to show "Delete row". */
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number } | null>(null)
   const lastEmitted = useRef(value)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -344,6 +353,10 @@ export default function EmailEditor({
         },
       }),
       PlaceholderNode,
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: placeholdersToChips(value),
     editorProps: {
@@ -364,7 +377,7 @@ export default function EmailEditor({
       },
     },
     onUpdate: ({ editor: ed }) => {
-      const html = chipsToPlaceholders(ed.getHTML())
+      const html = editorHtmlToStored(ed.getHTML())
       lastEmitted.current = html
       onChangeRef.current(html)
     },
@@ -401,6 +414,7 @@ export default function EmailEditor({
             ul: ed.isActive('bulletList'),
             ol: ed.isActive('orderedList'),
             link: ed.isActive('link'),
+            inTable: ed.isActive('table'),
             canUndo: ed.can().undo(),
             canRedo: ed.can().redo(),
           }
@@ -441,7 +455,44 @@ export default function EmailEditor({
     setLinkOpen(false)
   }
 
-  const s = state ?? { bold: false, italic: false, underline: false, h2: false, h3: false, ul: false, ol: false, link: false, canUndo: false, canRedo: false }
+  const s = state ?? { bold: false, italic: false, underline: false, h2: false, h3: false, ul: false, ol: false, link: false, inTable: false, canUndo: false, canRedo: false }
+
+  // The last row can't be deleted on its own — then the (now empty) table goes.
+  const deleteRow = () => {
+    setRowMenu(null)
+    if (!editor) return
+    if (!editor.chain().focus().deleteRow().run()) editor.chain().focus().deleteTable().run()
+  }
+
+  const onContextMenu = (e: ReactMouseEvent) => {
+    if (!editor || disabled) return
+    const cell = (e.target as HTMLElement).closest('td, th')
+    if (!cell || !editor.view.dom.contains(cell)) return
+    e.preventDefault()
+    const pos = editor.view.posAtDOM(cell, 0)
+    editor.chain().focus().setTextSelection(pos).run()
+    setRowMenu({ x: Math.min(e.clientX, window.innerWidth - 168), y: Math.min(e.clientY, window.innerHeight - 56) })
+  }
+
+  useEffect(() => {
+    if (!rowMenu) return
+    const close = () => setRowMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      close()
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', onKey, true)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [rowMenu])
 
   return (
     <ChipMetaContext.Provider value={meta}>
@@ -498,6 +549,11 @@ export default function EmailEditor({
             <ToolButton label="Divider line" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>
               <Minus className="h-4 w-4" />
             </ToolButton>
+            {s.inTable && (
+              <ToolButton label="Delete row" onClick={deleteRow}>
+                <Trash2 className="h-4 w-4" />
+              </ToolButton>
+            )}
             <span className="mx-1 h-5 w-px bg-gray-200" aria-hidden />
             <ToolButton label="Undo" disabled={!s.canUndo} onClick={() => editor?.chain().focus().undo().run()}>
               <Undo2 className="h-4 w-4" />
@@ -544,7 +600,28 @@ export default function EmailEditor({
             </button>
           </form>
         )}
-        <EditorContent editor={editor} />
+        <div className="overflow-x-auto" onContextMenu={onContextMenu}>
+          <EditorContent editor={editor} />
+        </div>
+        {rowMenu && (
+          <div
+            role="menu"
+            aria-label="Table row"
+            style={{ left: rowMenu.x, top: rowMenu.y }}
+            className="fixed z-50 w-40 rounded-lg border border-gray-200 bg-white p-1 shadow-xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              autoFocus
+              onClick={deleteRow}
+              className="flex min-h-10 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm text-red-700 hover:bg-red-50 focus-visible:bg-red-50 focus-visible:outline-none"
+            >
+              <Trash2 className="h-4 w-4" /> Delete row
+            </button>
+          </div>
+        )}
       </div>
     </ChipMetaContext.Provider>
   )

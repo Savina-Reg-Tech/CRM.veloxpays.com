@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import {
+  SUPPLIER_COPY_KEY,
   adjacentDraftId,
+  canMakeCustomerEmail,
   chipsToPlaceholders,
+  cleanEditorTables,
   closestPlaceholder,
   countdown,
   detailsCheckRows,
   effectiveValue,
   isAllowedEmailLink,
+  isEditedCopyConflict,
+  isNotLinkedError,
   isLockedDraftError,
   isSendingStale,
   isTestModeError,
@@ -14,6 +19,7 @@ import {
   needsCancelledConfirm,
   nextDraftId,
   pdErrorText,
+  pickableTemplates,
   placeholdersIn,
   placeholdersToChips,
   problemsFromError,
@@ -258,5 +264,38 @@ describe('error helpers', () => {
     )
     expect(pdErrorText(httpErr(403, { message: 'nope' }))).toBe("You don't have permission to do this.")
     expect(pdErrorText(new Error('Network Error'))).toBe('Network Error')
+  })
+})
+
+describe('rebranded ViaTovia email helpers', () => {
+  it('cleanEditorTables strips TipTap table markup back to plain tables', () => {
+    const tiptap =
+      '<table style="min-width: 50px"><colgroup><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody>' +
+      '<tr><th colspan="1" rowspan="1"><p>Pickup</p></th><td colspan="1" rowspan="1"><p><strong>10:00</strong></p></td></tr></tbody></table>'
+    expect(cleanEditorTables(tiptap)).toBe('<table><tbody><tr><th>Pickup</th><td><strong>10:00</strong></td></tr></tbody></table>')
+  })
+
+  it('cleanEditorTables keeps cells with several paragraphs and leaves table-free HTML alone', () => {
+    const two = '<table><tbody><tr><td><p>a</p><p>b</p></td></tr></tbody></table>'
+    expect(cleanEditorTables(two)).toBe(two)
+    expect(cleanEditorTables('<p style="x">hi</p>')).toBe('<p style="x">hi</p>')
+  })
+
+  it('pickableTemplates hides the rebranded copy', () => {
+    expect(pickableTemplates([{ key: 'transfer_general_message' }, { key: SUPPLIER_COPY_KEY }]).map((t) => t.key)).toEqual(['transfer_general_message'])
+  })
+
+  it('canMakeCustomerEmail: linked emails only', () => {
+    expect(canMakeCustomerEmail({ status: 'MATCHED', orderNo: 'T1' })).toBe(true)
+    expect(canMakeCustomerEmail({ status: 'DRAFTED', orderNo: 'T1' })).toBe(true)
+    expect(canMakeCustomerEmail({ status: 'UNMATCHED', orderNo: null })).toBe(false)
+    expect(canMakeCustomerEmail({ status: 'IGNORED', orderNo: 'T1' })).toBe(false)
+  })
+
+  it('recognises the inbox-draft 409s', () => {
+    const e = (message: string) => ({ response: { status: 409, data: { message } } })
+    expect(isEditedCopyConflict(e('Another rebranded ViaTovia email for this booking is being edited — send or discard it first'))).toBe(true)
+    expect(isEditedCopyConflict(e('Link this email to a booking first'))).toBe(false)
+    expect(isNotLinkedError(e('Link this email to a booking first'))).toBe(true)
   })
 })

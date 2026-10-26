@@ -36,3 +36,12 @@
 .prose-email hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1em 0; }
 .prose-email > :last-child { margin-bottom: 0; }
 .prose-email .ProseMirror-selectednode { outline: none; }
+/* Detail tables (rebranded ViaTovia emails) — styled like the sent email: label | value. */
+.prose-email table { width: 100%; border-collapse: collapse; margin: 0.4em 0 0.9em; table-layout: auto; }
+.prose-email tr { border-bottom: 1px solid #e5e7eb; }
+.prose-email tr:last-child { border-bottom: 0; }
+.prose-email th, .prose-email td { padding: 0.45em 0.6em 0.45em 0; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+.prose-email th { width: 38%; color: #6b7280; font-weight: 400; }
+.prose-email td { color: #111827; font-weight: 600; }
+.prose-email th > p, .prose-email td > p { margin: 0; }
+.prose-email .selectedCell { background: #eef2ff; }

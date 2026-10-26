@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { pickdropEmailsService } from '../vvAdminService'
+import { draftPath } from '../components/pickdrop-emails/paths'
 import type { DraftDetail, DraftEdit, DraftListParams, InboxAttachment, InboxListParams } from '../types'
 
 export const PD_KEYS = {
@@ -227,6 +229,24 @@ export function useSyncInbox() {
   return useMutation({
     mutationFn: () => pickdropEmailsService.syncInbox(),
     onSuccess: () => invalidatePickdrop(qc),
+  })
+}
+
+/**
+ * A customer email made from one ViaTovia email (its rebranded copy, or a template filled from
+ * it). Asking again returns the same open draft. Opens the Review screen on success.
+ */
+export function useCreateDraftFromInbox() {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  return useMutation({
+    mutationFn: ({ id, templateKey }: { id: string; templateKey: string }) => pickdropEmailsService.createDraftFromInbox(id, templateKey),
+    onSuccess: (detail, vars) => {
+      qc.setQueryData(PD_KEYS.draft(detail.id), detail)
+      void qc.invalidateQueries({ queryKey: PD_KEYS.inboxItem(vars.id) })
+      invalidatePickdrop(qc, detail.orderNo)
+      navigate(draftPath(detail.id))
+    },
   })
 }
 

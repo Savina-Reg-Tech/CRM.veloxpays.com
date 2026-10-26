@@ -9,7 +9,7 @@ import { useToast } from '@/app/providers/ToastProvider'
 import { cn } from '@/lib/utils'
 import { useBookingEmails, useBookingOpenDrafts, useCreateBookingDraft, useRefreshBooking } from '../../hooks/usePickdropEmails'
 import { useTemplates } from '../../hooks/useEmailTemplates'
-import { draftStatusMeta, inboundTypeMeta, isOpenDraft, pdErrorText, shortDateTime, templateIcon } from '../../pickdropEmails'
+import { draftStatusMeta, inboundTypeMeta, isOpenDraft, pdErrorText, pickableTemplates, shortDateTime, templateIcon } from '../../pickdropEmails'
 import type { TimelineItem } from '../../types'
 import { ToneChip } from './PdUI'
 import { draftPath, inboxEmailPath } from './paths'
@@ -220,7 +220,7 @@ export default function BookingEmailsCard({ orderNo, className }: { orderNo: str
             {menuOpen && (
               <ul role="menu" className="absolute right-0 top-11 z-30 w-[min(18rem,calc(100vw-3rem))] rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl">
                 {!tpl && <li className="px-3 py-2 text-sm text-gray-400">Loading templates…</li>}
-                {tpl?.templates.map((t) => {
+                {pickableTemplates(tpl?.templates).map((t) => {
                   const Icon = templateIcon(t.key)
                   return (
                     <li key={t.key} role="none">

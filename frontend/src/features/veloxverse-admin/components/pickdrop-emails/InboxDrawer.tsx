@@ -1,18 +1,28 @@
-// One ViaTovia email in full: what VeloxVerse read from it, why (or why not) a draft was made.
+// One ViaTovia email in full: what VeloxVerse read from it, why (or why not) a draft was made, and
+// (admins, linked emails) a way to send it to the customer — rebranded, or as one of our templates.
 import { useEffect, useId } from 'react'
 import { Link } from 'react-router-dom'
 import FocusTrap from 'focus-trap-react'
 import { AlertTriangle, ArrowRight, Info, Link2, EyeOff, X } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
-import { AuditErrorState } from '../audit/AuditUI'
+import { AuditErrorState, useAuditViewer } from '../audit/AuditUI'
 import { useIsTablet } from '../vv-audit/useMediaQuery'
 import { BottomSheet } from '../vv-audit/BottomSheet'
 import { useInboxItem } from '../../hooks/usePickdropEmails'
-import { MATCH_METHOD_LABEL, draftStatusMeta, inboundStatusMeta, inboundTypeMeta, shortDateTime } from '../../pickdropEmails'
+import {
+  ALREADY_COVERED_TYPES,
+  MATCH_METHOD_LABEL,
+  canMakeCustomerEmail,
+  draftStatusMeta,
+  inboundStatusMeta,
+  inboundTypeMeta,
+  shortDateTime,
+} from '../../pickdropEmails'
 import type { Extracted, InboxDetail, InboxSummary } from '../../types'
 import { AttachmentChips, EmailBody, SenderLine, VoucherLink } from './ViatoviaEmailPanel'
 import { ToneChip } from './PdUI'
+import InboxEmailActions, { AlreadyMade } from './InboxEmailActions'
 import { bookingPath, draftPath } from './paths'
 
 const EXTRACTED_LABELS: Array<[keyof Extracted, string]> = [
@@ -34,12 +44,32 @@ const EXTRACTED_LABELS: Array<[keyof Extracted, string]> = [
   ['passengerPhone', 'Passenger phone (customer)'],
 ]
 
-function Body({ email, onLink, onIgnore }: { email: InboxDetail; onLink: (e: InboxSummary) => void; onIgnore: (e: InboxSummary) => void }) {
+const NOT_NEEDED_RE = /no customer email (is )?needed/i
+
+function Body({
+  email,
+  onLink,
+  onIgnore,
+  isAdmin,
+  isTablet,
+}: {
+  email: InboxDetail
+  onLink: (e: InboxSummary) => void
+  onIgnore: (e: InboxSummary) => void
+  isAdmin: boolean
+  isTablet: boolean
+}) {
   const type = inboundTypeMeta(email.detectedType)
   const status = inboundStatusMeta(email.status)
   const ex = email.extracted ?? {}
   const rows = EXTRACTED_LABELS.filter(([k]) => ex[k] != null && ex[k] !== '')
-  const canAct = email.status === 'UNMATCHED' || email.status === 'NEW'
+  const canAct = isAdmin && (email.status === 'UNMATCHED' || email.status === 'NEW')
+  const canSend = isAdmin && canMakeCustomerEmail(email)
+  // "No customer email needed" stays only where our automatic email covers it (received,
+  // cancelled) — with a pointer to the buttons. Elsewhere the buttons speak for themselves.
+  const notNeeded = !!email.handledNote && NOT_NEEDED_RE.test(email.handledNote)
+  const covered = ALREADY_COVERED_TYPES.has(email.detectedType)
+  const showNote = !!email.handledNote && (!notNeeded || covered || !canSend)
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -68,11 +98,16 @@ function Body({ email, onLink, onIgnore }: { email: InboxDetail; onLink: (e: Inb
           <span className="break-words">{email.error}</span>
         </div>
       )}
-      {email.handledNote && (
+      {showNote && (
         <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="break-words">
             {email.handledNote}
+            {notNeeded && covered && canSend && (
+              <span className="mt-0.5 block">
+                Our automatic email already covers this. You can still send it to the customer {isTablet ? 'below' : 'with the buttons at the bottom'}.
+              </span>
+            )}
             {email.handledBy && <span className="block text-xs text-sky-700">— {email.handledBy}, {shortDateTime(email.handledAt)}</span>}
           </span>
         </div>
@@ -101,7 +136,18 @@ function Body({ email, onLink, onIgnore }: { email: InboxDetail; onLink: (e: Inb
         </div>
       )}
 
-      {email.drafts.length > 0 && (
+      {canSend && (
+        <section aria-label="Send to customer" className="space-y-2">
+          <AlreadyMade email={email} />
+          {isTablet && (
+            <div className="sticky -top-4 z-10 -mx-5 border-y border-gray-100 bg-white/95 px-5 py-3 backdrop-blur">
+              <InboxEmailActions email={email} layout="bar" onNeedsLink={() => onLink(email)} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {!canSend && email.drafts.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Drafts made from it</h3>
           <ul className="space-y-1.5">
@@ -169,6 +215,7 @@ export default function InboxDrawer({
 }) {
   const isTablet = useIsTablet()
   const titleId = useId()
+  const { isAdmin } = useAuditViewer()
   const { data, isLoading, error, refetch } = useInboxItem(emailId)
   const content = isLoading ? (
     <div className="space-y-3">
@@ -179,7 +226,7 @@ export default function InboxDrawer({
   ) : error ? (
     <AuditErrorState error={error} onRetry={() => void refetch()} notFoundText="This ViaTovia email is no longer stored." />
   ) : data ? (
-    <Body email={data} onLink={onLink} onIgnore={onIgnore} />
+    <Body email={data} onLink={onLink} onIgnore={onIgnore} isAdmin={isAdmin} isTablet={isTablet} />
   ) : null
 
   useEffect(() => {
@@ -192,7 +239,15 @@ export default function InboxDrawer({
   if (!emailId) return null
   if (!isTablet) {
     return (
-      <BottomSheet open onClose={onClose} title="ViaTovia email" className="max-h-[92vh]">
+      <BottomSheet
+        open
+        onClose={onClose}
+        title="ViaTovia email"
+        className="max-h-[92vh]"
+        footer={
+          data && isAdmin && canMakeCustomerEmail(data) ? <InboxEmailActions email={data} layout="sheet" onNeedsLink={() => onLink(data)} /> : undefined
+        }
+      >
         {content}
       </BottomSheet>
     )

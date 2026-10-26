@@ -6,6 +6,7 @@ import {
   Car,
   CheckCircle2,
   Mail,
+  Mails,
   MessageSquare,
   PencilLine,
   Repeat,
@@ -105,7 +106,30 @@ export const TEMPLATE_ICON: Record<string, LucideIcon> = {
   transfer_booking_changed: PencilLine,
   transfer_pickup_reminder: AlarmClock,
   transfer_general_message: MessageSquare,
+  transfer_supplier_copy: Mails,
 }
+
+// ── ViaTovia's email, rebranded ─────────────────────────────────────
+/** The template that sends ViaTovia's own email to the customer, rebranded as VeloxVerse. */
+export const SUPPLIER_COPY_KEY = 'transfer_supplier_copy'
+export const SUPPLIER_COPY_LABEL = 'ViaTovia email (rebranded)'
+export const SUPPLIER_COPY_EMOJI = '📨'
+export const SEND_REBRANDED_LABEL = 'Send to customer (rebranded)'
+export const USE_TEMPLATE_LABEL = 'Use a template…'
+export const isSupplierCopy = (d: { templateKey?: string | null } | null | undefined) => d?.templateKey === SUPPLIER_COPY_KEY
+
+/** Templates offered by "New email" on a booking / "Use a template…" — never the rebranded copy,
+ * which needs a ViaTovia email to copy from. */
+export function pickableTemplates<T extends { key: string }>(templates: T[] | null | undefined): T[] {
+  return (templates ?? []).filter((t) => t.key !== SUPPLIER_COPY_KEY)
+}
+
+/** An inbox email a customer email can be made from (linked to a booking). */
+export const canMakeCustomerEmail = (e: { status: InboundStatus; orderNo: string | null }) =>
+  (e.status === 'MATCHED' || e.status === 'DRAFTED') && !!e.orderNo
+
+/** ViaTovia emails whose "no customer email needed" note gets the "you can still send it" line. */
+export const ALREADY_COVERED_TYPES: ReadonlySet<InboundType> = new Set(['RECEIVED', 'CANCELLED'])
 
 export const templateIcon = (key: string | null | undefined): LucideIcon => (key && TEMPLATE_ICON[key]) || Mail
 
@@ -291,6 +315,29 @@ export function placeholdersToChips(html: string): string {
   return doc.body.innerHTML
 }
 
+/**
+ * TipTap writes tables as `<table style><colgroup>…</colgroup><tbody><tr><th colspan rowspan><p>…`.
+ * VeloxVerse keeps `table/tbody/tr/th/td` with no attributes, so: drop the colgroup and every
+ * attribute on table parts, and unwrap a cell's lone paragraph — an unchanged table saves back
+ * exactly as it came.
+ */
+export function cleanEditorTables(html: string): string {
+  if (!html || !html.includes('<table') || typeof DOMParser === 'undefined') return html ?? ''
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
+  doc.body.querySelectorAll('colgroup').forEach((el) => el.remove())
+  doc.body.querySelectorAll('table, thead, tbody, tr, th, td').forEach((el) => {
+    for (const name of el.getAttributeNames()) el.removeAttribute(name)
+  })
+  doc.body.querySelectorAll('th, td').forEach((cell) => {
+    const only = cell.children.length === 1 ? cell.firstElementChild : null
+    if (only?.tagName === 'P' && cell.childNodes.length === 1) only.replaceWith(...Array.from(only.childNodes))
+  })
+  return doc.body.innerHTML
+}
+
+/** The editor's HTML → what VeloxVerse stores. */
+export const editorHtmlToStored = (html: string) => chipsToPlaceholders(cleanEditorTables(html))
+
 export function chipsToPlaceholders(html: string): string {
   if (!html || typeof DOMParser === 'undefined') return html ?? ''
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
@@ -475,6 +522,18 @@ export function problemsFromError(err: unknown): string[] {
 export const errorStatus = (err: unknown) => errParts(err).status
 export const isConflict = (err: unknown) => errParts(err).status === 409
 export const isReaderOff = (err: unknown) => errParts(err).status === 503
+
+/** 409: another rebranded copy of this booking has edits — send or discard it first. */
+export function isEditedCopyConflict(err: unknown): boolean {
+  const { status, message } = errParts(err)
+  return status === 409 && /being edited|send or discard/i.test(message)
+}
+
+/** 409: the ViaTovia email isn't linked to a booking yet. */
+export function isNotLinkedError(err: unknown): boolean {
+  const { status, message } = errParts(err)
+  return status === 409 && /link this email/i.test(message)
+}
 
 /** The draft is past editing (sent, discarded, or someone else is sending it). */
 export function isLockedDraftError(err: unknown): boolean {

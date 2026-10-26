@@ -38,8 +38,11 @@ import {
 import { useTemplates } from '../../hooks/useEmailTemplates'
 import {
   adjacentDraftId,
+  SUPPLIER_COPY_EMOJI,
+  SUPPLIER_COPY_LABEL,
   isLockedDraftError,
   isSendingStale,
+  isSupplierCopy,
   isVoucherError,
   nextDraftId,
   pdErrorText,
@@ -55,7 +58,7 @@ import CustomerEmailPanel from './CustomerEmailPanel'
 import SendFlow from './SendDialog'
 import DiscardDialog from './DiscardDialog'
 import { SafeHtmlFrame } from './SafeHtmlFrame'
-import { Banner, BookingStatusChip, CountdownChip, Kbd, ShortcutsPopover, isTypingTarget, modKey, useNow } from './PdUI'
+import { Banner, BookingStatusChip, CountdownChip, Kbd, ShortcutsPopover, ToneChip, isTypingTarget, modKey, useNow } from './PdUI'
 import { PD_EMAILS_BASE, bookingPath, draftPath } from './paths'
 
 type MobileTab = 'email' | 'details' | 'viatovia'
@@ -101,7 +104,7 @@ function ReadOnlyEmail({ draft }: { draft: DraftDetail }) {
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Subject</p>
         <p className="mt-0.5 break-words font-medium text-gray-900">{draft.preview?.subject}</p>
       </div>
-      <SafeHtmlFrame html={draft.preview?.html ?? ''} title="Customer email" />
+      <SafeHtmlFrame html={draft.preview?.html ?? ''} title="Customer email" deviceToggle />
     </div>
   )
 }
@@ -528,6 +531,11 @@ export default function DraftReview({ id }: { id: string }) {
               <span className="font-mono text-base font-semibold text-gray-700">{draft.orderNo}</span>
             </h1>
             <div className="flex flex-wrap items-center gap-2">
+              {isSupplierCopy(draft) && (
+                <ToneChip tone="blue">
+                  <span aria-hidden>{SUPPLIER_COPY_EMOJI}</span> {SUPPLIER_COPY_LABEL}
+                </ToneChip>
+              )}
               <CountdownChip pickupAt={draft.pickupAt} now={now} />
               {draft.booking?.pickupLocal && <span className="text-xs text-gray-600">Pickup {draft.booking.pickupLocal} (local)</span>}
               <BookingStatusChip status={draft.booking?.status ?? draft.bookingStatus} />
