@@ -15,7 +15,6 @@ import {
   MATCH_METHOD_LABEL,
   canMakeCustomerEmail,
   draftStatusMeta,
-  inboundStatusMeta,
   inboundTypeMeta,
   shortDateTime,
 } from '../../pickdropEmails'
@@ -23,6 +22,7 @@ import type { Extracted, InboxDetail, InboxSummary } from '../../types'
 import { AttachmentChips, EmailBody, SenderLine, VoucherLink } from './ViatoviaEmailPanel'
 import { ToneChip } from './PdUI'
 import InboxEmailActions, { AlreadyMade } from './InboxEmailActions'
+import { OutcomeChip } from './InboxList'
 import { bookingPath, draftPath } from './paths'
 
 const EXTRACTED_LABELS: Array<[keyof Extracted, string]> = [
@@ -60,7 +60,6 @@ function Body({
   isTablet: boolean
 }) {
   const type = inboundTypeMeta(email.detectedType)
-  const status = inboundStatusMeta(email.status)
   const ex = email.extracted ?? {}
   const rows = EXTRACTED_LABELS.filter(([k]) => ex[k] != null && ex[k] !== '')
   const canAct = isAdmin && (email.status === 'UNMATCHED' || email.status === 'NEW')
@@ -69,15 +68,14 @@ function Body({
   // cancelled) — with a pointer to the buttons. Elsewhere the buttons speak for themselves.
   const notNeeded = !!email.handledNote && NOT_NEEDED_RE.test(email.handledNote)
   const covered = ALREADY_COVERED_TYPES.has(email.detectedType)
-  const showNote = !!email.handledNote && (!notNeeded || covered || !canSend)
+  // A customer email exists → its outcome (header chip) says it all.
+  const showNote = !!email.handledNote && !email.customerEmail && (!notNeeded || covered || !canSend)
   return (
     <div className="space-y-5">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <ToneChip tone={type.tone}>{type.label}</ToneChip>
-          <ToneChip tone={status.tone} dot>
-            {status.label}
-          </ToneChip>
+          <OutcomeChip email={email} />
           {email.matchMethod && <span className="text-xs text-gray-500">matched {MATCH_METHOD_LABEL[email.matchMethod]}</span>}
         </div>
         <p className="break-words text-base font-semibold text-gray-900">{email.subject || '(no subject)'}</p>

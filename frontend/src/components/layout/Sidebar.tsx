@@ -51,7 +51,7 @@ export default function Sidebar({
           {shouldCollapse ? (
             <div className=" h-20 w-10  flex items-center justify-center  shrink-0">
               <img
-                src="/fav.svg"
+                src="/logo-icon.png"
                 alt="Veloxverse icon"
                 className="h-12 w-full max-w-full object-contain"
               />
@@ -59,7 +59,7 @@ export default function Sidebar({
           ) : (
             <div className="h-20 w-full  px-3 flex items-center ">
               <img
-                src="/logo.png"
+                src="/logo-header.png"
                 alt="Veloxverse logo"
                 className="h-12 w-full max-w-full object-contain"
               />

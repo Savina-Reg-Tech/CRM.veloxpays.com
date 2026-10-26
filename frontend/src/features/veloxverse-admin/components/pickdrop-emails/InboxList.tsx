@@ -1,12 +1,39 @@
 // ViaTovia emails as cards/rows. Shared by the Unmatched tab and the full inbox tab.
-import { AlertTriangle, ChevronRight, EyeOff, Link2, Paperclip } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertTriangle, ArrowRight, ChevronRight, EyeOff, Link2, Paperclip } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Skeleton from '@/components/ui/Skeleton'
 import { cn } from '@/lib/utils'
 import { useIsDesktop } from '../vv-audit/useMediaQuery'
-import { MATCH_METHOD_LABEL, inboundStatusMeta, inboundTypeMeta, shortDateTime } from '../../pickdropEmails'
+import { MATCH_METHOD_LABEL, inboundTypeMeta, inboxOutcome, shortDateTime } from '../../pickdropEmails'
 import type { InboxSummary } from '../../types'
 import { ToneChip } from './PdUI'
+import { draftPath } from './paths'
+
+/** The ViaTovia email's outcome: its customer email (opens Review) or, without one, its status. */
+export function OutcomeChip({ email, className }: { email: Pick<InboxSummary, 'status' | 'customerEmail'>; className?: string }) {
+  const o = inboxOutcome(email)
+  const chip = (
+    <ToneChip tone={o.tone} dot>
+      {o.label}
+    </ToneChip>
+  )
+  if (!o.draftId) return <div className={className}>{chip}</div>
+  return (
+    <Link
+      to={draftPath(o.draftId)}
+      onClick={(ev) => ev.stopPropagation()}
+      title="Open the customer email"
+      className={cn('group inline-flex max-w-full flex-col items-start gap-0.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500', className)}
+    >
+      <span className="inline-flex max-w-full items-center gap-1">
+        {chip}
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gray-400 group-hover:text-indigo-600" aria-hidden />
+      </span>
+      {o.detail && <span className="max-w-full truncate text-xs text-gray-500 group-hover:text-indigo-700 group-hover:underline">{o.detail}</span>}
+    </Link>
+  )
+}
 
 function Sender({ e }: { e: InboxSummary }) {
   return (
@@ -71,7 +98,6 @@ export default function InboxList({
           <tbody className="divide-y divide-gray-100">
             {items.map((e) => {
               const type = inboundTypeMeta(e.detectedType)
-              const status = inboundStatusMeta(e.status)
               return (
                 <tr key={e.id} onClick={() => onOpen(e)} className="cursor-pointer hover:bg-gray-50">
                   <td className="px-4 py-3 align-top text-xs text-gray-600">{shortDateTime(e.receivedAt)}</td>
@@ -110,10 +136,8 @@ export default function InboxList({
                       actions(e)
                     ) : (
                       <div className="space-y-1">
-                        <ToneChip tone={status.tone} dot>
-                          {status.label}
-                        </ToneChip>
-                        {e.handledNote && <p className="line-clamp-2 text-xs text-gray-500" title={e.handledNote}>{e.handledNote}</p>}
+                        <OutcomeChip email={e} />
+                        {!e.customerEmail && e.handledNote && <p className="line-clamp-2 text-xs text-gray-500" title={e.handledNote}>{e.handledNote}</p>}
                         {e.error && <p className="line-clamp-2 text-xs text-red-600" title={e.error}>{e.error}</p>}
                       </div>
                     )}
@@ -131,7 +155,6 @@ export default function InboxList({
     <ul className="grid gap-3 sm:grid-cols-2">
       {items.map((e) => {
         const type = inboundTypeMeta(e.detectedType)
-        const status = inboundStatusMeta(e.status)
         return (
           <li key={e.id} className="flex flex-col gap-2.5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <button type="button" onClick={() => onOpen(e)} className="flex flex-col gap-2 text-left">
@@ -147,11 +170,6 @@ export default function InboxList({
                 <Sender e={e} />
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                {mode === 'all' && (
-                  <ToneChip tone={status.tone} dot>
-                    {status.label}
-                  </ToneChip>
-                )}
                 {(e.orderNo || e.reservationNo) && <span className="font-mono text-gray-700">{e.orderNo ?? `Res. ${e.reservationNo}`}</span>}
                 {e.attachmentCount > 0 && (
                   <span className="inline-flex items-center gap-0.5 text-gray-500">
@@ -160,9 +178,11 @@ export default function InboxList({
                   </span>
                 )}
               </div>
-              {mode === 'all' && e.handledNote && <p className="text-xs text-gray-500">{e.handledNote}</p>}
+              {mode === 'all' && !e.customerEmail && e.handledNote && <p className="text-xs text-gray-500">{e.handledNote}</p>}
               {e.error && <p className="text-xs text-red-600">{e.error}</p>}
             </button>
+            {/* Outside the card button: with a customer email it's a link to Review. */}
+            {mode === 'all' && <OutcomeChip email={e} className="min-h-9" />}
             {actions(e, true)}
           </li>
         )

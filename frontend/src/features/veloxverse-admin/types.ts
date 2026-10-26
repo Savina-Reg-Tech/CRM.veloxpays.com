@@ -1677,6 +1677,15 @@ export interface Extracted {
   skippedAttachments?: string[]
 }
 
+/** The newest customer email made from a ViaTovia email. */
+export interface InboxCustomerEmail {
+  draftId: string
+  templateKey: string
+  status: DraftStatus
+  sentAt: string | null
+  sentTo: string | null
+}
+
 export interface InboxSummary {
   id: string
   receivedAt: string
@@ -1694,6 +1703,8 @@ export interface InboxSummary {
   handledNote: string | null
   handledBy: string | null
   handledAt: string | null
+  /** Newest customer email made from this email (null = none). */
+  customerEmail: InboxCustomerEmail | null
 }
 
 export interface InboxAttachment {

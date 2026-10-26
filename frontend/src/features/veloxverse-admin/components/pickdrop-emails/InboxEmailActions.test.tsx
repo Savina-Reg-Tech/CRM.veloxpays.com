@@ -63,6 +63,7 @@ function email(over: Partial<InboxDetail> = {}): InboxDetail {
     attachments: [],
     drafts: [],
     candidates: [],
+    customerEmail: null,
     ...over,
   }
 }
@@ -178,6 +179,16 @@ describe('ViaTovia inbox drawer — send to customer', () => {
     expect(await screen.findByText('Already made:')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /open/i })).toHaveAttribute('href', '/dashboard/veloxverse/pickdrop/emails/drafts/d5')
     expect(screen.getByRole('button', { name: /send to customer \(rebranded\)/i })).toBeEnabled()
+  })
+
+  it('a sent customer email shows in the header as "Email sent" (opens Review) and hides the handled note', async () => {
+    renderDrawer(
+      email({ status: 'DRAFTED', customerEmail: { draftId: 'd5', templateKey: 'transfer_supplier_copy', status: 'SENT', sentAt: '2026-10-26T08:35:00Z', sentTo: 'anna@example.com' } }),
+    )
+    const link = await screen.findByRole('link', { name: /email sent/i })
+    expect(link).toHaveAttribute('href', '/dashboard/veloxverse/pickdrop/emails/drafts/d5')
+    expect(link).toHaveTextContent('to anna@example.com')
+    expect(screen.queryByText(/no customer email needed/i)).not.toBeInTheDocument()
   })
 
   it('no actions for an unmatched email', async () => {

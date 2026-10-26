@@ -18,6 +18,7 @@ import type {
   DraftSummary,
   DraftTrigger,
   InboundStatus,
+  InboxSummary,
   InboundType,
   MatchMethod,
   Mismatch,
@@ -107,6 +108,39 @@ export const TEMPLATE_ICON: Record<string, LucideIcon> = {
   transfer_pickup_reminder: AlarmClock,
   transfer_general_message: MessageSquare,
   transfer_supplier_copy: Mails,
+}
+
+// ── Inbox outcome ───────────────────────────────────────────────────
+export interface InboxOutcome {
+  label: string
+  tone: Tone
+  /** Second line, e.g. "to anna@… · 26 Oct, 14:05". */
+  detail: string | null
+  /** Set when a customer email exists — the chip opens its Review screen. */
+  draftId: string | null
+}
+
+/** What happened to a ViaTovia email: its customer email when there is one, else its status. */
+export function inboxOutcome(e: Pick<InboxSummary, 'status' | 'customerEmail'>): InboxOutcome {
+  const ce = e.customerEmail
+  if (ce) {
+    const draftId = ce.draftId
+    switch (ce.status) {
+      case 'SENT':
+        return { label: 'Email sent', tone: 'green', detail: [ce.sentTo && `to ${ce.sentTo}`, ce.sentAt && shortDateTime(ce.sentAt)].filter(Boolean).join(' · ') || null, draftId }
+      case 'SENDING':
+        return { label: 'Sending…', tone: 'blue', detail: null, draftId }
+      case 'FAILED':
+        return { label: 'Send failed', tone: 'red', detail: 'Open to try again', draftId }
+      case 'DRAFT':
+        return { label: 'Draft to review', tone: 'amber', detail: 'Open draft', draftId }
+      case 'DISCARDED':
+        return { label: 'Draft discarded', tone: 'grey', detail: null, draftId }
+    }
+  }
+  // "Drafted" with no customer email left to show is just a matched email.
+  const meta = inboundStatusMeta(e.status === 'DRAFTED' ? 'MATCHED' : e.status)
+  return { label: meta.label, tone: meta.tone, detail: null, draftId: null }
 }
 
 // ── ViaTovia's email, rebranded ─────────────────────────────────────

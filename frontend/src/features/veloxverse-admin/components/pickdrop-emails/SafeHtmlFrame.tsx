@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils'
 // Untrusted HTML (ViaTovia's email body, the rendered customer email) is shown only here: an
 // iframe with an EMPTY sandbox — no scripts, no same-origin, no forms, no popups — plus a CSP
 // that blocks everything but inline styles and images. Never dangerouslySetInnerHTML.
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src https: data:"
+// Images over https (the VeloxVerse logo in previews comes from the web app's /logo.png), plus
+// localhost so that logo also shows against a local VeloxVerse — the same as the CRM's own CSP.
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src https: data: http://localhost:* http://127.0.0.1:*; font-src https: data:"
 
 const BASE_STYLE =
   'html,body{margin:0;padding:0;background:#fff}' +

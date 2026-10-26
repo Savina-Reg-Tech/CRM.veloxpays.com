@@ -13,9 +13,9 @@ export default function AuthLayout() {
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
         <div className="text-center mb-8">
           <div className="inline-flex  items-center justify-center rounded-2xl mb-4">
-            <img src="/fav.svg" alt="Veloxverse icon" className="h-20 w-full max-w-full object-contain" />
+            <img src="/logo-header.png" alt="VeloxVerse" className="h-16 w-full max-w-full object-contain" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Veloxverse</h1>
+          <h1 className="sr-only">VeloxVerse</h1>
           <p className="text-sm text-gray-500 mt-1">Sign in to your workspace</p>
         </div>
           <Outlet />

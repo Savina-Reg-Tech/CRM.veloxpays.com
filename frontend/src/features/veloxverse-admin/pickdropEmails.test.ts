@@ -3,6 +3,7 @@ import {
   SUPPLIER_COPY_KEY,
   adjacentDraftId,
   canMakeCustomerEmail,
+  inboxOutcome,
   chipsToPlaceholders,
   cleanEditorTables,
   closestPlaceholder,
@@ -184,7 +185,7 @@ describe('detailsCheckRows', () => {
         id: 'e1', receivedAt: at(0), from: 'x', subject: 's', detectedType: 'DRIVER_ASSIGNED', status: 'DRAFTED',
         orderNo: 'TRF-1', reservationNo: 'R-1', matchMethod: 'ORDER_TAG', senderVerified: true,
         mismatches: [{ field: 'driverName', email: 'Ravi K', ours: 'Ravi' }],
-        attachmentCount: 0, error: null, handledNote: null, handledBy: null, handledAt: null,
+        attachmentCount: 0, error: null, handledNote: null, handledBy: null, handledAt: null, customerEmail: null,
         bodyHtml: null,
         extracted: { driverName: 'Ravi K', passengerName: 'Asha', passengerPhone: '+61 400 111 222' },
       },
@@ -206,7 +207,7 @@ describe('detailsCheckRows', () => {
         id: 'e1', receivedAt: at(0), from: 'x', subject: 's', detectedType: 'DRIVER_ASSIGNED', status: 'DRAFTED',
         orderNo: 'TRF-1', reservationNo: 'R-1', matchMethod: 'ORDER_TAG', senderVerified: true,
         mismatches: [{ field: 'driverName', email: 'Ravi K', ours: 'Ravi' }],
-        attachmentCount: 0, error: null, handledNote: null, handledBy: null, handledAt: null,
+        attachmentCount: 0, error: null, handledNote: null, handledBy: null, handledAt: null, customerEmail: null,
         bodyHtml: null, extracted: { driverName: 'Ravi K' },
       },
     })
@@ -297,5 +298,31 @@ describe('rebranded ViaTovia email helpers', () => {
     expect(isEditedCopyConflict(e('Another rebranded ViaTovia email for this booking is being edited — send or discard it first'))).toBe(true)
     expect(isEditedCopyConflict(e('Link this email to a booking first'))).toBe(false)
     expect(isNotLinkedError(e('Link this email to a booking first'))).toBe(true)
+  })
+})
+
+describe('inboxOutcome', () => {
+  const ce = (status: 'DRAFT' | 'SENDING' | 'SENT' | 'FAILED' | 'DISCARDED', over = {}) => ({
+    draftId: 'd1',
+    templateKey: 'transfer_supplier_copy',
+    status,
+    sentAt: null,
+    sentTo: null,
+    ...over,
+  })
+
+  it('a customer email decides the chip, and the chip opens it', () => {
+    const sent = inboxOutcome({ status: 'DRAFTED', customerEmail: ce('SENT', { sentTo: 'anna@example.com', sentAt: '2026-10-26T08:35:00Z' }) })
+    expect(sent).toMatchObject({ label: 'Email sent', tone: 'green', draftId: 'd1' })
+    expect(sent.detail).toMatch(/^to anna@example\.com · /)
+    expect(inboxOutcome({ status: 'DRAFTED', customerEmail: ce('SENDING') })).toMatchObject({ label: 'Sending…', tone: 'blue' })
+    expect(inboxOutcome({ status: 'DRAFTED', customerEmail: ce('FAILED') })).toMatchObject({ label: 'Send failed', tone: 'red', detail: 'Open to try again' })
+    expect(inboxOutcome({ status: 'DRAFTED', customerEmail: ce('DRAFT') })).toMatchObject({ label: 'Draft to review', tone: 'amber', detail: 'Open draft' })
+    expect(inboxOutcome({ status: 'DRAFTED', customerEmail: ce('DISCARDED') })).toMatchObject({ label: 'Draft discarded', tone: 'grey', detail: null })
+  })
+
+  it('without one: the status, and "Drafted" reads as "Matched"', () => {
+    expect(inboxOutcome({ status: 'DRAFTED', customerEmail: null })).toMatchObject({ label: inboxOutcome({ status: 'MATCHED', customerEmail: null }).label, draftId: null })
+    expect(inboxOutcome({ status: 'UNMATCHED', customerEmail: null }).draftId).toBeNull()
   })
 })
