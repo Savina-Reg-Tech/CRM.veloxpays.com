@@ -1,15 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vvUsersService } from '../vvAdminService'
+import { vvUsersService, type VVUserListFilters } from '../vvAdminService'
 import type { VVAdminUserDetail, VVUserRole } from '../types'
 
 export function useVVUsers(
   page = 1,
-  search?: string,
+  filters: VVUserListFilters = {},
   options?: { enabled?: boolean }
 ) {
   return useQuery({
-    queryKey: ['vv-users', 'list', page, search ?? ''],
-    queryFn: () => vvUsersService.list(page, search),
+    queryKey: ['vv-users', 'list', page, filters],
+    queryFn: () => vvUsersService.list(page, filters),
     enabled: options?.enabled ?? true,
   })
 }

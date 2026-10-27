@@ -36,6 +36,10 @@ import VVPromoCodeDetailPage from '@/features/veloxverse-admin/pages/VVPromoCode
 import VVReferEarnPage from '@/features/veloxverse-admin/pages/VVReferEarnPage'
 import VVReferralDetailPage from '@/features/veloxverse-admin/pages/VVReferralDetailPage'
 import VVPricingPage from '@/features/veloxverse-admin/pages/VVPricingPage'
+import VVPaymentsPage from '@/features/veloxverse-admin/pages/VVPaymentsPage'
+import VVRefundsPage from '@/features/veloxverse-admin/pages/VVRefundsPage'
+import VVReconciliationPage from '@/features/veloxverse-admin/pages/VVReconciliationPage'
+import VVSystemHealthPage from '@/features/veloxverse-admin/pages/VVSystemHealthPage'
 import VVUsersListPage from '@/features/veloxverse-admin/pages/VVUsersListPage'
 import VVUserDetailPage from '@/features/veloxverse-admin/pages/VVUserDetailPage'
 import VVSupportListPage from '@/features/veloxverse-admin/pages/VVSupportListPage'
@@ -130,6 +134,10 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/promo-codes',            element: <VVPromoCodesPage /> },
               { path: '/dashboard/veloxverse/promo-codes/:id',        element: <VVPromoCodeDetailPage /> },
               { path: '/dashboard/veloxverse/pricing',                element: <VVPricingPage /> },
+              { path: '/dashboard/veloxverse/payments',               element: <VVPaymentsPage /> },
+              { path: '/dashboard/veloxverse/refunds',                element: <VVRefundsPage /> },
+              { path: '/dashboard/veloxverse/reconciliation',         element: <VVReconciliationPage /> },
+              { path: '/dashboard/veloxverse/system-health',          element: <VVSystemHealthPage /> },
               { path: '/dashboard/veloxverse/users',                  element: <VVUsersListPage /> },
               { path: '/dashboard/veloxverse/users/:id',              element: <VVUserDetailPage /> },
               { path: '/dashboard/veloxverse/support',                element: <VVSupportListPage /> },

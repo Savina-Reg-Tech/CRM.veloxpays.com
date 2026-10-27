@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, Search, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -12,6 +12,11 @@ import {
   useVVSupportSearch,
 } from '../hooks/useVVSupport'
 import { formatDateTime, statusBadgeVariant } from '../utils'
+import { useDebounce } from '@/hooks/useDebounce'
+import { vvSupportService } from '../vvAdminService'
+import DateRangeFilter from '../components/reports/DateRangeFilter'
+import ExportCsvButton from '../components/reports/ExportCsvButton'
+import { ALL_TIME, isReversedRange, rangeParams, type ReportRange } from '../reportRange'
 import type {
   VVAdminSearchResult,
   VVAdminTicketFilters,
@@ -150,7 +155,15 @@ function StatCard({ label, value, tint }: { label: string; value: number; tint: 
 }
 
 export default function VVSupportListPage() {
-  const [filters, setFilters] = useState<VVAdminTicketFilters>({})
+  const [choices, setFilters] = useState<VVAdminTicketFilters>({})
+  const [search, setSearch] = useState('')
+  const [range, setRange] = useState<ReportRange>(ALL_TIME)
+  const debouncedSearch = useDebounce(search.trim(), 300)
+  // VeloxVerse applies every filter; a reversed custom range is not sent (the filter shows why).
+  const filters = useMemo<VVAdminTicketFilters>(
+    () => ({ ...choices, search: debouncedSearch || undefined, ...(isReversedRange(range) ? {} : rangeParams(range)) }),
+    [choices, debouncedSearch, range]
+  )
   const { data: tickets, isLoading } = useVVSupportTickets(filters)
   const { data: stats } = useVVSupportStats()
 
@@ -175,7 +188,16 @@ export default function VVSupportListPage() {
 
       <CaseSearch />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-full sm:w-64">
+          <Input
+            placeholder="Subject, case ID or customer…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search size={16} />}
+            aria-label="Search tickets"
+          />
+        </div>
         <select className={selectCls} value={filters.status ?? ''} onChange={(e) => set('status', e.target.value)}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -200,6 +222,12 @@ export default function VVSupportListPage() {
             </option>
           ))}
         </select>
+        <DateRangeFilter value={range} onChange={setRange} />
+        <ExportCsvButton
+          className="w-full sm:ml-auto sm:w-auto"
+          disabled={isReversedRange(range)}
+          onExport={() => vvSupportService.exportCsv(filters)}
+        />
       </div>
 
       {isLoading ? (

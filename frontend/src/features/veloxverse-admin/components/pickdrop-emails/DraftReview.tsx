@@ -351,7 +351,7 @@ export default function DraftReview({ id }: { id: string }) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Link to={PD_EMAILS_BASE} className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" /> Customer emails
+          <ArrowLeft className="h-4 w-4" /> Pick &amp; Drop Emails
         </Link>
         <AuditErrorState error={error} onRetry={() => void refetch()} notFoundText="This email draft doesn't exist any more." />
       </div>
@@ -483,7 +483,7 @@ export default function DraftReview({ id }: { id: string }) {
             to={readOnly ? `${PD_EMAILS_BASE}/history` : PD_EMAILS_BASE}
             className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
           >
-            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Customer emails</span><span className="sm:hidden">Back</span>
+            <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Pick &amp; Drop Emails</span><span className="sm:hidden">Back</span>
           </Link>
           <div className="flex items-center gap-1.5">
             <ShortcutsPopover

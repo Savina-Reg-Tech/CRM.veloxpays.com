@@ -29,6 +29,8 @@ export interface NavItem {
   icon: LucideIcon
   /** A live count shown next to the label (hidden at 0). */
   badge?: 'pickdropEmails'
+  /** Sidebar group heading; a new heading is shown whenever this changes between items. */
+  section?: string
 }
 
 // ── Employees ────────────────────────────────────────────────────

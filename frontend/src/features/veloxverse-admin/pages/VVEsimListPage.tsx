@@ -7,13 +7,21 @@ import Button from '@/components/ui/Button'
 import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
 import DualAmount from '@/components/ui/DualAmount'
+import { useDebounce } from '@/hooks/useDebounce'
 import { useVVEsimOrders } from '../hooks/useVVEsim'
+import { vvEsimService } from '../vvAdminService'
+import DateRangeFilter from '../components/reports/DateRangeFilter'
+import ExportCsvButton from '../components/reports/ExportCsvButton'
+import { ALL_TIME, isReversedRange, rangeParams, type ReportRange } from '../reportRange'
 import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
 import { formatDateTime, isUnpaidOrder, ownCardCharge, statusBadgeVariant, unpaidOrderNote } from '../utils'
 import { formatMoney } from '@/lib/utils'
 import type { AdminOrderRow } from '../types'
 
 const LIMIT = 20
+
+// Every eSIM order status VeloxVerse uses (EsimOrderStatus on the backend).
+const ESIM_STATUSES = ['PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'CANCELLED', 'REVOKED', 'FAILED']
 
 /** Cost / price / profit of an order that was never paid: there is no such amount, so a dash —
  * never "INR 0.00". The quoted price is on hover. */
@@ -29,50 +37,27 @@ export default function VVEsimListPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
+  const [range, setRange] = useState<ReportRange>(ALL_TIME)
+  const debouncedSearch = useDebounce(search.trim(), 300)
+
+  // VeloxVerse applies every filter across all orders; a reversed custom range is not sent.
+  const filters = useMemo(
+    () => ({ search: debouncedSearch, status, ...(isReversedRange(range) ? {} : rangeParams(range)) }),
+    [debouncedSearch, status, range]
+  )
+  const hasFilters = Boolean(search || status || range.preset !== 'all')
 
   // Reset to page 1 whenever a filter changes so results aren't stranded
   // on a page that no longer exists for the new query.
   useEffect(() => {
     setPage(1)
-  }, [search, status])
+  }, [filters])
 
-  const { data, isLoading, isFetching } = useVVEsimOrders(page, LIMIT, { search, status })
+  const { data, isLoading, isFetching } = useVVEsimOrders(page, LIMIT, filters)
 
   const orders = data?.orders ?? []
   const cardChargeByOrderNo = useCardChargeByOrderNo()
   const pagination = data?.pagination
-
-  // Status options are derived from whatever the backend has actually
-  // returned so far, rather than a hardcoded enum — the real set of
-  // eSIM order statuses isn't documented for this endpoint, so this
-  // avoids showing filter options that don't exist or hiding ones that do.
-  const [knownStatuses, setKnownStatuses] = useState<string[]>([])
-  useEffect(() => {
-    if (!orders.length) return
-    setKnownStatuses((prev) => {
-      const next = new Set(prev)
-      let changed = false
-      for (const o of orders) {
-        if (o.status && !next.has(o.status)) {
-          next.add(o.status)
-          changed = true
-        }
-      }
-      return changed ? Array.from(next).sort() : prev
-    })
-  }, [orders])
-
-  // Client-side filtering on the currently-loaded page — a guaranteed
-  // fallback regardless of whether the backend honors the search/status
-  // query params above (unconfirmed for this endpoint).
-  const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return orders.filter((o) => {
-      const matchesSearch = !q || o.orderNo.toLowerCase().includes(q)
-      const matchesStatus = !status || o.status === status
-      return matchesSearch && matchesStatus
-    })
-  }, [orders, search, status])
 
   const columns = [
     {
@@ -185,7 +170,7 @@ export default function VVEsimListPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by order no…"
+            placeholder="Order no, ICCID, package, customer…"
             className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-8 text-sm text-gray-700 placeholder:text-gray-400 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-colors"
           />
           {search && (
@@ -205,19 +190,22 @@ export default function VVEsimListPage() {
           className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-colors"
         >
           <option value="">All statuses</option>
-          {knownStatuses.map((s) => (
+          {ESIM_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </select>
 
-        {(search || status) && (
+        <DateRangeFilter value={range} onChange={setRange} />
+
+        {hasFilters && (
           <button
             type="button"
             onClick={() => {
               setSearch('')
               setStatus('')
+              setRange(ALL_TIME)
             }}
             className="text-xs font-medium text-gray-400 hover:text-gray-600"
           >
@@ -228,15 +216,21 @@ export default function VVEsimListPage() {
         {isFetching && !isLoading && (
           <span className="text-xs text-gray-400">Refreshing…</span>
         )}
+
+        <ExportCsvButton
+          className="w-full sm:ml-auto sm:w-auto"
+          disabled={isReversedRange(range)}
+          onExport={() => vvEsimService.exportOrders(filters)}
+        />
       </div>
 
       <Card padding="none">
         <Table
           columns={columns}
-          data={filteredOrders}
+          data={orders}
           keyField="orderNo"
           loading={isLoading}
-          emptyMessage={search || status ? 'No eSIM orders match your filters.' : 'No eSIM orders yet.'}
+          emptyMessage={hasFilters ? 'No eSIM orders match your filters.' : 'No eSIM orders yet.'}
         />
       </Card>
 

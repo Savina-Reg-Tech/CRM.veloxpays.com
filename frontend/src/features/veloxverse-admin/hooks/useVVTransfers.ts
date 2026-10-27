@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { vvTransferService } from '../vvAdminService'
+import { type TransferBookingFilters, vvTransferService } from '../vvAdminService'
 
-export function useVVTransferBookings(status?: string) {
+export function useVVTransferBookings(filters: TransferBookingFilters = {}) {
   return useQuery({
-    queryKey: ['vv-transfers', 'bookings', status ?? 'all'],
-    queryFn: () => vvTransferService.getBookings(status),
+    queryKey: ['vv-transfers', 'bookings', filters.status ?? '', filters.search ?? '', filters.from ?? '', filters.to ?? ''],
+    queryFn: () => vvTransferService.getBookings(filters),
     placeholderData: (prev) => prev,
   })
 }

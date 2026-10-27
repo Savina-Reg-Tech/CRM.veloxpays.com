@@ -32,6 +32,10 @@ import {
 } from '../hooks/useVVLounge'
 import { formatDate, getInitials, statusBadgeVariant } from '../utils'
 import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
+import { vvLoungeService, type LoungeVisitsParams } from '../vvAdminService'
+import DateRangeFilter from '../components/reports/DateRangeFilter'
+import ExportCsvButton from '../components/reports/ExportCsvButton'
+import { isReversedRange, rangeFromSearch, rangeParams, writeRangeToSearch, type ReportRange } from '../reportRange'
 import { CARD_CHARGE_TOOLTIP, cardChargeLabel, centsToMajorOrNull } from '@/lib/utils'
 import {
   formatCentsIn,
@@ -292,6 +296,7 @@ function VisitsList({ tab }: { tab: VisitsTab }) {
   const page = Number(params.get('page')) || 1
   const airport = params.get('airport') ?? ''
   const status = (params.get('status') ?? '') as '' | LoungeVisitStatus
+  const range = rangeFromSearch(params)
   const [search, setSearch] = useState(params.get('q') ?? '')
   const debouncedSearch = useDebounce(search.trim(), 350)
 
@@ -311,18 +316,30 @@ function VisitsList({ tab }: { tab: VisitsTab }) {
     [setParams],
   )
 
+  const setRange = (next: ReportRange) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        writeRangeToSearch(p, next)
+        p.delete('page')
+        return p
+      },
+      { replace: true },
+    )
+
   useEffect(() => {
     if (debouncedSearch !== (params.get('q') ?? '')) setParam('q', debouncedSearch)
   }, [debouncedSearch, params, setParam])
 
-  const { data, isLoading, isFetching, isError, error } = useVVLoungeVisits({
-    page,
-    limit: PAGE_SIZE,
+  // A reversed custom range is not sent (the filter shows the error instead).
+  const filters: LoungeVisitsParams = {
     airport: airport || undefined,
     status: status || undefined,
     search: debouncedSearch || undefined,
+    ...(isReversedRange(range) ? {} : rangeParams(range)),
     ...TAB_QUERY[tab],
-  })
+  }
+  const { data, isLoading, isFetching, isError, error } = useVVLoungeVisits({ page, limit: PAGE_SIZE, ...filters })
 
   return (
     <div className="space-y-4">
@@ -358,12 +375,18 @@ function VisitsList({ tab }: { tab: VisitsTab }) {
             ))}
           </select>
         </div>
+        <DateRangeFilter value={range} onChange={setRange} />
         {data && (
           <span className="text-xs text-gray-500">
             {data.total.toLocaleString()} booking{data.total === 1 ? '' : 's'}
           </span>
         )}
         {isFetching && !isLoading && <span className="text-xs text-gray-400">Updating…</span>}
+        <ExportCsvButton
+          className="w-full sm:ml-auto sm:w-auto"
+          disabled={isReversedRange(range)}
+          onExport={() => vvLoungeService.exportVisits(filters)}
+        />
       </div>
 
       {isError ? (

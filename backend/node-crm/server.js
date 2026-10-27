@@ -2,6 +2,7 @@ import "dotenv/config";
 import app from "./src/app.js";
 import pool from "./config/db.js";
 import { startExpiryScheduler } from "./src/jobs/expiryWorker.js";
+import { startVeloxVerseHealthMonitor } from "./src/jobs/veloxverseHealthMonitor.js";
 import { assertSafeEnv } from "./src/config/validateEnv.js";
 import { storageStatus } from "./src/storage/index.js";
 import { isMailConfigured, mailTransportKind } from "./src/utils/mailer.js";
@@ -22,13 +23,13 @@ const SHUTDOWN_GRACE_MS = 10_000;
  * On SIGTERM (a deploy or scale-down) stop taking new connections, let in-flight requests
  * finish, then close the DB pool. Without this Node exited mid-request on every rollout.
  */
-function handleShutdown(server, expiryTask) {
+function handleShutdown(server, tasks) {
   let closing = false;
   const shutdown = (signal) => {
     if (closing) return;
     closing = true;
     console.log(`🛑 ${signal} received — finishing in-flight requests`);
-    expiryTask?.stop();
+    for (const task of tasks) task?.stop();
     // Don't wait forever on a hung request or keep-alive socket.
     setTimeout(() => {
       console.error("⏱️  Shutdown grace period over — exiting");
@@ -57,7 +58,9 @@ pool.connect()
     });
     // Daily verification-expiry sweep (in-process scheduler).
     const expiryTask = startExpiryScheduler();
-    handleShutdown(server, expiryTask);
+    // "VeloxVerse is down" alerts to admins (in-app + email).
+    const vvHealthTask = startVeloxVerseHealthMonitor();
+    handleShutdown(server, [expiryTask, vvHealthTask]);
     if (isMailConfigured()) console.log(`📧 Email      : ${mailTransportKind()}`);
     else if (process.env.NODE_ENV === "production")
       console.error("❌ Email is NOT configured (set SMTP_HOST, or MAIL_USER + MAIL_APP_PASSWORD): password reset is disabled and no notifications are sent");

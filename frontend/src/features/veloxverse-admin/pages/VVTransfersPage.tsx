@@ -22,6 +22,7 @@ import {
   Navigation,
   AlertTriangle,
   Link2,
+  Search,
 } from 'lucide-react'
 import { History as HistoryIcon } from 'lucide-react'
 import Button from '@/components/ui/Button'
@@ -38,6 +39,11 @@ import {
 } from '../hooks/useVVTransfers'
 import { apiErrorMessage, formatDateTime, ownCardCharge, statusBadgeVariant, TRANSFER_UNCONFIRMED_NOTICE } from '../utils'
 import { useCardChargeByOrderNo } from '../hooks/useVVAnalytics'
+import { useDebounce } from '@/hooks/useDebounce'
+import { vvTransferService } from '../vvAdminService'
+import DateRangeFilter from '../components/reports/DateRangeFilter'
+import ExportCsvButton from '../components/reports/ExportCsvButton'
+import { ALL_TIME, isReversedRange, rangeParams, type ReportRange } from '../reportRange'
 import { CARD_CHARGE_TOOLTIP, cardChargeLabel, formatMoney } from '@/lib/utils'
 import DualAmount from '@/components/ui/DualAmount'
 import type { AdminTransferBooking, TransferBookingStatus } from '../types'
@@ -276,7 +282,16 @@ function SectionCard({ icon, title, children }: { icon: ReactNode; title: string
 export default function VVTransfersPage() {
   const [activeTab, setActiveTab] = useState<'pickdrop' | 'meetgreet'>('pickdrop')
   const [status, setStatus] = useState<'' | TransferBookingStatus>('')
-  const { data: bookings, isLoading, isError, refetch } = useVVTransferBookings(status || undefined)
+  const [search, setSearch] = useState('')
+  const [range, setRange] = useState<ReportRange>(ALL_TIME)
+  const debouncedSearch = useDebounce(search.trim(), 300)
+  // VeloxVerse applies every filter; a reversed custom range is not sent (the filter shows why).
+  const filters = useMemo(
+    () => ({ status: status || undefined, search: debouncedSearch || undefined, ...(isReversedRange(range) ? {} : rangeParams(range)) }),
+    [status, debouncedSearch, range]
+  )
+  const hasFilters = Boolean(status || search || range.preset !== 'all')
+  const { data: bookings, isLoading, isError, refetch } = useVVTransferBookings(filters)
 
   const [detailBooking, setDetailBooking] = useState<AdminTransferBooking | null>(null)
   // The audit drawers (?event= / ?log=) sit outside the detail modal, whose focus trap would
@@ -534,18 +549,48 @@ export default function VVTransfersPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-gray-500">Status:</span>
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Order / reservation no, place, customer…"
+                aria-label="Search bookings"
+                className={`${selectClass} w-full pl-8`}
+              />
+            </div>
             <select
+              aria-label="Status"
               value={status}
               onChange={(e) => setStatus(e.target.value as '' | TransferBookingStatus)}
               className={selectClass}
             >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s || 'ALL'} value={s}>
-                  {s || 'All'}
+                  {s || 'All statuses'}
                 </option>
               ))}
             </select>
+            <DateRangeFilter value={range} onChange={setRange} />
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('')
+                  setStatus('')
+                  setRange(ALL_TIME)
+                }}
+                className="text-xs font-medium text-gray-400 hover:text-gray-600"
+              >
+                Clear filters
+              </button>
+            )}
+            <ExportCsvButton
+              className="w-full sm:ml-auto sm:w-auto"
+              disabled={isReversedRange(range)}
+              onExport={() => vvTransferService.exportBookings(filters)}
+            />
           </div>
 
           {isError ? (
@@ -563,7 +608,7 @@ export default function VVTransfersPage() {
             </div>
           ) : !bookings || bookings.length === 0 ? (
             <Card className="py-10 text-center text-sm text-gray-500">
-              {status ? 'No Pick & Drop bookings match this status.' : 'No Pick & Drop bookings yet.'}
+              {hasFilters ? 'No Pick & Drop bookings match your filters.' : 'No Pick & Drop bookings yet.'}
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -74,36 +74,37 @@ export default function Sidebar({
             shouldCollapse && 'md:px-2'
           )}
         >
-          {!shouldCollapse && (
+          {!shouldCollapse && !navItems[0]?.section && (
             <p className="px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
               Menu
             </p>
           )}
-          {(() => {
-            let vvHeaderShown = false
-            return navItems.map((item) => {
-              const isVV = item.path.startsWith('/dashboard/veloxverse/')
-              const showHeader = isVV && !vvHeaderShown
-              if (showHeader) vvHeaderShown = true
-              return (
-                <div key={item.path}>
-                  {showHeader && !shouldCollapse && (
-                    <p className="px-3 mt-5 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-                      VeloxVerse
-                    </p>
-                  )}
-                  {showHeader && shouldCollapse && (
-                    <div className="my-3 mx-2 border-t border-gray-200" />
-                  )}
-                  <SidebarNavItem
-                    item={item}
-                    collapsed={shouldCollapse}
-                    onClick={onMobileClose}
-                  />
-                </div>
-              )
-            })
-          })()}
+          {navItems.map((item, i) => {
+            // A heading starts each new section (items without a section sit under "Menu").
+            const showHeader = Boolean(item.section) && item.section !== navItems[i - 1]?.section
+            return (
+              <div key={item.path}>
+                {showHeader && !shouldCollapse && (
+                  <p
+                    className={cn(
+                      'px-3 mb-2 text-[10px] font-semibold text-gray-400 uppercase tracking-widest',
+                      i > 0 && 'mt-5'
+                    )}
+                  >
+                    {item.section}
+                  </p>
+                )}
+                {showHeader && shouldCollapse && i > 0 && (
+                  <div className="my-3 mx-2 border-t border-gray-200" />
+                )}
+                <SidebarNavItem
+                  item={item}
+                  collapsed={shouldCollapse}
+                  onClick={onMobileClose}
+                />
+              </div>
+            )
+          })}
         </nav>
 
         {/* User profile at bottom */}

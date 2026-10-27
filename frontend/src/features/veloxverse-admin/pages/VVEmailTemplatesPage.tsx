@@ -36,7 +36,7 @@ export default function VVEmailTemplatesPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="space-y-1">
         <Link to={PD_EMAILS_BASE} className="-ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900">
-          <ArrowLeft className="h-4 w-4" /> Customer emails
+          <ArrowLeft className="h-4 w-4" /> Pick &amp; Drop Emails
         </Link>
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Email templates</h1>
         <p className="max-w-2xl text-sm text-gray-500">

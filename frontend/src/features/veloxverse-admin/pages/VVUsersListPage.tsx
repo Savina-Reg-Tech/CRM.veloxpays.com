@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -8,6 +8,10 @@ import { Table } from '@/components/ui/Table'
 import Pagination from '@/components/ui/Pagination'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useVVUsers } from '../hooks/useVVUsers'
+import { vvUsersService } from '../vvAdminService'
+import DateRangeFilter from '../components/reports/DateRangeFilter'
+import ExportCsvButton from '../components/reports/ExportCsvButton'
+import { ALL_TIME, isReversedRange, rangeParams, type ReportRange } from '../reportRange'
 import VVUserAvatar from '../components/VVUserAvatar'
 import { formatDate } from '../utils'
 import { useAuthStore } from '@/store/authStore'
@@ -41,8 +45,7 @@ const STATUS_FILTERS: { value: '' | VVAccountStatus; label: string }[] = [
 export default function VVUsersListPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const debounced = useDebounce(search, 300)
-  const { data, isLoading } = useVVUsers(page, debounced || undefined)
+  const debounced = useDebounce(search.trim(), 300)
 
   // Staff accounts (admin / super admin / support) are managed by super admins only, so only
   // they are offered the option to list them. Everyone else sees customers, as before.
@@ -50,9 +53,25 @@ export default function VVUsersListPage() {
   const [includeStaff, setIncludeStaff] = useState(false)
   const showStaff = isSuperAdmin && includeStaff
   const [statusFilter, setStatusFilter] = useState<'' | VVAccountStatus>('')
-  const users = (data?.users ?? [])
-    .filter((u) => showStaff || VV_CUSTOMER_ROLES.includes(u.role))
-    .filter((u) => !statusFilter || vvAccountStatus(u).status === statusFilter)
+  const [range, setRange] = useState<ReportRange>(ALL_TIME)
+
+  // VeloxVerse applies every filter across all accounts (so totals and pages are right); a
+  // reversed custom range is not sent (the filter shows why).
+  const filters = useMemo(
+    () => ({
+      search: debounced || undefined,
+      status: statusFilter || undefined,
+      roles: showStaff ? undefined : VV_CUSTOMER_ROLES,
+      ...(isReversedRange(range) ? {} : rangeParams(range)),
+    }),
+    [debounced, statusFilter, showStaff, range]
+  )
+  useEffect(() => {
+    setPage(1)
+  }, [filters])
+
+  const { data, isLoading } = useVVUsers(page, filters)
+  const users = data?.users ?? []
   const pagination = data?.pagination
 
   const columns = [
@@ -132,18 +151,27 @@ export default function VVUsersListPage() {
             <option key={f.value} value={f.value}>{f.label}</option>
           ))}
         </select>
-        {statusFilter && <span className="text-xs text-gray-400">Applies to the accounts on this page.</span>}
       </label>
 
-      <div className="max-w-md">
-        <Input
-          placeholder="Search by name or email…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(1)
-          }}
-          leftIcon={<Search size={16} />}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-full sm:max-w-md sm:flex-1">
+          <Input
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search size={16} />}
+          />
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
+        {pagination && (
+          <span className="text-xs text-gray-500">
+            {pagination.total.toLocaleString()} account{pagination.total === 1 ? '' : 's'}
+          </span>
+        )}
+        <ExportCsvButton
+          className="w-full sm:ml-auto sm:w-auto"
+          disabled={isReversedRange(range)}
+          onExport={() => vvUsersService.exportCsv(filters)}
         />
       </div>
 

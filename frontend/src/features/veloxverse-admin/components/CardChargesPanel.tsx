@@ -1,30 +1,26 @@
 import { useState, type ReactNode } from 'react'
-import { CreditCard, Info, Landmark, Receipt, Undo2 } from 'lucide-react'
+import { CreditCard, Info, Landmark, Receipt, TicketPercent, Undo2, Wallet } from 'lucide-react'
 import Skeleton from '@/components/ui/Skeleton'
 import { formatMoney } from '@/lib/utils'
 import { useVVCardCharges } from '../hooks/useVVAnalytics'
-import type { CardChargePeriod } from '../types'
+import { averagePayment, honoursWindow, type CardChargeWindow } from '../cardChargeWindow'
+import { isReversedRange } from '../reportRange'
+import { serviceLabel } from '../billingReports'
 
-const PERIODS: { value: CardChargePeriod; label: string }[] = [
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
-  { value: '12m', label: '12 months' },
-  { value: 'all', label: 'All time' },
+// Rolling periods VeloxVerse has always supported, then calendar ranges sent as from / to.
+const WINDOWS: { key: string; label: string; window: CardChargeWindow }[] = [
+  { key: '7d', label: '7 days', window: { kind: 'period', period: '7d' } },
+  { key: '30d', label: '30 days', window: { kind: 'period', period: '30d' } },
+  { key: '90d', label: '90 days', window: { kind: 'period', period: '90d' } },
+  { key: '12m', label: '12 months', window: { kind: 'period', period: '12m' } },
+  { key: 'thisMonth', label: 'This month', window: { kind: 'range', range: { preset: 'thisMonth' } } },
+  { key: 'lastMonth', label: 'Last month', window: { kind: 'range', range: { preset: 'lastMonth' } } },
+  { key: 'custom', label: 'Custom', window: { kind: 'range', range: { preset: 'custom' } } },
+  { key: 'all', label: 'All time', window: { kind: 'period', period: 'all' } },
 ]
 
-const SERVICE_LABEL: Record<string, string> = {
-  ESIM_ORDER: 'eSIM',
-  ESIM_TOPUP: 'eSIM top-up',
-  LOUNGE_VISIT: 'Lounge & benefits',
-  TRANSFER: 'Pick & Drop',
-  CLUB_MEMBERSHIP: 'VeloxClub',
-  FLIGHT_BOOKING: 'Flights',
-}
-
-function serviceLabel(service: string): string {
-  return SERVICE_LABEL[service] ?? service.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
-}
+const dateInputClass =
+  'h-8 min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 text-base text-gray-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:w-36 sm:flex-none sm:text-xs'
 
 function Tile({
   icon,
@@ -65,9 +61,17 @@ function Tile({
  * are FX-converted from each booking's customer currency at today's rate.
  */
 export default function CardChargesPanel({ showByService = true }: { showByService?: boolean }) {
-  const [period, setPeriod] = useState<CardChargePeriod>('30d')
-  const { data, isLoading, isError, isFetching } = useVVCardCharges(period)
+  const [key, setKey] = useState('30d')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const base = WINDOWS.find((w) => w.key === key)!.window
+  const selected: CardChargeWindow =
+    key === 'custom' ? { kind: 'range', range: { preset: 'custom', customFrom: customFrom || undefined, customTo: customTo || undefined } } : base
+  const reversed = selected.kind === 'range' && isReversedRange(selected.range)
+  const { data, isLoading, isError, isFetching } = useVVCardCharges(selected)
   const cur = data?.currency ?? 'AUD'
+  const average = data ? averagePayment(data.charged, data.paymentCount) : null
+  const hasPromo = typeof data?.promoDiscount === 'number'
 
   return (
     <section className="space-y-3">
@@ -77,22 +81,31 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
           <p className="text-xs text-gray-500">Actual card money collected through Mint, in AUD.</p>
         </div>
         <div className="flex flex-wrap items-center gap-1 rounded-lg bg-gray-100 p-1" role="tablist" aria-label="Period">
-          {PERIODS.map((p) => (
+          {WINDOWS.map((w) => (
             <button
-              key={p.value}
+              key={w.key}
               type="button"
               role="tab"
-              aria-selected={period === p.value}
-              onClick={() => setPeriod(p.value)}
+              aria-selected={key === w.key}
+              onClick={() => setKey(w.key)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                period === p.value ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                key === w.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
-              {p.label}
+              {w.label}
             </button>
           ))}
         </div>
       </div>
+
+      {key === 'custom' && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+          <input type="date" aria-label="From date" value={customFrom} max={customTo || undefined} onChange={(e) => setCustomFrom(e.target.value)} className={dateInputClass} />
+          <span aria-hidden="true">–</span>
+          <input type="date" aria-label="To date" value={customTo} min={customFrom || undefined} onChange={(e) => setCustomTo(e.target.value)} className={dateInputClass} />
+          {reversed && <span className="w-full text-red-600">The end date is before the start date.</span>}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -102,9 +115,15 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
           Couldn&rsquo;t load the AUD card totals from VeloxVerse. Try reloading in a moment.
         </p>
+      ) : !honoursWindow(selected, data) ? (
+        // Never show all-time money under a calendar label.
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+          VeloxVerse doesn&rsquo;t support calendar months or custom dates yet, so these totals can&rsquo;t be shown for
+          this choice. Use 7 / 30 / 90 days, 12 months or All time until it&rsquo;s updated.
+        </p>
       ) : (
         <div className={`space-y-3 transition-opacity ${isFetching ? 'opacity-60' : ''}`}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <Tile
               icon={<Landmark className="h-5 w-5 text-emerald-600" />}
               tint="bg-white ring-1 ring-emerald-200"
@@ -132,6 +151,22 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
               value={data.paymentCount.toLocaleString()}
               sub={`${data.refundCount.toLocaleString()} refund${data.refundCount === 1 ? '' : 's'}`}
             />
+            <Tile
+              icon={<Wallet className="h-5 w-5 text-violet-500" />}
+              tint="bg-violet-50"
+              label={`Average card payment (${cur})`}
+              value={average == null ? '—' : formatMoney(average, cur)}
+              sub="Collected ÷ card payments"
+            />
+            {hasPromo && (
+              <Tile
+                icon={<TicketPercent className="h-5 w-5 text-amber-500" />}
+                tint="bg-amber-50"
+                label={`Promo discounts given (${cur})`}
+                value={formatMoney(data.promoDiscount ?? 0, cur)}
+                sub={`${(data.promoOrderCount ?? 0).toLocaleString()} order${data.promoOrderCount === 1 ? '' : 's'} with a promo code`}
+              />
+            )}
           </div>
 
           {showByService && data.byService.length > 0 && (
@@ -144,6 +179,8 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
                     <th className="px-4 py-2.5 text-right">Refunded</th>
                     <th className="px-4 py-2.5 text-right">Net</th>
                     <th className="px-4 py-2.5 text-right">Payments</th>
+                    <th className="px-4 py-2.5 text-right">Avg payment</th>
+                    {hasPromo && <th className="px-4 py-2.5 text-right">Promo discounts</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -157,6 +194,18 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
                         {s.paymentCount.toLocaleString()}
                         {s.refundCount > 0 && <span className="text-gray-400"> · {s.refundCount.toLocaleString()} refunded</span>}
                       </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">
+                        {(() => {
+                          const avg = averagePayment(s.charged, s.paymentCount)
+                          return avg == null ? '—' : formatMoney(avg, cur)
+                        })()}
+                      </td>
+                      {hasPromo && (
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-600">
+                          {formatMoney(s.promoDiscount ?? 0, cur)}
+                          {!!s.promoOrderCount && <span className="text-gray-400"> · {s.promoOrderCount.toLocaleString()}</span>}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -169,6 +218,14 @@ export default function CardChargesPanel({ showByService = true }: { showByServi
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
               {data.paymentsWithoutAud.toLocaleString()} older payment{data.paymentsWithoutAud === 1 ? ' was' : 's were'} made
               before AUD charging and {data.paymentsWithoutAud === 1 ? 'is' : 'are'} not included.
+            </p>
+          )}
+          {!!data.promoWithoutAud && (
+            <p className="flex items-start gap-1.5 text-xs text-gray-500">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+              {data.promoWithoutAud.toLocaleString()} promo order{data.promoWithoutAud === 1 ? ' has' : 's have'} no AUD card
+              charge (wallet or points only, or made before AUD charging) and {data.promoWithoutAud === 1 ? 'is' : 'are'} not
+              in the promo total.
             </p>
           )}
         </div>

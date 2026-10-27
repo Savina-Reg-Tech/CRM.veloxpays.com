@@ -347,11 +347,14 @@ export interface AuditTimelineFilters {
   severity?: string[]
 }
 
-export interface AuditExportResult {
+/** Result of any VeloxVerse CSV download (see `downloadVVCsv`). */
+export interface CsvExportResult {
   filename: string
   rows: number
   truncated: boolean
 }
+
+export type AuditExportResult = CsvExportResult
 
 // ── API logs (every HTTP exchange: inbound, supplier calls, webhooks) ──
 

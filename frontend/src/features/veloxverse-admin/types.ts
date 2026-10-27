@@ -143,6 +143,9 @@ export interface CardChargesByService {
   net: number
   paymentCount: number
   refundCount: number
+  /** Promo-code discounts in AUD at each payment's own charge rate — absent on older VeloxVerse. */
+  promoDiscount?: number
+  promoOrderCount?: number
 }
 
 export interface CardCharges {
@@ -157,6 +160,13 @@ export interface CardCharges {
   /** Older payments/refunds with no AUD amount — NOT in the totals above. */
   paymentsWithoutAud: number
   refundsWithoutAud: number
+  /** The window VeloxVerse applied (ISO; null = open end). Absent on a VeloxVerse without
+   * `from` / `to` support — see `honoursWindow`. */
+  range?: { from: string | null; to: string | null }
+  promoDiscount?: number
+  promoOrderCount?: number
+  /** Promo payments with no AUD rate (wallet-only / pre-AUD) — NOT in `promoDiscount`. */
+  promoWithoutAud?: number
 }
 
 // Finding #397 (CRM dual-amount generalization) — the same "Original Price (native) / FX Rate /
@@ -845,6 +855,11 @@ export interface VVAdminTicketFilters {
   status?: VVSupportStatus
   priority?: VVSupportPriority
   category?: VVSupportCategory
+  /** Case ID, subject, or the customer's email / name. */
+  search?: string
+  /** Ticket created-at range as ISO instants (`to` exclusive) — see `rangeParams`. */
+  from?: string
+  to?: string
 }
 
 export interface VVAdminSearchResult {
@@ -1845,4 +1860,264 @@ export interface InboxListParams {
   orderNo?: string
   page?: number
   limit?: number
+}
+
+// ── Billing reports: Payments + Refunds (GET /admin/billing/payments | refunds) ──
+// Money is integer cents beside its currency; AUD (`charge*`) is the real card money through Mint.
+
+export type BillingPaymentStatus =
+  | 'INITIATED'
+  | 'REQUIRES_ACTION'
+  | 'FAILED'
+  | 'CHARGED'
+  | 'FULFILLING'
+  | 'FULFILLED'
+  | 'FULFILLMENT_FAILED'
+  | 'REFUNDING'
+  | 'REFUNDED'
+  | 'RECONCILING'
+  | 'ABANDONED'
+
+export type BillingOutcome = 'paid' | 'pending' | 'failed'
+
+export type BillingService = 'ESIM_ORDER' | 'ESIM_TOPUP' | 'TRANSFER' | 'LOUNGE_VISIT' | 'CLUB_MEMBERSHIP' | 'FLIGHT_BOOKING'
+
+export interface BillingCustomer {
+  id: string
+  email: string
+  name: string
+}
+
+export interface BillingPaymentRow {
+  id: string
+  createdAt: string
+  updatedAt: string
+  status: BillingPaymentStatus
+  outcome: BillingOutcome | null
+  service: BillingService
+  resourceId: string
+  /** The order / booking number; for an eSIM top-up, the parent eSIM order's. Null when the
+   * booking was never made (e.g. a failed lounge checkout). */
+  orderNo: string | null
+  /** Lounge / benefit bookings only — links to the booking detail page. */
+  visitId: string | null
+  customer: BillingCustomer | null
+  provider: 'MINT' | 'STRIPE'
+  providerReference: string | null
+  invoiceNumber: string | null
+  currency: string
+  /** Card part, in the customer's currency. */
+  amountCents: number
+  creditAppliedCents: number
+  pointsAppliedCents: number
+  clubDiscountCents: number
+  promoDiscountCents: number
+  promoCode: string | null
+  /** amountCents + creditAppliedCents — the full price, as on the statement. */
+  orderTotalCents: number
+  chargeAmountCents: number | null
+  chargeCurrency: string | null
+  /** DECIMAL, as a string. */
+  fxRate: string | null
+  refund: {
+    count: number
+    /** SUCCEEDED refunds only, in `currency`. */
+    succeededCents: number
+    /** SUCCEEDED refunds only, in AUD. */
+    succeededChargeCents: number
+    pendingCount: number
+    failedCount: number
+    /** Money kept on cancellation (e.g. the $8 flexible fee), in `currency` — not a refund. */
+    withheldCents: number | null
+  }
+}
+
+export interface BillingPaymentsSummary {
+  currency: string
+  paidCount: number
+  chargedAudCents: number
+  /** Refunds of the listed payments, whenever they happened. */
+  refundedAudCents: number
+  netAudCents: number
+  /** Paid without an AUD card charge (wallet / points only, or before AUD charging) — not in the totals. */
+  withoutAudCount: number
+}
+
+export type BillingInitiatorKind = 'customer' | 'staff' | 'system' | 'unknown'
+
+export interface BillingRefundRow {
+  id: string
+  createdAt: string
+  updatedAt: string
+  status: 'PENDING' | 'SUCCEEDED' | 'FAILED'
+  /** PENDING for more than 24 hours. */
+  stuck: boolean
+  paymentId: string
+  service: BillingService
+  orderNo: string | null
+  visitId: string | null
+  customer: BillingCustomer | null
+  currency: string
+  totalAmountCents: number
+  creditPortionCents: number
+  mintPortionCents: number
+  chargeAmountCents: number | null
+  chargeCurrency: string | null
+  providerRefundReference: string | null
+  reason: string | null
+  /** `unknown` = made before VeloxVerse recorded who started refunds. */
+  initiatedBy: { kind: BillingInitiatorKind; userId: string | null; email: string | null }
+  payment: {
+    amountCents: number
+    currency: string
+    chargeAmountCents: number | null
+    chargeCurrency: string | null
+    withheldCents: number | null
+  } | null
+}
+
+export interface BillingRefundsSummary {
+  currency: string
+  count: number
+  succeededCount: number
+  pendingCount: number
+  failedCount: number
+  stuckCount: number
+  succeededAudCents: number
+  pendingAudCents: number
+  withoutAudCount: number
+}
+
+export interface BillingPaymentDetail {
+  payment: BillingPaymentRow & {
+    description: string
+    metadata: { refundWithheldCents?: number; cardBrand?: string; previousStatus?: string; source?: string }
+  }
+  refunds: BillingRefundRow[]
+  attempts: Array<{ id: string; createdAt: string; source: string; providerStatus: string; providerReference: string | null }>
+}
+
+export interface BillingPaymentFilters {
+  search?: string
+  from?: string
+  to?: string
+  outcome?: BillingOutcome
+  service?: BillingService
+  provider?: 'MINT' | 'STRIPE'
+  refunded?: boolean
+}
+
+export interface BillingRefundFilters {
+  search?: string
+  from?: string
+  to?: string
+  status?: BillingRefundRow['status']
+  service?: BillingService
+  initiatedBy?: BillingInitiatorKind
+  stuck?: boolean
+}
+
+// ── System health (GET /admin/health) + supplier reconciliation (GET /admin/reconciliation) ──
+
+export type HealthStatus = 'ok' | 'degraded' | 'down'
+/** `idle` = not used recently / turned off — shown grey, never an alert. */
+export type HealthComponentStatus = HealthStatus | 'idle'
+
+export interface HealthComponent {
+  name: string
+  kind: 'database' | 'supplier' | 'job' | 'email'
+  status: HealthComponentStatus
+  latencyMs: number | null
+  message: string | null
+  lastSuccessAt: string | null
+  /** Suppliers only: our calls to them in the window. */
+  callCount?: number
+  failureCount?: number
+}
+
+export interface SystemHealth {
+  /** `down` only when the database is down. */
+  status: HealthStatus
+  checkedAt: string
+  windowMinutes: number
+  components: HealthComponent[]
+}
+
+export type ReconSupplier = 'esimaccess' | 'dragonpass' | 'viatovia' | 'mint'
+export type ReconIssue = 'mismatch' | 'missing_supplier' | 'missing_ours' | 'matched'
+export type CurrencyAmount = { currency: string; cents: number }
+
+export interface ReconSupplierSummary {
+  supplier: ReconSupplier
+  name: string
+  ourCount: number
+  matchedCount: number
+  mismatchCount: number
+  missingAtSupplierCount: number
+  /** Always null — VeloxVerse doesn't pull suppliers' full order lists. */
+  missingOnOursCount: number | null
+  ourAmount: CurrencyAmount[]
+  /** Null for Mint (no supplier cost). */
+  supplierCost: CurrencyAmount[] | null
+  margin: CurrencyAmount[] | null
+  /** Margin of the rows that could be put in AUD at each payment's locked rate. */
+  marginAudCents: number | null
+  marginAudRowCount: number | null
+  rowsWithoutCost: number | null
+  lastSyncedAt: string | null
+  lastSyncStatus: string | null
+  /** Plain-text names of what this supplier can't report (e.g. "missing on ours"). */
+  notAvailable: string[]
+  /** More than 20,000 bookings in the range — narrow the dates. */
+  truncated: boolean
+}
+
+export interface ReconRange {
+  from: string | null
+  to: string | null
+}
+
+export interface ReconSummaryResponse {
+  range: ReconRange
+  suppliers: ReconSupplierSummary[]
+}
+
+export interface ReconRow {
+  id: string
+  createdAt: string
+  service: string
+  orderNo: string | null
+  visitId: string | null
+  customerEmail: string | null
+  ourRef: string | null
+  supplierRef: string | null
+  ourStatus: string | null
+  /** Null when the supplier's status isn't stored (always for DragonPass). */
+  supplierStatus: string | null
+  paymentId: string | null
+  paymentStatus: string | null
+  ourAmountCents: number | null
+  currency: string | null
+  supplierCostCents: number | null
+  supplierCurrency: string | null
+  supplierCostInCurrencyCents: number | null
+  marginCents: number | null
+  marginAudCents: number | null
+  issue: ReconIssue
+  issueDetail: string | null
+  lastCheckedAt: string | null
+}
+
+export interface ReconRowsResponse {
+  range: ReconRange
+  summary: ReconSupplierSummary
+  rows: ReconRow[]
+  pagination: VVPagination
+}
+
+export interface ReconRowFilters {
+  from?: string
+  to?: string
+  issue?: ReconIssue
+  search?: string
 }

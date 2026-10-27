@@ -55,7 +55,7 @@ export default function CustomersPage() {
     data: vvData,
     isLoading: vvLoading,
     isError: vvError,
-  } = useVVUsers(page, debouncedSearch || undefined, { enabled: canSeeVeloxVerse })
+  } = useVVUsers(page, { search: debouncedSearch || undefined }, { enabled: canSeeVeloxVerse })
 
   const crmRows = useMemo((): UnifiedCustomerRow[] => {
     let customers = crmData?.items ?? []

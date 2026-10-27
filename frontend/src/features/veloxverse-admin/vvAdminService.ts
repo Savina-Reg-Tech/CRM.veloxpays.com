@@ -1,7 +1,7 @@
 import api from '@/lib/axios'
 import type {
   AnalyticsOverview, RevenueSeries, GrowthSeries, PopularPackagesResult,
-  RecentActivity, RecentActivityPage, OrderStats, CustomerSpendingResult, CardCharges, CardChargePeriod,
+  RecentActivity, RecentActivityPage, OrderStats, CustomerSpendingResult, CardCharges,
   AdminOrderRow, AdminOrderDetail, VVPagination, EsimCancelResult,
   LoungeVisit, LoungeVisitDetail, AdminLoungeMembership, LoungeStats, Paginated,
   LoungeBookingTypeFilter, LoungeResourceType,
@@ -21,13 +21,17 @@ import type {
   AdminBillingActivity,
   AuditMeta, AuditEventPage, AuditEventDetail, AuditTrace, AuditJourney, AuditTimelinePage, AuditBookingTrail,
   AuditStuckItem, AuditErrorsSummary, AuditFunnel, AuditDailySummary, AuditAlertsPage, AuditSettings,
-  AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult,
+  AuditSettingsUpdate, AlertRecipient, AlertRecipientInput, AuditEventFilters, AuditTimelineFilters, AuditExportResult, CsvExportResult,
   ApiLogDetailResponse, ApiLogExport, ApiLogFilters, ApiLogListResponse, ApiLogStats, ApiTimelineParams, ApiTimelineResponse,
   DraftSummary, DraftDetail, DraftEdit, DraftListParams, InboxSummary, InboxDetail, InboxListParams, InboxAttachment,
   InboxPollSummary, PickdropList, BookingSummary, TimelineItem, EmailTemplate, EmailTemplateVersion, Placeholder,
   TemplatePreview, TemplateUpdate,
+  BillingPaymentRow, BillingPaymentsSummary, BillingPaymentDetail, BillingPaymentFilters,
+  BillingRefundRow, BillingRefundsSummary, BillingRefundFilters,
+  SystemHealth, ReconSummaryResponse, ReconRowsResponse, ReconRowFilters, ReconSupplier,
 } from './types'
 import { limitOrZero } from './pointsLimits'
+import { billingParams } from './billingReports'
 
 /** An older VeloxVerse doesn't send the per-order limits — a missing one means "no limit" (0). */
 function normalizePointsSettings(settings: PointsSettings): PointsSettings {
@@ -47,6 +51,43 @@ export function normalizeVVUser<T extends VVAdminUser>(user: T): T {
 interface VVResponse<T> { success: boolean; message: string; data: T }
 
 const VV = '/vv-admin'
+
+/**
+ * Downloads one of VeloxVerse's own CSV exports (formula-safe, max 10,000 rows) through the CRM
+ * proxy and saves it. `path` is under /vv-admin and ends in `export.csv`; the rows / truncated
+ * figures come from VeloxVerse's X-Export-Rows / X-Export-Truncated headers.
+ */
+export async function downloadVVCsv(path: string, params: object, fallbackName: string): Promise<CsvExportResult> {
+  let res
+  try {
+    res = await api.get<Blob>(path, { params, responseType: 'blob' })
+  } catch (err) {
+    // With responseType 'blob' the JSON error body arrives as a Blob — decode it so callers can
+    // read `message` / `requestId` exactly like every other call.
+    const r = (err as { response?: { data?: unknown } }).response
+    if (r?.data instanceof Blob) {
+      try {
+        r.data = JSON.parse(await r.data.text())
+      } catch {
+        /* leave as-is */
+      }
+    }
+    throw err
+  }
+  const disposition = String(res.headers['content-disposition'] ?? '')
+  const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? `${fallbackName}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.csv`
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+  return {
+    filename,
+    rows: Number(res.headers['x-export-rows'] ?? 0),
+    truncated: String(res.headers['x-export-truncated']) === 'true',
+  }
+}
 
 // ── Analytics ───────────────────────────────────────────────────────
 export const vvAnalyticsService = {
@@ -93,33 +134,91 @@ export const vvAnalyticsService = {
     )
     return data.data
   },
-  /** Real AUD collected through Mint. 'all' sends no `period` (all time). */
-  async getCardCharges(period: CardChargePeriod = 'all') {
-    const { data } = await api.get<VVResponse<{ cardCharges: CardCharges }>>(`${VV}/admin/analytics/card-charges`, {
-      params: { period: period === 'all' ? undefined : period },
-    })
+  /** Real AUD collected through Mint, for a rolling period or a calendar range (see `cardChargeParams`). */
+  async getCardCharges(params: Record<string, string> = {}) {
+    const { data } = await api.get<VVResponse<{ cardCharges: CardCharges }>>(`${VV}/admin/analytics/card-charges`, { params })
     return data.data.cardCharges
   },
 }
 
-// ── eSIM Orders ─────────────────────────────────────────────────────
-export const vvEsimService = {
-  // `search`/`status` are passed through optimistically, mirroring the
-  // page/limit/search convention already used by vvUsersService.list and
-  // vvPromoService.list against the same /vv-admin backend — not confirmed
-  // for this specific endpoint. If the backend ignores them, VVEsimListPage
-  // still filters the returned page client-side, so search/filter works
-  // either way.
-  async getOrders(page = 1, limit = 20, params: { search?: string; status?: string } = {}) {
-    const { data } = await api.get<VVResponse<{ orders: AdminOrderRow[]; pagination: VVPagination }>>(`${VV}/admin/esims/orders`, {
-      params: {
-        page,
-        limit,
-        ...(params.search ? { search: params.search } : {}),
-        ...(params.status ? { status: params.status } : {}),
-      },
+// ── Billing reports: Payments + Refunds (admins only) ───────────────
+const BILLING = `${VV}/admin/billing`
+
+export const vvBillingReportsService = {
+  /** Every payment matching the filters; `summary` covers all matches, not just this page. */
+  async listPayments(page = 1, limit = 20, filters: BillingPaymentFilters = {}) {
+    const { data } = await api.get<VVResponse<{ payments: BillingPaymentRow[]; pagination: VVPagination; summary: BillingPaymentsSummary }>>(
+      `${BILLING}/payments`,
+      { params: { page, limit, ...billingParams(filters) } }
+    )
+    return data.data
+  },
+  async getPayment(id: string) {
+    const { data } = await api.get<VVResponse<BillingPaymentDetail>>(`${BILLING}/payments/${encodeURIComponent(id)}`)
+    return data.data
+  },
+  exportPayments(filters: BillingPaymentFilters = {}) {
+    return downloadVVCsv(`${BILLING}/payments/export.csv`, billingParams(filters), 'payments')
+  },
+  async listRefunds(page = 1, limit = 20, filters: BillingRefundFilters = {}) {
+    const { data } = await api.get<VVResponse<{ refunds: BillingRefundRow[]; pagination: VVPagination; summary: BillingRefundsSummary }>>(
+      `${BILLING}/refunds`,
+      { params: { page, limit, ...billingParams(filters) } }
+    )
+    return data.data
+  },
+  exportRefunds(filters: BillingRefundFilters = {}) {
+    return downloadVVCsv(`${BILLING}/refunds/export.csv`, billingParams(filters), 'refunds')
+  },
+}
+
+// ── System health + supplier reconciliation (admins only) ───────────
+export const vvSupplierReportsService = {
+  /** Status of the database, suppliers, background jobs and email. `fresh` skips VeloxVerse's 30 s cache. */
+  async getHealth(fresh = false) {
+    const { data } = await api.get<VVResponse<SystemHealth>>(`${VV}/admin/health`, { params: fresh ? { fresh: 'true' } : undefined })
+    return data.data
+  },
+  async getReconciliation(range: { from?: string; to?: string }) {
+    const { data } = await api.get<VVResponse<ReconSummaryResponse>>(`${VV}/admin/reconciliation`, { params: range })
+    return data.data
+  },
+  async getReconciliationRows(supplier: ReconSupplier, page = 1, limit = 20, filters: ReconRowFilters = {}) {
+    const { data } = await api.get<VVResponse<ReconRowsResponse>>(`${VV}/admin/reconciliation/${supplier}`, {
+      params: { page, limit, ...billingParams(filters) },
     })
     return data.data
+  },
+  exportReconciliation(supplier: ReconSupplier, filters: ReconRowFilters = {}) {
+    return downloadVVCsv(`${VV}/admin/reconciliation/${supplier}/export.csv`, billingParams(filters), `reconciliation-${supplier}`)
+  },
+}
+
+// ── eSIM Orders ─────────────────────────────────────────────────────
+export type EsimOrderFilters = { search?: string; status?: string; from?: string; to?: string }
+
+/** Only the filters that are set — blank ones are left off the query string. */
+function esimOrderParams(f: EsimOrderFilters) {
+  return {
+    ...(f.search ? { search: f.search } : {}),
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.from ? { from: f.from } : {}),
+    ...(f.to ? { to: f.to } : {}),
+  }
+}
+
+export const vvEsimService = {
+  /** Search (order no., ICCID, package, customer email/name), status and created-at range are
+   * applied by VeloxVerse across all orders, not just the page shown. */
+  async getOrders(page = 1, limit = 20, filters: EsimOrderFilters = {}) {
+    const { data } = await api.get<VVResponse<{ orders: AdminOrderRow[]; pagination: VVPagination }>>(`${VV}/admin/esims/orders`, {
+      params: { page, limit, ...esimOrderParams(filters) },
+    })
+    return data.data
+  },
+  /** CSV of every order matching the filters (max 10,000 rows). */
+  exportOrders(filters: EsimOrderFilters = {}) {
+    return downloadVVCsv(`${VV}/admin/esims/orders/export.csv`, esimOrderParams(filters), 'esim-orders')
   },
   async getOrderDetail(orderNo: string) {
     const { data } = await api.get<VVResponse<{ order: AdminOrderDetail }>>(`${VV}/admin/esims/orders/${encodeURIComponent(orderNo)}`)
@@ -152,6 +251,9 @@ export interface LoungeVisitsParams {
   resourceType?: LoungeResourceType
   /** Order no., DragonPass reference / order id, ePass ID, contact email, or account email / name. */
   search?: string
+  /** Booking created-at range as ISO instants (`to` exclusive) — see `rangeParams`. */
+  from?: string
+  to?: string
 }
 
 export const vvLoungeService = {
@@ -160,6 +262,10 @@ export const vvLoungeService = {
     // Map backend shape { visits, pagination } → Paginated<LoungeVisit> { items, total, page, totalPages }
     const d = data.data
     return { items: d.visits, total: d.pagination.total, page: d.pagination.page, totalPages: d.pagination.totalPages } as Paginated<LoungeVisit>
+  },
+  /** CSV of every booking matching the list filters (max 10,000 rows). */
+  exportVisits({ page: _page, limit: _limit, ...filters }: LoungeVisitsParams = {}) {
+    return downloadVVCsv(`${VV}/lounge/admin/visits/export.csv`, filters, 'lounge-bookings')
   },
   async getMemberships() {
     const { data } = await api.get<VVResponse<{ memberships: AdminLoungeMembership[] }>>(`${VV}/lounge/admin/memberships`)
@@ -176,10 +282,28 @@ export const vvLoungeService = {
 }
 
 // ── Transfers (VeloxAssist Pick & Drop) ───────────────────────────────
+export type TransferBookingFilters = { status?: string; search?: string; from?: string; to?: string }
+
+/** Only the filters that are set — blank ones are left off the query string. */
+function transferParams(f: TransferBookingFilters) {
+  return {
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.search ? { search: f.search } : {}),
+    ...(f.from ? { from: f.from } : {}),
+    ...(f.to ? { to: f.to } : {}),
+  }
+}
+
 export const vvTransferService = {
-  async getBookings(status?: string) {
-    const { data } = await api.get<VVResponse<{ bookings: AdminTransferBooking[] }>>(`${VV}/admin/assist/transfer/bookings`, { params: status ? { status } : undefined })
+  /** Every booking matching the filters (not paged — the page totals them). Search covers order /
+   * reservation no. and the customer's email / name; `from` / `to` is the booking created-at range. */
+  async getBookings(filters: TransferBookingFilters = {}) {
+    const { data } = await api.get<VVResponse<{ bookings: AdminTransferBooking[] }>>(`${VV}/admin/assist/transfer/bookings`, { params: transferParams(filters) })
     return data.data.bookings
+  },
+  /** CSV of every booking matching the filters (max 10,000 rows). */
+  exportBookings(filters: TransferBookingFilters = {}) {
+    return downloadVVCsv(`${VV}/admin/assist/transfer/bookings/export.csv`, transferParams(filters), 'pickdrop-bookings')
   },
   async getCancelReasons() {
     const { data } = await api.get<VVResponse<{ reasons: TransferCancelReason[] }>>(`${VV}/admin/assist/transfer/cancel-reasons`)
@@ -287,10 +411,36 @@ export const vvPricingService = {
 }
 
 // ── Users ───────────────────────────────────────────────────────────
+/** Admin users list filters — all applied by VeloxVerse across every account, not just one page. */
+export type VVUserListFilters = {
+  /** Email, first or last name (or an exact user id). */
+  search?: string
+  status?: 'active' | 'inactive' | 'blocked'
+  /** One or more roles, e.g. ['USER', 'GUEST'] for customers only. */
+  roles?: VVUserRole[]
+  /** Account created-at range as ISO instants (`to` exclusive) — see `rangeParams`. */
+  from?: string
+  to?: string
+}
+
+function userListParams(f: VVUserListFilters) {
+  return {
+    ...(f.search ? { search: f.search } : {}),
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.roles?.length ? { role: f.roles.join(',') } : {}),
+    ...(f.from ? { from: f.from } : {}),
+    ...(f.to ? { to: f.to } : {}),
+  }
+}
+
 export const vvUsersService = {
-  async list(page = 1, search?: string, limit = 20) {
-    const { data } = await api.get<VVResponse<VVAdminUsersPage>>(`${VV}/admin/users`, { params: { page, limit, ...(search ? { search } : {}) } })
+  async list(page = 1, filters: VVUserListFilters = {}, limit = 20) {
+    const { data } = await api.get<VVResponse<VVAdminUsersPage>>(`${VV}/admin/users`, { params: { page, limit, ...userListParams(filters) } })
     return { ...data.data, users: (data.data.users ?? []).map(normalizeVVUser) }
+  },
+  /** CSV of every account matching the filters (max 10,000 rows; never passwords or tokens). */
+  exportCsv(filters: VVUserListFilters = {}) {
+    return downloadVVCsv(`${VV}/admin/users/export.csv`, userListParams(filters), 'users')
   },
   async get(id: string) {
     const { data } = await api.get<VVResponse<VVAdminUserDetail>>(`${VV}/admin/users/${id}`)
@@ -313,6 +463,10 @@ export const vvSupportService = {
   async list(filters: VVAdminTicketFilters = {}) {
     const { data } = await api.get<VVResponse<{ tickets: VVSupportTicket[] }>>(`${VV}/admin/support/tickets`, { params: filters })
     return data.data.tickets
+  },
+  /** CSV of every ticket matching the filters (admins only; max 10,000 rows; no message bodies). */
+  exportCsv(filters: VVAdminTicketFilters = {}) {
+    return downloadVVCsv(`${VV}/admin/support/tickets/export.csv`, filters, 'support-tickets')
   },
   async get(id: string) {
     const { data } = await api.get<VVResponse<{ ticket: VVSupportTicket }>>(`${VV}/admin/support/tickets/${encodeURIComponent(id)}`)
@@ -720,36 +874,8 @@ export const vvAuditService = {
 
   /** Streams VeloxVerse's own CSV (admin-only, formula-safe, max 10,000 rows) through the CRM
    * proxy and saves it. */
-  async exportCsv(filters: AuditEventFilters): Promise<AuditExportResult> {
-    let res
-    try {
-      res = await api.get<Blob>(`${AUDIT}/export.csv`, { params: auditParams(filters), responseType: 'blob' })
-    } catch (err) {
-      // With responseType 'blob' the JSON error body arrives as a Blob — decode it so callers can
-      // read `message` / `requestId` exactly like every other audit call.
-      const r = (err as { response?: { data?: unknown } }).response
-      if (r?.data instanceof Blob) {
-        try {
-          r.data = JSON.parse(await r.data.text())
-        } catch {
-          /* leave as-is */
-        }
-      }
-      throw err
-    }
-    const disposition = String(res.headers['content-disposition'] ?? '')
-    const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? `audit-log-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.csv`
-    const url = URL.createObjectURL(res.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-    return {
-      filename,
-      rows: Number(res.headers['x-export-rows'] ?? 0),
-      truncated: String(res.headers['x-export-truncated']) === 'true',
-    }
+  exportCsv(filters: AuditEventFilters): Promise<AuditExportResult> {
+    return downloadVVCsv(`${AUDIT}/export.csv`, auditParams(filters), 'audit-log')
   },
 }
 

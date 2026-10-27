@@ -281,10 +281,10 @@ export default function VVPickdropEmailsPage({ tab }: { tab: PickdropEmailsTab }
       <div className="sticky -top-4 z-20 -mx-4 bg-gray-50/95 px-4 pb-2 pt-4 backdrop-blur sm:-top-6 sm:-mx-6 sm:px-6 sm:pt-6 lg:static lg:mx-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Customer emails</h1>
+            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Pick &amp; Drop Emails</h1>
             <p className="mt-0.5 text-sm text-gray-500">
               {badge.isLoading ? 'Loading…' : `${badge.open} to review · ${badge.unmatched} unmatched`}
-              <span className="hidden sm:inline"> · Pick &amp; Drop rides by ViaTovia</span>
+              <span className="hidden sm:inline"> · Rides by ViaTovia</span>
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">

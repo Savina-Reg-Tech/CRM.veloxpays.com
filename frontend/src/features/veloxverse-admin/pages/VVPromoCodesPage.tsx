@@ -28,9 +28,14 @@ function fieldLabel(text: string) {
   return <label className="mb-1.5 block text-sm font-medium text-gray-700">{text}</label>
 }
 
-// Checkout currencies that can carry their own promo amounts. USD is the base (the "$" fields
-// above), so it isn't repeated here.
+// Checkout currencies that can carry their own promo amounts. USD is the base (bound to the
+// discountValue / minPurchase / maxDiscount state), so it's never sent as an override.
 const OVERRIDE_CURRENCIES = ANALYTICS_CURRENCIES.filter((c) => c !== 'USD')
+
+// Card order in "Amounts per currency": USD (base) first, AUD (main checkout currency) second.
+const CURRENCY_CARD_ORDER = ['USD', 'AUD', ...ANALYTICS_CURRENCIES.filter((c) => c !== 'USD' && c !== 'AUD')]
+
+const amountInputClass = 'h-9 text-base sm:h-8 sm:text-sm'
 
 type AmountDraft = { min: string; discount: string; max: string }
 
@@ -175,40 +180,17 @@ export function PromoForm({ promo, onClose }: { promo?: PromoCode; onClose: () =
             <option value="PERCENTAGE">Percentage (%)</option>
           </select>
         </div>
-        <div>
-          {fieldLabel(discountType === 'PERCENTAGE' ? 'Discount (%)' : 'Discount (USD $)')}
-          <Input
-            className="text-base sm:text-sm"
-            type="number"
-            min="0"
-            step="0.01"
-            value={discountValue}
-            onChange={(e) => setDiscountValue(e.target.value)}
-          />
-        </div>
-        <div>
-          {fieldLabel('Min purchase (USD $)')}
-          <Input
-            className="text-base sm:text-sm"
-            type="number"
-            min="0"
-            step="0.01"
-            value={minPurchase}
-            onChange={(e) => setMinPurchase(e.target.value)}
-            placeholder="No minimum"
-          />
-        </div>
+        {/* A percentage isn't a currency amount, so it stays here; a fixed USD discount lives in the USD card below. */}
         {discountType === 'PERCENTAGE' && (
           <div>
-            {fieldLabel('Max discount (USD $)')}
+            {fieldLabel('Discount (%)')}
             <Input
               className="text-base sm:text-sm"
               type="number"
               min="0"
               step="0.01"
-              value={maxDiscount}
-              onChange={(e) => setMaxDiscount(e.target.value)}
-              placeholder="No cap"
+              value={discountValue}
+              onChange={(e) => setDiscountValue(e.target.value)}
             />
           </div>
         )}
@@ -261,52 +243,105 @@ export function PromoForm({ promo, onClose }: { promo?: PromoCode; onClose: () =
       </div>
 
       <div>
-        {fieldLabel('Amounts per currency (optional)')}
+        {fieldLabel('Amounts per currency')}
         <p className="mb-2 text-xs text-gray-500">
-          Enter amounts in each currency itself (e.g. INR in rupees). Leave a field blank to convert the USD
-          amount above at the live exchange rate.
+          USD is the base amount. Enter other currencies in their own money (e.g. INR in rupees); leave a field
+          blank to convert the USD amount at the live exchange rate.
         </p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {OVERRIDE_CURRENCIES.map((cur) => (
-            <div key={cur} className="rounded-lg border border-gray-100 p-2">
-              <p className="mb-1 text-xs font-semibold text-gray-700">{cur}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="h-9 text-base sm:h-8 sm:text-sm"
-                  value={amounts[cur].min}
-                  onChange={(e) => setAmount(cur, 'min', e.target.value)}
-                  placeholder="Min · auto"
-                  aria-label={`Minimum purchase in ${cur}`}
-                />
-                {discountType === 'FIXED' ? (
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="h-9 text-base sm:h-8 sm:text-sm"
-                    value={amounts[cur].discount}
-                    onChange={(e) => setAmount(cur, 'discount', e.target.value)}
-                    placeholder="Discount · auto"
-                    aria-label={`Discount in ${cur}`}
-                  />
-                ) : (
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="h-9 text-base sm:h-8 sm:text-sm"
-                    value={amounts[cur].max}
-                    onChange={(e) => setAmount(cur, 'max', e.target.value)}
-                    placeholder="Max · auto"
-                    aria-label={`Maximum discount in ${cur}`}
-                  />
-                )}
-              </div>
+        {/* Column hints — one set per card column, aligned with each card's two inputs. */}
+        <div className="mb-1 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-hidden="true">
+          {[0, 1].map((i) => (
+            <div key={i} className={`grid grid-cols-2 gap-2 px-2 text-[11px] font-medium text-gray-400 ${i ? 'hidden sm:grid' : ''}`}>
+              <span>Min purchase</span>
+              <span>{discountType === 'FIXED' ? 'Discount' : 'Max discount'}</span>
             </div>
           ))}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {CURRENCY_CARD_ORDER.map((cur) =>
+            cur === 'USD' ? (
+              <div key={cur} className="rounded-lg border border-indigo-200 p-2">
+                <p className="mb-1 text-xs font-semibold text-gray-700">
+                  USD
+                  <span className="ml-1 rounded bg-indigo-50 px-1.5 text-[10px] font-semibold text-indigo-600">Base</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={amountInputClass}
+                    value={minPurchase}
+                    onChange={(e) => setMinPurchase(e.target.value)}
+                    placeholder="Min · none"
+                    aria-label="Minimum purchase in USD"
+                  />
+                  {discountType === 'FIXED' ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={amountInputClass}
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      placeholder="Discount (required)"
+                      aria-label="Discount in USD"
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={amountInputClass}
+                      value={maxDiscount}
+                      onChange={(e) => setMaxDiscount(e.target.value)}
+                      placeholder="Max · no cap"
+                      aria-label="Maximum discount in USD"
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div key={cur} className="rounded-lg border border-gray-100 p-2">
+                <p className="mb-1 text-xs font-semibold text-gray-700">{cur}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={amountInputClass}
+                    value={amounts[cur].min}
+                    onChange={(e) => setAmount(cur, 'min', e.target.value)}
+                    placeholder="Min · auto"
+                    aria-label={`Minimum purchase in ${cur}`}
+                  />
+                  {discountType === 'FIXED' ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={amountInputClass}
+                      value={amounts[cur].discount}
+                      onChange={(e) => setAmount(cur, 'discount', e.target.value)}
+                      placeholder="Discount · auto"
+                      aria-label={`Discount in ${cur}`}
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={amountInputClass}
+                      value={amounts[cur].max}
+                      onChange={(e) => setAmount(cur, 'max', e.target.value)}
+                      placeholder="Max · auto"
+                      aria-label={`Maximum discount in ${cur}`}
+                    />
+                  )}
+                </div>
+              </div>
+            )
+          )}
         </div>
       </div>
 

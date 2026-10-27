@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { vvAnalyticsService } from '../vvAdminService'
-import type { CardChargePeriod } from '../types'
+import { cardChargeParams, type CardChargeWindow } from '../cardChargeWindow'
 import { cardChargesByOrderNo, type CardCharge } from '../utils'
 
 export function useVVOverview(currency?: string) {
@@ -64,10 +64,11 @@ export function useVVCustomerSpending(limit = 20, currency?: string) {
   })
 }
 
-export function useVVCardCharges(period: CardChargePeriod = '30d') {
+export function useVVCardCharges(window: CardChargeWindow = { kind: 'period', period: '30d' }) {
+  const params = cardChargeParams(window)
   return useQuery({
-    queryKey: ['vv-analytics', 'card-charges', period],
-    queryFn: () => vvAnalyticsService.getCardCharges(period),
+    queryKey: ['vv-analytics', 'card-charges', params],
+    queryFn: () => vvAnalyticsService.getCardCharges(params),
     // Keep the previous period's cards on screen while the next tab loads.
     placeholderData: keepPreviousData,
   })
