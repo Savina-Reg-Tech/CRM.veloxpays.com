@@ -799,6 +799,9 @@ export interface VVAdminUser {
   avatarType?: 'PRESET' | 'CUSTOM'
   avatarId?: string | null
   avatarUrl?: string | null
+  /** Account country (ISO-2 + name) — only when VeloxVerse's admin user list sends it. */
+  countryCode?: string | null
+  country?: string | null
 }
 
 export interface VVAdminUsersPage {
@@ -2120,4 +2123,108 @@ export interface ReconRowFilters {
   to?: string
   issue?: ReconIssue
   search?: string
+}
+
+// ── Country availability ────────────────────────────────────────────
+// Which VeloxVerse services / sub-services / forms each country may use. The rules live in
+// VeloxVerse (GET /admin/service-availability); the item list is never hard-coded here.
+export type AvailabilityMode = 'all_countries' | 'allow_list' | 'deny_list' | 'disabled'
+export type BlockedDisplay = 'hidden' | 'coming-soon' | 'register-interest' | 'not-available'
+export type UnknownCountryPolicy = 'allow' | 'block'
+export type AvailabilityItemKind = 'service' | 'sub-service' | 'form'
+
+export interface AvailabilityRule {
+  serviceKey: string
+  mode: AvailabilityMode
+  /** ISO-2, sorted; [] for all_countries / disabled */
+  countries: string[]
+  blockedDisplay: BlockedDisplay
+  unknownCountryPolicy: UnknownCountryPolicy
+  strictIpCheck: boolean
+  message: string | null
+  /** Send back as expectedVersion — VeloxVerse answers 409 when someone else saved first. */
+  version: number
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
+export interface AvailabilityItem {
+  /** e.g. "velox-assist.pick-drop" — stable, never shown as the main label */
+  key: string
+  label: string
+  kind: AvailabilityItemKind
+  group: string
+  /** null for a top-level service */
+  parentKey: string | null
+  /** forms only — the CRM form slug (e.g. "car-loan") */
+  crmFormKey?: string
+  rule: AvailabilityRule
+}
+
+export interface AvailabilityCountry { code: string; name: string }
+
+export interface AvailabilityOverview {
+  /** VeloxVerse master switch — while false every service is available everywhere. */
+  enforced: boolean
+  /** Parents first, each followed by its children. */
+  items: AvailabilityItem[]
+  countries: AvailabilityCountry[]
+  modes: AvailabilityMode[]
+  blockedDisplays: BlockedDisplay[]
+  unknownCountryPolicies: UnknownCountryPolicy[]
+}
+
+export interface AvailabilityRuleInput {
+  mode: AvailabilityMode
+  countries: string[]
+  blockedDisplay: BlockedDisplay
+  unknownCountryPolicy: UnknownCountryPolicy
+  strictIpCheck: boolean
+  message?: string | null
+  expectedVersion?: number
+  /** Optional note (max 500) stored in the change history. */
+  reason?: string | null
+}
+
+export interface ItemAvailabilityPreview {
+  available: boolean
+  display: 'show' | BlockedDisplay
+  message?: string
+  /** The key whose rule blocks it (itself or its parent). */
+  blockedBy?: string
+}
+
+export interface AvailabilityPreview {
+  country: string | null
+  services: Record<string, ItemAvailabilityPreview>
+}
+
+export type AvailabilityChangeEntity = 'rule' | 'customer_country'
+
+export interface AvailabilityChange {
+  id: string
+  entity: AvailabilityChangeEntity
+  /** Service key, or VeloxVerse user id. */
+  entityId: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  actorId: string | null
+  actorEmail: string | null
+  actorRole: string | null
+  reason: string | null
+  createdAt: string
+}
+
+export interface AvailabilityChangeParams {
+  entity?: AvailabilityChangeEntity
+  entityId?: string
+  limit?: number
+}
+
+export interface CustomerCountry {
+  userId: string
+  /** ISO-2 */
+  country: string | null
+  countrySource: 'customer' | 'admin' | null
+  countryUpdatedAt: string | null
 }

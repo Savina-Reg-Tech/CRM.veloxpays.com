@@ -29,6 +29,8 @@ import type {
   BillingPaymentRow, BillingPaymentsSummary, BillingPaymentDetail, BillingPaymentFilters,
   BillingRefundRow, BillingRefundsSummary, BillingRefundFilters,
   SystemHealth, ReconSummaryResponse, ReconRowsResponse, ReconRowFilters, ReconSupplier,
+  AvailabilityOverview, AvailabilityRule, AvailabilityRuleInput, AvailabilityPreview, AvailabilityChange,
+  AvailabilityChangeParams, CustomerCountry,
 } from './types'
 import { limitOrZero } from './pointsLimits'
 import { billingParams } from './billingReports'
@@ -1010,6 +1012,41 @@ export const emailTemplatesService = {
   },
   async restore(key: string, version: number) {
     const { data } = await api.post<VVResponse<EmailTemplate>>(`${TPL}/${enc(key)}/restore`, { version })
+    return data.data
+  },
+}
+
+// ── Country availability (which services each country can use) ──────
+const SA = `${VV}/admin/service-availability`
+
+export const vvAvailabilityService = {
+  async overview() {
+    const { data } = await api.get<VVResponse<AvailabilityOverview>>(SA)
+    return data.data
+  },
+  /** Service keys contain a dot (velox-assist.pick-drop) — always encoded. */
+  async updateRule(serviceKey: string, input: AvailabilityRuleInput) {
+    const { data } = await api.put<VVResponse<{ rule: AvailabilityRule }>>(`${SA}/rules/${encodeURIComponent(serviceKey)}`, input)
+    return data.data.rule
+  },
+  /** `null` = a customer whose country can't be told. */
+  async preview(country: string | null) {
+    const { data } = await api.get<VVResponse<AvailabilityPreview>>(`${SA}/preview`, {
+      params: cleanParams({ country: country ?? undefined }),
+    })
+    return data.data
+  },
+  async changes(params: AvailabilityChangeParams) {
+    const { data } = await api.get<VVResponse<{ changes: AvailabilityChange[] }>>(`${SA}/changes`, { params: cleanParams(params) })
+    return data.data.changes
+  },
+  async getCustomerCountry(userId: string) {
+    const { data } = await api.get<VVResponse<CustomerCountry>>(`${SA}/customers/${encodeURIComponent(userId)}/country`)
+    return data.data
+  },
+  /** `country: null` clears it — the IP country applies again. */
+  async setCustomerCountry(userId: string, body: { country: string | null; reason?: string }) {
+    const { data } = await api.put<VVResponse<CustomerCountry>>(`${SA}/customers/${encodeURIComponent(userId)}/country`, body)
     return data.data
   },
 }

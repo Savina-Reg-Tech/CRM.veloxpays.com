@@ -64,6 +64,7 @@ import VVPickdropEmailsPage from '@/features/veloxverse-admin/pages/VVPickdropEm
 import VVDraftReviewPage from '@/features/veloxverse-admin/pages/VVDraftReviewPage'
 import VVEmailTemplatesPage from '@/features/veloxverse-admin/pages/VVEmailTemplatesPage'
 import VVEmailTemplateEditorPage from '@/features/veloxverse-admin/pages/VVEmailTemplateEditorPage'
+import VVCountryAvailabilityPage from '@/features/veloxverse-admin/pages/VVCountryAvailabilityPage'
 
 const router = createBrowserRouter([
   // ── Public ──────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ const router = createBrowserRouter([
               { path: '/dashboard/veloxverse/pickdrop/emails/drafts/:id', element: <VVDraftReviewPage /> },
               { path: '/dashboard/veloxverse/settings/email-templates',      element: <VVEmailTemplatesPage /> },
               { path: '/dashboard/veloxverse/settings/email-templates/:key', element: <VVEmailTemplateEditorPage /> },
+              { path: '/dashboard/veloxverse/country-availability',   element: <VVCountryAvailabilityPage /> },
               { path: '/dashboard/veloxverse/promo-codes',            element: <VVPromoCodesPage /> },
               { path: '/dashboard/veloxverse/promo-codes/:id',        element: <VVPromoCodeDetailPage /> },
               { path: '/dashboard/veloxverse/pricing',                element: <VVPricingPage /> },

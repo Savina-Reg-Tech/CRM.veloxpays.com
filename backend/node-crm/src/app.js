@@ -76,7 +76,7 @@ const corsOptions = {
 // Public form endpoints are embedded on other people's websites, so they answer any origin —
 // without credentials. They must be matched BEFORE the CRM allowlist above gets a say, or every
 // embed on a third-party site is refused (it used to surface as a 500).
-const publicCors = cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type"] });
+const publicCors = cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "X-VV-Form-Pass"] });
 const crmCors = cors(corsOptions);
 export const isPublicPath = (path) => path === "/form.js" || path === "/public" || path.startsWith("/public/");
 

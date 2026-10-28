@@ -29,6 +29,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { useToast } from '@/app/providers/ToastProvider'
 import { CARD_CHARGE_TOOLTIP, formatMoney } from '@/lib/utils'
 import { useVeloxEsimCustomer } from '@/features/velox-esim/hooks/useVeloxEsim'
+import CustomerCountryField from '../components/availability/CustomerCountryField'
 import { useVeloxVerseCustomerProfile } from '@/features/customers/hooks/useVeloxVerseCustomerProfile'
 import { CustomerActivityList } from '@/features/customers/components/CustomerActivityList'
 import { useVVUserDetail, useVVSetUserRole, useVVSetUserStatus } from '../hooks/useVVUsers'
@@ -375,6 +376,13 @@ export default function VVUserDetailPage() {
                       <span className="text-amber-600"> · Guest expires {formatDate(data.user.guestExpiresAt)}</span>
                     )}
                   </p>
+                  <div className="mt-1">
+                    <CustomerCountryField
+                      userId={data.user.id}
+                      feedCountryCode={cardTotals.data?.countryCode}
+                      feedCountry={cardTotals.data?.country}
+                    />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col items-start gap-2 self-start sm:items-end sm:self-auto">

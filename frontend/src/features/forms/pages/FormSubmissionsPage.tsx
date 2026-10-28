@@ -125,6 +125,12 @@ export default function FormSubmissionsPage() {
                   {expanded === sub.id && (
                     <tr>
                       <td colSpan={6} className="px-5 pb-4 bg-gray-50">
+                        {sub.vv_pass_status && (
+                          <p className="pt-3 text-xs text-gray-400">
+                            VeloxVerse pass: {sub.vv_pass_status.replace('_', ' ')}
+                            {sub.vv_pass_country && <> · {sub.vv_pass_country}</>}
+                          </p>
+                        )}
                         <SubmissionDataView
                           data={sub.submission_data}
                           formJson={form?.form_json}

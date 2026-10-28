@@ -6,6 +6,7 @@ import { sendSuccess, sendError } from "../utils/response.js";
 import { storage, contentMatchesType } from "../storage/index.js";
 import { FORM_UPLOAD_MIME_EXTENSION } from "../middleware/upload.js";
 import { publicApiBase } from "../utils/publicUrls.js";
+import { evaluateVvFormPass } from "../utils/vvFormPass.js";
 
 /**
  * The part of `form_json` an anonymous visitor's browser needs to render the form. Webhook
@@ -49,6 +50,13 @@ export const handleSubmitForm = async (req, res) => {
   try {
     const formId = parseInt(req.params.id, 10);
     if (!Number.isFinite(formId)) throw { status: 400, message: "Invalid form ID" };
+
+    // VeloxVerse form pass — checked before anything is stored, so in enforce mode a form that is
+    // switched off for the customer's country is refused outright (see utils/vvFormPass.js).
+    const vvPass = evaluateVvFormPass(req.get("x-vv-form-pass"), formId);
+    if (vvPass.refusal) {
+      return res.status(403).json({ success: false, ...vvPass.refusal });
+    }
 
     // Two shapes reach here. The React embed (PublicFormPage.tsx) always posts multipart now —
     // uploadFormSubmissionFiles (see routes/publicFormRoutes.js) parses it, and the real
@@ -133,6 +141,7 @@ export const handleSubmitForm = async (req, res) => {
         formLoadedAt,
         ipAddress,
         userAgent,
+        vvPass: vvPass.record,
       });
     } catch (err) {
       // Storing failed partway, or the submission was refused (validation, spam rules…):

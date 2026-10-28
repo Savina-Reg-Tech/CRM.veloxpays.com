@@ -146,7 +146,7 @@ function extractContactFields(form, rawData) {
  * @param {string} opts.ipAddress
  * @param {string} opts.userAgent
  */
-async function processFormSubmission({ formId, data: rawSubmittedData, formLoadedAt, ipAddress, userAgent }) {
+async function processFormSubmission({ formId, data: rawSubmittedData, formLoadedAt, ipAddress, userAgent, vvPass = null }) {
   // ── Load form ─────────────────────────────────────────────────
   const form = await Form.findById(formId);
   if (!form) throw { status: 404, message: "Form not found" };
@@ -261,6 +261,7 @@ async function processFormSubmission({ formId, data: rawSubmittedData, formLoade
     timeTakenSeconds,
     spamScore,
     status,
+    vvPass,
   });
 
   // ── Update form counters ──────────────────────────────────────

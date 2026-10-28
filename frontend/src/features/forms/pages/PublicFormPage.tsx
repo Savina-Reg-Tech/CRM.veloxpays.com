@@ -691,6 +691,14 @@ function resolveStepNavigation(
   return null
 }
 
+// The CRM refuses a submission whose VeloxVerse form pass isn't valid (VV_FORM_PASS_MODE=enforce).
+// The typed values stay on screen either way — only the message changes.
+function vvPassRefusalMessage(code: unknown): string | null {
+  if (code === 'FORM_NOT_AVAILABLE_IN_COUNTRY') return "This form isn't available in your country."
+  if (code === 'FORM_PASS_EXPIRED') return 'This page has been open too long. Please close it and open the form again.'
+  return null
+}
+
 // ── Main component ────────────────────────────────────────────────
 export default function PublicFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -712,6 +720,9 @@ export default function PublicFormPage() {
   // step's static config is.
   const [resolvedMessage, setResolvedMessage] = useState<string | undefined>(undefined)
   const loadedAt = useRef(new Date().toISOString())
+  // VeloxVerse form pass (?vvPass=) — read once on load and kept in memory only (never storage);
+  // sent back with the submission so the CRM can refuse a form switched off for this country.
+  const [vvPass] = useState(() => searchParams.get('vvPass') || '')
 
   // Multi-step state
   const [currentStep, setCurrentStep] = useState(0)
@@ -869,9 +880,10 @@ export default function PublicFormPage() {
       const res = await fetch(`${PUBLIC_API}/forms/${id}/submit`, {
         method: 'POST',
         body,
+        headers: vvPass ? { 'X-VV-Form-Pass': vvPass } : undefined,
       })
       const json = await res.json()
-      if (!json.success) throw new Error(json.message ?? 'Submission failed')
+      if (!json.success) throw new Error(vvPassRefusalMessage(json.code) ?? json.message ?? 'Submission failed')
       alreadySubmittedRef.current = true
 
       // Resolve which on-submit behavior actually applies to THIS
@@ -936,7 +948,7 @@ export default function PublicFormPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [id, onSubmitStepIndex, onSubmitConfig])
+  }, [id, onSubmitStepIndex, onSubmitConfig, vvPass])
 
   const handleNext = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

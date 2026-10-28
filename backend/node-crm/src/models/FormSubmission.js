@@ -2,16 +2,17 @@ import { query } from "../../config/db.js";
 
 const FormSubmission = {
   /** Create a new submission record */
-  create: async ({ formId, leadId, submissionData, email, ipAddress, userAgent, timeTakenSeconds, spamScore, status }) => {
+  create: async ({ formId, leadId, submissionData, email, ipAddress, userAgent, timeTakenSeconds, spamScore, status, vvPass }) => {
     const { rows } = await query(
       `INSERT INTO form_submissions
-         (form_id, lead_id, submission_data, email, ip_address, user_agent, time_taken_seconds, spam_score, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::lead_status)
+         (form_id, lead_id, submission_data, email, ip_address, user_agent, time_taken_seconds, spam_score, status,
+          vv_pass_status, vv_pass_country, vv_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::lead_status, $10, $11, $12)
        RETURNING
          id, form_id, lead_id, submission_data, email, ip_address, user_agent,
          time_taken_seconds::float8 AS time_taken_seconds,
          spam_score::int            AS spam_score,
-         status, created_at`,
+         status, vv_pass_status, vv_pass_country, vv_user_id, created_at`,
       [
         formId,
         leadId ?? null,
@@ -22,6 +23,9 @@ const FormSubmission = {
         timeTakenSeconds ?? null,
         spamScore ?? 0,
         status ?? "NEW",
+        vvPass?.status ?? null,
+        vvPass?.country ?? null,
+        vvPass?.userId ?? null,
       ]
     );
     return rows[0];
@@ -45,6 +49,8 @@ const FormSubmission = {
          s.time_taken_seconds::float8  AS time_taken_seconds,
          s.spam_score::int             AS spam_score,
          s.status,
+         s.vv_pass_status,
+         s.vv_pass_country,
          s.created_at
        FROM form_submissions s
        WHERE s.form_id = $1 ${statusClause}
@@ -75,7 +81,7 @@ const FormSubmission = {
          id, form_id, lead_id, submission_data, email, ip_address, user_agent,
          time_taken_seconds::float8 AS time_taken_seconds,
          spam_score::int            AS spam_score,
-         status, created_at
+         status, vv_pass_status, vv_pass_country, vv_user_id, created_at
        FROM form_submissions WHERE id = $1`,
       [id]
     );

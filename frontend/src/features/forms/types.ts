@@ -439,6 +439,9 @@ export interface FormSubmission {
   time_taken_seconds: number | null
   spam_score: number
   status: LeadStatus
+  /** VeloxVerse form pass check (VV_FORM_PASS_MODE monitor / enforce); null when not checked. */
+  vv_pass_status?: 'valid' | 'missing' | 'invalid' | 'expired' | 'wrong_form' | null
+  vv_pass_country?: string | null
   created_at: string
 }
 

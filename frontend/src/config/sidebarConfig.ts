@@ -24,6 +24,7 @@ import {
   Undo2,
   Scale,
   Activity,
+  Globe2,
 } from 'lucide-react'
 import type { NavItem, UserRole } from '@/types'
 
@@ -58,6 +59,7 @@ const VV_ITEMS: NavItem[] = [
   { label: 'Payments',        path: '/dashboard/veloxverse/payments',        icon: CreditCard,  section: 'Business' },
   { label: 'Refunds',         path: '/dashboard/veloxverse/refunds',         icon: Undo2,       section: 'Business' },
   { label: 'Reconciliation',  path: '/dashboard/veloxverse/reconciliation',  icon: Scale,       section: 'Business' },
+  { label: 'Country Availability', path: '/dashboard/veloxverse/country-availability', icon: Globe2, section: 'Business' },
   // Monitoring
   { label: 'System health',   path: '/dashboard/veloxverse/system-health',   icon: Activity,    section: 'Monitoring' },
   // Always last
