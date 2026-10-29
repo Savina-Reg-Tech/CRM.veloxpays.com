@@ -102,7 +102,7 @@ export default function CustomersTable({
               return <span className="text-gray-600">{parts.length ? parts.join(', ') : '—'}</span>
             }
             if (row._source === 'veloxverse') {
-              // Account country — shown once VeloxVerse's admin user list sends it.
+              // Country (current residency), guests included — shown once VeloxVerse's admin user list sends it.
               const code = row.data.countryCode ?? null
               return (
                 <div className="flex flex-col items-start gap-1">
@@ -110,7 +110,7 @@ export default function CustomersTable({
                     {row.data.role === 'GUEST' ? 'Guest' : 'Registered'}
                   </Badge>
                   {code && (
-                    <span className="text-xs text-gray-600">
+                    <span className="text-xs text-gray-600" title="Country (current residency)">
                       <span aria-hidden="true">{countryFlag(code)}</span> {row.data.country || code}
                     </span>
                   )}

@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import type { UserRole } from '@/types'
 
 interface Props {
-  allowedRoles: UserRole[]
+  allowedRoles: readonly UserRole[]
 }
 
 export default function RoleGuard({ allowedRoles }: Props) {

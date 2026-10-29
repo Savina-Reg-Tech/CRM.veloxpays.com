@@ -1,6 +1,7 @@
 import { loginUser } from "../services/authService.js";
 import { requestPasswordReset, resetPasswordWithOtp } from "../services/passwordResetService.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import User from "../models/User.js";
 
 // Auth cookie config. The token never leaves the cookie jar — keeping it
 // httpOnly means even a successful XSS attack cannot read or exfiltrate it.
@@ -105,7 +106,40 @@ export const resetPassword = async (req, res) => {
  */
 export const getMe = async (req, res) => {
   try {
-    return sendSuccess(res, req.user, "Authenticated user fetched");
+    const tour = await User.getTourState(req.user.id);
+    return sendSuccess(res, { ...req.user, ...tour }, "Authenticated user fetched");
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+const TOUR_RESULTS = ["completed", "dismissed"];
+const TOUR_FIELDS = ["tourStatus", "tourVersion"];
+
+/**
+ * PATCH /api/auth/me/onboarding — saves the caller's own welcome-tour result.
+ * Body: { tourStatus: "completed" | "dismissed", tourVersion: positive integer }. Any other
+ * field is refused. Only the field names are logged, never their values.
+ */
+export const updateOnboarding = async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
+    const unknown = Object.keys(body).filter((key) => !TOUR_FIELDS.includes(key));
+    if (unknown.length) return sendError(res, "Only tourStatus and tourVersion can be updated", 400);
+
+    const { tourStatus, tourVersion } = body;
+    if (!TOUR_RESULTS.includes(tourStatus)) {
+      return sendError(res, "tourStatus must be 'completed' or 'dismissed'", 400);
+    }
+    if (!Number.isInteger(tourVersion) || tourVersion < 1 || tourVersion > 1000) {
+      return sendError(res, "tourVersion must be a positive integer", 400);
+    }
+
+    const saved = await User.setTourState(req.user.id, { status: tourStatus, version: tourVersion });
+    if (!saved) return sendError(res, "User not found", 404);
+
+    console.info(`[onboarding] user ${req.user.id} updated fields: ${TOUR_FIELDS.join(", ")}`);
+    return sendSuccess(res, saved, "Onboarding saved");
   } catch (err) {
     return sendError(res, err.message, 500);
   }

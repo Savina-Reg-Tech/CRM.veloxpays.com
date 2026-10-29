@@ -69,6 +69,7 @@ export default function Sidebar({
 
         {/* Nav links */}
         <nav
+          data-tour="sidebar"
           className={cn(
             'flex-1 py-4 px-3 space-y-0.5 overflow-y-auto',
             shouldCollapse && 'md:px-2'

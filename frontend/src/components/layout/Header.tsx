@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, ChevronDown, Bell, BellRing, ClipboardList, ShieldCheck, PanelLeftClose, PanelLeftOpen, Menu } from 'lucide-react'
+import { LogOut, BookOpen, ChevronDown, Bell, BellRing, ClipboardList, ShieldCheck, PanelLeftClose, PanelLeftOpen, Menu } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { authService } from '@/features/auth/authService'
 import { canViewApprovalQueues } from '@/config/roles'
@@ -14,6 +14,7 @@ import {
 } from '@/features/notifications/hooks/useNotifications'
 import Avatar from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
+import { useOnboarding } from '@/features/onboarding/onboardingContext'
 
 interface HeaderProps {
   isDesktopCollapsed: boolean
@@ -38,6 +39,7 @@ export default function Header({
   const { data: notifications = [] } = useNotifications(notifOpen)
   const markRead = useMarkNotificationRead()
   const markAllRead = useMarkAllNotificationsRead()
+  const { openGuide } = useOnboarding()
 
   const handleSignOut = async () => {
     setDropdownOpen(false)
@@ -58,6 +60,7 @@ export default function Header({
         <button
           type="button"
           onClick={onToggleMobileSidebar}
+          data-tour="menu-button"
           className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
           aria-label="Toggle sidebar"
         >
@@ -80,6 +83,7 @@ export default function Header({
           <button
             type="button"
             onClick={() => setNotifOpen((v) => !v)}
+            data-tour="notifications"
             aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
             title="Notifications"
             className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
@@ -140,6 +144,7 @@ export default function Header({
           <button
             type="button"
             onClick={() => navigate('/dashboard/verification-review?status=pending')}
+            data-tour="verification-alerts"
             aria-label={
               pendingVerifCount > 0
                 ? `${pendingVerifCount} verification${pendingVerifCount === 1 ? '' : 's'} pending`
@@ -165,6 +170,7 @@ export default function Header({
           <button
             type="button"
             onClick={() => navigate('/dashboard/approvals')}
+            data-tour="approvals-button"
             aria-label={bellLabel}
             title={bellLabel}
             className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
@@ -182,6 +188,7 @@ export default function Header({
         <div className="relative">
           <button
             onClick={() => setDropdownOpen((v) => !v)}
+            data-tour="user-menu"
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <Avatar name={user?.name ?? ''} size="sm" />
@@ -212,6 +219,16 @@ export default function Header({
                   <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                   <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                 </div>
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false)
+                    openGuide()
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <BookOpen size={15} />
+                  Quick Guide
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"

@@ -29,6 +29,42 @@ const User = {
     return rows[0] || null;
   },
 
+  /**
+   * Welcome-tour state for GET /me. Kept out of findById (which every authenticated request
+   * runs) so a backend deployed before migration 022 still authenticates. Until 022 has run the
+   * columns are missing (42703) and nothing could be saved, so the tour reads as 'not_offered'
+   * rather than reappearing for everyone on every load.
+   */
+  getTourState: async (id) => {
+    try {
+      const { rows } = await query(
+        "SELECT tour_status, tour_version, tour_seen_at FROM users WHERE id = $1 LIMIT 1",
+        [id]
+      );
+      const row = rows[0] ?? {};
+      return {
+        tour_status: row.tour_status ?? null,
+        tour_version: row.tour_version ?? null,
+        tour_seen_at: row.tour_seen_at ?? null,
+      };
+    } catch (err) {
+      if (err?.code === "42703") return { tour_status: "not_offered", tour_version: null, tour_seen_at: null };
+      throw err;
+    }
+  },
+
+  /** Save the user's own tour result (completed / dismissed) for a tour version. */
+  setTourState: async (id, { status, version }) => {
+    const { rows } = await query(
+      `UPDATE users
+          SET tour_status = $2, tour_version = $3, tour_seen_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+        RETURNING tour_status, tour_version, tour_seen_at`,
+      [id, status, version]
+    );
+    return rows[0] || null;
+  },
+
   /** Create a new user row. Returns the created user (no password). */
   create: async (
     {

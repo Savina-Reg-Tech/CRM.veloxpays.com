@@ -14,7 +14,14 @@ export interface User {
   is_active: boolean
   account_status?: AccountStatus
   verification_deadline?: string | null
+  /** Welcome-tour state — only on GET /auth/me (see features/onboarding/tourConfig.ts). */
+  tour_status?: TourStatus | null
+  tour_version?: number | null
+  tour_seen_at?: string | null
 }
+
+/** 'not_offered' = staff who existed before the tour shipped (never shown it automatically). */
+export type TourStatus = 'completed' | 'dismissed' | 'not_offered'
 
 // Login response: backend sets the JWT as an httpOnly cookie and only
 // returns the user profile in the body.

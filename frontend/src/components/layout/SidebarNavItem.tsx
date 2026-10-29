@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import type { NavItem } from '@/types'
 import { usePickdropBadge } from '@/features/veloxverse-admin/hooks/usePickdropEmails'
+import { navTarget } from '@/features/onboarding/targets'
 
 interface Props {
   item: NavItem
@@ -35,6 +36,7 @@ export default function SidebarNavItem({ item, collapsed = false, onClick }: Pro
     <NavLink
       to={item.path}
       onClick={onClick}
+      data-tour={navTarget(item.path)}
       className={({ isActive }) =>
         cn(
           'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',

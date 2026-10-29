@@ -1,0 +1,182 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Quick Guide topics > topic → roles (generated from canAccess) 1`] = `
+{
+  "alerts": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "analytics": [
+    "super_admin",
+    "admin",
+  ],
+  "api-health": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "api-logs": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "app-users": [
+    "super_admin",
+    "admin",
+  ],
+  "approvals": [
+    "super_admin",
+    "admin",
+    "employee",
+    "agent",
+    "affiliate",
+  ],
+  "assist": [
+    "super_admin",
+    "admin",
+  ],
+  "audit-logs": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "audit-settings": [
+    "super_admin",
+    "admin",
+  ],
+  "audit-trails": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "bookings": [
+    "super_admin",
+    "admin",
+  ],
+  "club": [
+    "super_admin",
+    "admin",
+  ],
+  "country-rules": [
+    "super_admin",
+    "admin",
+  ],
+  "customers": [
+    "super_admin",
+    "admin",
+    "employee",
+    "agent",
+    "affiliate",
+  ],
+  "dashboard": [
+    "super_admin",
+    "admin",
+  ],
+  "email-templates": [
+    "super_admin",
+    "admin",
+  ],
+  "errors-trends": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "esim": [
+    "super_admin",
+    "admin",
+  ],
+  "forms": [
+    "super_admin",
+    "admin",
+  ],
+  "forms-leads": [
+    "super_admin",
+    "admin",
+  ],
+  "forms-share": [
+    "super_admin",
+    "admin",
+  ],
+  "forms-submissions": [
+    "super_admin",
+    "admin",
+  ],
+  "getting-around": [
+    "super_admin",
+    "admin",
+    "employee",
+    "agent",
+    "affiliate",
+    "support",
+  ],
+  "my-profile": [
+    "employee",
+    "agent",
+    "affiliate",
+  ],
+  "payments": [
+    "super_admin",
+    "admin",
+  ],
+  "pickdrop-inbox": [
+    "super_admin",
+    "admin",
+  ],
+  "points": [
+    "super_admin",
+    "admin",
+  ],
+  "pricing": [
+    "super_admin",
+    "admin",
+  ],
+  "promo-codes": [
+    "super_admin",
+    "admin",
+  ],
+  "reconciliation": [
+    "super_admin",
+    "admin",
+  ],
+  "refer-earn": [
+    "super_admin",
+    "admin",
+  ],
+  "refunds": [
+    "super_admin",
+    "admin",
+  ],
+  "settings": [
+    "super_admin",
+    "admin",
+  ],
+  "staff": [
+    "super_admin",
+    "admin",
+    "employee",
+  ],
+  "stuck": [
+    "super_admin",
+    "admin",
+    "support",
+  ],
+  "support-tickets": [
+    "super_admin",
+    "admin",
+  ],
+  "system-health": [
+    "super_admin",
+    "admin",
+  ],
+  "verification": [
+    "employee",
+    "agent",
+    "affiliate",
+  ],
+  "verification-review": [
+    "super_admin",
+    "admin",
+  ],
+}
+`;

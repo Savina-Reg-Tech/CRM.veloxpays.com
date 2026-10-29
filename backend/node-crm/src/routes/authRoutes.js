@@ -1,6 +1,6 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { login, logout, getMe, forgotPassword, resetPassword } from "../controllers/authController.js";
+import { login, logout, getMe, updateOnboarding, forgotPassword, resetPassword } from "../controllers/authController.js";
 import { authenticate } from "../middleware/auth.js";
 
 const router = Router();
@@ -92,6 +92,8 @@ const resetPasswordAccountLimiter = rateLimit({
 router.post("/login",  loginLimiter, login);
 router.post("/logout", logout);
 router.get("/me",      authenticate, getMe);
+// The caller's own welcome-tour result — the user id always comes from the session, never the body.
+router.patch("/me/onboarding", authenticate, updateOnboarding);
 router.post("/forgot-password", forgotPasswordLimiter, forgotPasswordAccountLimiter, forgotPassword);
 router.post("/reset-password",  resetPasswordLimiter,  resetPasswordAccountLimiter,  resetPassword);
 

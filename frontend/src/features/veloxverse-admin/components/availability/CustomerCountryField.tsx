@@ -24,7 +24,7 @@ interface Props {
   feedCountry?: string | null
 }
 
-/** "Account country: 🇦🇺 Australia · set by customer" with a Change button for admins. */
+/** "Country (current residency): 🇦🇺 Australia · set by customer" with a Change button for admins. Shown for guests too. */
 export default function CustomerCountryField({ userId, feedCountryCode, feedCountry }: Props) {
   const role = useAuthStore((s) => s.user?.role)
   const canChange = role === 'super_admin' || role === 'admin'
@@ -39,7 +39,7 @@ export default function CustomerCountryField({ userId, feedCountryCode, feedCoun
     <div className="space-y-0.5">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
         <Globe2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span>Account country:</span>
+        <span>Country (current residency):</span>
         {code ? (
           <span className="font-medium text-gray-700">
             <span aria-hidden="true">{countryFlag(code)}</span> {nameOf(code, query.data ? null : feedCountry)}

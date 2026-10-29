@@ -43,7 +43,7 @@ export default function ChangeCustomerCountryModal({ open, onClose, userId, curr
     <Modal
       open={open}
       onClose={onClose}
-      title="Change account country"
+      title="Change country (current residency)"
       size="md"
       footer={
         <>
@@ -56,7 +56,7 @@ export default function ChangeCustomerCountryModal({ open, onClose, userId, curr
     >
       <div className="space-y-4">
         <div>
-          <label htmlFor="vv-customer-country" className="mb-1.5 block text-sm font-medium text-gray-700">Country</label>
+          <label htmlFor="vv-customer-country" className="mb-1.5 block text-sm font-medium text-gray-700">Country (current residency)</label>
           {overview.isLoading ? (
             <Skeleton className="h-10" />
           ) : (

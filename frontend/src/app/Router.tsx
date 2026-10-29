@@ -1,7 +1,8 @@
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, type RouteObject } from 'react-router-dom'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import RoleGuard from '@/routes/RoleGuard'
 import VerificationGate from '@/routes/VerificationGate'
+import { ROUTE_ROLES } from '@/config/routeAccess'
 import { RouteErrorScreen } from '@/components/ErrorScreen'
 import AppLayout from '@/components/layout/AppLayout'
 import AuthLayout from '@/components/layout/AuthLayout'
@@ -66,7 +67,8 @@ import VVEmailTemplatesPage from '@/features/veloxverse-admin/pages/VVEmailTempl
 import VVEmailTemplateEditorPage from '@/features/veloxverse-admin/pages/VVEmailTemplateEditorPage'
 import VVCountryAvailabilityPage from '@/features/veloxverse-admin/pages/VVCountryAvailabilityPage'
 
-const router = createBrowserRouter([
+// Exported so tests can read each route's RoleGuard roles (see config/routeAccess.test.ts).
+export const appRoutes: RouteObject[] = [
   // ── Public ──────────────────────────────────────────────────────
   {
     element: <AuthLayout />,
@@ -104,7 +106,7 @@ const router = createBrowserRouter([
 
           // Super Admin routes
           {
-            element: <RoleGuard allowedRoles={['super_admin', 'admin']} />,
+            element: <RoleGuard allowedRoles={ROUTE_ROLES.admin} />,
             children: [
               { path: '/dashboard/admin',               element: <SuperAdminDashboard /> },
               { path: '/dashboard/settings',            element: <SettingsPage /> },
@@ -157,7 +159,7 @@ const router = createBrowserRouter([
           // (and nothing else on VeloxVerse); VeloxVerse masks customer PII for them, and the
           // CRM backend only lets the support role through for GET /admin/audit reads.
           {
-            element: <RoleGuard allowedRoles={['super_admin', 'admin', 'support']} />,
+            element: <RoleGuard allowedRoles={ROUTE_ROLES.auditRead} />,
             children: [
               { path: '/dashboard/veloxverse/audit-logs',                                       element: <VVAuditLogPage /> },
               { path: '/dashboard/veloxverse/audit-logs/api',                                   element: <VVApiLogsPage /> },
@@ -180,12 +182,12 @@ const router = createBrowserRouter([
 
           // User management route for creator roles
           {
-            element: <RoleGuard allowedRoles={['super_admin', 'admin', 'employee']} />,
+            element: <RoleGuard allowedRoles={ROUTE_ROLES.staffManagement} />,
             children: [{ path: '/dashboard/employees', element: <EmployeesPage /> }],
           },
 
           {
-            element: <RoleGuard allowedRoles={['super_admin', 'admin', 'employee', 'agent', 'affiliate']} />,
+            element: <RoleGuard allowedRoles={ROUTE_ROLES.customers} />,
             children: [
               { path: '/dashboard/customers', element: <CustomersPage /> },
               { path: '/dashboard/approvals', element: <ApprovalsPage /> },
@@ -194,7 +196,7 @@ const router = createBrowserRouter([
 
           // Verification dashboard for users who must complete KYC.
           {
-            element: <RoleGuard allowedRoles={['employee', 'agent', 'affiliate']} />,
+            element: <RoleGuard allowedRoles={ROUTE_ROLES.selfVerification} />,
             children: [
               { path: '/dashboard/verification', element: <VerificationDashboardPage /> },
               { path: '/dashboard/me', element: <EmployeeDashboard /> },
@@ -217,7 +219,9 @@ const router = createBrowserRouter([
 
   // ── Catch-all ────────────────────────────────────────────────────
   { path: '*', element: <Navigate to="/login" replace /> },
-])
+]
+
+const router = createBrowserRouter(appRoutes)
 
 export default function Router() {
   return <RouterProvider router={router} />

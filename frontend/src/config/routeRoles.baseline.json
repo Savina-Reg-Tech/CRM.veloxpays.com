@@ -1,0 +1,262 @@
+{
+  "/login": null,
+  "/forgot-password": null,
+  "/embed/:id": null,
+  "/dashboard": null,
+  "/dashboard/admin": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/settings": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/verification-review": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/builder/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/submissions/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/analytics/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/leads": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/spam": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/forms/blocked-domains": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/analytics": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/esim-orders": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/esim-orders/:orderNo": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/lounge": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/lounge-bookings/:visitId": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/transfers": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pickdrop/emails": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pickdrop/emails/unmatched": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pickdrop/emails/history": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pickdrop/emails/inbox": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pickdrop/emails/drafts/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/settings/email-templates": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/settings/email-templates/:key": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/country-availability": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/promo-codes": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/promo-codes/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/pricing": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/payments": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/refunds": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/reconciliation": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/system-health": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/users": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/users/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/support": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/support/:ticketId": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/points": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/refer-earn": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/refer-earn/:id": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/club": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/audit-logs/settings": [
+    "super_admin",
+    "admin"
+  ],
+  "/dashboard/veloxverse/audit-logs": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/api": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/api/timeline": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/api-health": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/trace/:requestId": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/journeys/:journeyId": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/customers/:userId": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/guests/:anonId": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/bookings/:referenceType/:referenceId": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/stuck": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/errors": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/trends": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/veloxverse/audit-logs/alerts": [
+    "super_admin",
+    "admin",
+    "support"
+  ],
+  "/dashboard/velox-esim": null,
+  "/dashboard/employees": [
+    "super_admin",
+    "admin",
+    "employee"
+  ],
+  "/dashboard/customers": [
+    "super_admin",
+    "admin",
+    "employee",
+    "agent",
+    "affiliate"
+  ],
+  "/dashboard/approvals": [
+    "super_admin",
+    "admin",
+    "employee",
+    "agent",
+    "affiliate"
+  ],
+  "/dashboard/verification": [
+    "employee",
+    "agent",
+    "affiliate"
+  ],
+  "/dashboard/me": [
+    "employee",
+    "agent",
+    "affiliate"
+  ],
+  "*": null
+}
